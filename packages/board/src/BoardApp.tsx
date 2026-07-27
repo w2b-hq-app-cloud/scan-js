@@ -3261,7 +3261,7 @@ function NodeInspector({
         ) : null}
         {!node.consumes?.length && !node.exposes?.length && (
           <div className="text-[11px] text-muted-foreground">
-            No ports yet. Add Consume / Expose above, then wire on the canvas: Expose -> Consume.
+            No ports yet. Add Consume / Expose above, then wire on the canvas: Expose {"->"} Consume.
           </div>
         )}
       </Section>
@@ -3283,7 +3283,7 @@ function NodeInspector({
                   <EdgeIcon kind={e.kind} />
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-[11px] font-medium">
-                      {outbound ? "->" : "â†"} {other?.title ?? otherId}
+                      {outbound ? "->" : "<-"} {other?.title ?? otherId}
                     </div>
                     <div className="truncate text-[10px] text-muted-foreground">
                       {e.label ?? edgeKindTitle(e.kind)}
@@ -3462,7 +3462,7 @@ function EdgeInspector({
         {(edge.fromPort || edge.toPort) && (
           <div className="mt-1.5 flex items-center gap-1 font-mono text-[10px] text-muted-foreground">
             <Link2 className="h-3 w-3 shrink-0" />
-            {edge.fromPort ?? " - "} -> {edge.toPort ?? " - "}
+            {edge.fromPort ?? " - "} {"->"} {edge.toPort ?? " - "}
           </div>
         )}
       </div>
