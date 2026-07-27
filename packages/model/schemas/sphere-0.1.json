@@ -1,0 +1,7 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/w2b-hq-app-cloud/scan-js/raw/main/packages/model/schemas/sphere-0.1.json",
+  "title": "Legacy schema id (alias of SCAN 0.1)",
+  "description": "Deprecated alias. Use packages/model/schemas/scan-0.1.json (or @spherescan/model/schema.json).",
+  "$ref": "scan-0.1.json"
+}

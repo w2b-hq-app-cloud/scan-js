@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SCAN Viewer Embed Example</title>
+    <style>
+      body {
+        margin: 0;
+        font-family: system-ui, sans-serif;
+        background: #f1f5f9;
+        color: #0f172a;
+      }
+      header {
+        padding: 1rem 1.5rem;
+        background: white;
+        border-bottom: 1px solid #e2e8f0;
+      }
+      #diagram {
+        margin: 1.5rem;
+        min-height: 640px;
+        background: white;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        overflow: auto;
+      }
+      code {
+        font-size: 0.85em;
+        background: #e2e8f0;
+        padding: 0.1em 0.35em;
+        border-radius: 4px;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Embed SCAN Viewer</h1>
+      <p>
+        Host page loading <code>order-platform.yaml</code> via
+        <code>@spherescan/viewer</code> (open-source SCAN renderer — not the Sphere platform).
+      </p>
+    </header>
+    <div id="diagram"></div>
+    <script type="module" src="/main.ts"></script>
+  </body>
+</html>

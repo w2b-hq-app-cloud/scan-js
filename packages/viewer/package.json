@@ -1,0 +1,40 @@
+﻿{
+  "name": "@spherescan/viewer",
+  "version": "0.1.0",
+  "description": "SCAN viewer — embeddable System & Component Architecture Notation renderer",
+  "type": "module",
+  "license": "Apache-2.0",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "LICENSE", "NOTICE"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "npm run build && node --test dist/**/*.test.js"
+  },
+  "dependencies": {
+    "@spherescan/model": "0.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.16.5",
+    "typescript": "^5.8.3"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/w2b-hq-app-cloud/scan-js.git",
+    "directory": "packages/viewer"
+  },
+  "homepage": "https://github.com/w2b-hq-app-cloud/scan-js#readme",
+  "bugs": {
+    "url": "https://github.com/w2b-hq-app-cloud/scan-js/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

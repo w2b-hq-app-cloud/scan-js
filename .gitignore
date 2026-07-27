@@ -1,0 +1,48 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Build outputs
+dist/
+**/dist/
+*.tsbuildinfo
+.output/
+apps/whiteboard/.output/
+
+# Lockfiles nested under apps (root lockfile is authoritative)
+apps/*/package-lock.json
+examples/*/package-lock.json
+
+# Logs & coverage
+logs/
+*.log
+npm-debug.log*
+coverage/
+.nyc_output/
+
+# Env / local
+.env
+.env.*
+!.env.example
+*.local
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Generated / temp
+*.svg
+!docs/**
+order-platform.svg
+*.tgz
+
+# Sphere / Cursor / Claude host tooling — not part of public SCAN.
+# Canonical OSS skill lives at skills/scan-notation/ only.
+.cursor/
+.claude/
+.antigravity/
+.github/copilot-instructions.md

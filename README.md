@@ -1,0 +1,319 @@
+﻿# SCAN (`scan-js`)
+
+**System & Component Architecture Notation** â€” an open-source toolkit for describing and editing software architecture diagrams in the browser.
+
+![SCAN whiteboard reference UI](docs/screenshot.png)
+
+SCAN is an open-source **notation + embeddable libraries + reference modeler** for
+system and component architecture diagrams â€” not a full product platform.
+
+| Layer | Role in SCAN |
+|-------|----------------|
+| **Notation** | YAML/JSON metamodel (`scan: "0.1"`) â€” elements, ports, typed connections, views |
+| **Libraries** | `@spherescan/model`, `@spherescan/rules`, `@spherescan/viewer`, `@spherescan/modeler`, `@spherescan/cli` |
+| **Reference app** | `apps/whiteboard` â€” minimal modeler to exercise the toolkit |
+
+This repository (`scan-js`) is the open-source project. Contributions, issues, and roadmap here are about **SCAN**, not any proprietary host product.
+
+---
+
+## What SCAN is
+
+SCAN describes **software systems**: services, data stores, event streams, external systems, agents, and repositories â€” plus **how they connect** (REST, gRPC, DB access, publish/subscribe, agent delegation, git integration).
+
+Canonical form is **YAML** (JSON works with the same schema). A document has:
+
+1. **Semantics** â€” root collections (`components`, `channels`, `connections`, â€¦)
+2. **Presentation (diagram DI)** â€” `views[].layout` boxes and optional `boundaries`
+3. **Validation** â€” Zod + JSON Schema in `@spherescan/model`, connection legality in `@spherescan/rules`
+
+**Principle:** keep architectural **`type`** (role) separate from **`technology`** (stack), e.g. `type: service` + `technology: Spring Boot`.
+
+Full normative detail: [`docs/spec/scan-0.1.md`](docs/spec/scan-0.1.md) Â· Whiteboard UI: [`docs/MANUAL.md`](docs/MANUAL.md) Â· JSON Schema: [`packages/model/schemas/scan-0.1.json`](packages/model/schemas/scan-0.1.json)
+
+---
+
+## How a SCAN document works
+
+### Document root
+
+```yaml
+scan: "0.1"
+
+system:
+  id: order-platform
+  name: Order Platform
+
+components: [ ... ]
+channels: [ ... ]
+external_systems: [ ... ]
+agents: [ ... ]
+repositories: [ ... ]
+connections: [ ... ]
+
+views:
+  - id: architecture-board
+    layout: { ... }
+    boundaries: [ ... ]
+```
+
+| Field | Required | Purpose |
+|-------|----------|---------|
+| `scan` | yes (`"0.1"`) | Notation version |
+| `system` | yes | System `id` + `name` |
+| `components` | no | Services, datastores, search indexes |
+| `channels` | no | Event / stream topics |
+| `external_systems` | no | Systems outside the modeled boundary |
+| `agents` / `agent_runtimes` | no | Agents and their runtimes |
+| `repositories` | no | Source/artifact repos as first-class nodes |
+| `connections` | no | Typed edges between element ids |
+| `views` | yes (â‰¥1) | Diagram layout + boundaries |
+
+### Where elements go
+
+| Concept | Collection | Notes |
+|---------|------------|--------|
+| API / app service | `components` | `type: service` |
+| Database | `components` | `type: datastore` |
+| Search index | `components` | `type: search` |
+| Kafka / topic / stream | `channels` | usually `type: event-stream` |
+| Third-party system | `external_systems` | |
+| Agent | `agents` | not under `components` |
+| Git / artifact repo **node** | `repositories` | canvas element |
+| Inline repo **ref** on a component | `repository:` field | path only â€” not a box |
+
+### Ports
+
+Elements talk through **`consumes`** (inbound) and **`exposes`** (outbound) ports:
+
+```yaml
+consumes:
+  - id: api-in
+    label: REST
+    protocol: OpenAPI
+exposes:
+  - id: api-out
+    label: REST
+    protocol: OpenAPI
+```
+
+When a connection sets `fromPort` / `toPort`, rules require **expose â†’ consume**.
+
+### Connections
+
+```yaml
+connections:
+  - id: e1
+    from: order-api
+    to: orders-db
+    type: database-access
+    label: DB Access
+    fromSide: b   # diagram DI only
+    toSide: t
+```
+
+| Type | Meaning |
+|------|---------|
+| `synchronous-request` | Request/response (e.g. REST) |
+| `grpc-request` | Synchronous gRPC-style call |
+| `database-access` | Client â†’ datastore |
+| `event-publication` | Producer â†’ channel |
+| `event-subscription` | Channel â†’ consumer |
+| `stream-consume` | Stream / topic consume |
+| `agent-delegation` | Agent â†’ agent |
+| `git-integration` | Agent/system â†’ repository |
+
+**Which pairs are legal** (e.g. serviceâ†’database yes, agentâ†’database no) is enforced by `@spherescan/rules`, not by the schema alone. See connection rules in the [scan-notation skill](skills/scan-notation/connection-rules.md) and `packages/rules`.
+
+### Views (diagram interchange)
+
+Semantics stay in root collections. **Pixels live only under `views`:**
+
+```yaml
+views:
+  - id: architecture-board
+    type: service-architecture
+    boundaries:
+      - id: g-trust
+        label: Order Platform
+        kind: trust          # trust | runtime
+        members: [order-api, orders-db]
+        x: 400
+        y: 60
+        w: 900
+        h: 500
+    layout:
+      order-api: { x: 480, y: 120, w: 260, h: 190 }
+      orders-db: { x: 500, y: 380, w: 220, h: 160 }
+```
+
+Every element that should appear on the board needs a `layout` entry. Boundaries are optional grouping rectangles (trust / runtime).
+
+### Minimal valid example
+
+```yaml
+scan: "0.1"
+
+system:
+  id: checkout
+  name: Checkout
+
+components:
+  - id: checkout-api
+    name: Checkout API
+    type: service
+    technology: NestJS
+    exposes:
+      - id: checkout-api-out
+        label: REST
+        protocol: OpenAPI
+
+external_systems:
+  - id: payments
+    name: Payments Provider
+    exposes:
+      - id: payments-out
+        label: REST
+
+connections:
+  - id: c1
+    from: payments
+    to: checkout-api
+    type: synchronous-request
+    label: REST
+
+views:
+  - id: board
+    layout:
+      checkout-api: { x: 320, y: 120, w: 260, h: 190 }
+      payments: { x: 40, y: 120, w: 220, h: 150 }
+```
+
+Fixture used in tests: [`packages/model/fixtures/order-platform.yaml`](packages/model/fixtures/order-platform.yaml)
+
+---
+
+## Packages
+
+| Package | Purpose |
+|---------|---------|
+| `@spherescan/model` | Parse / serialize / validate SCAN YAML & JSON |
+| `@spherescan/rules` | Legal connection pairs + port checks |
+| `@spherescan/viewer` | Project model â†’ board graph; SVG/PNG export |
+| `@spherescan/modeler` | Command stack: move, connect, create, auto-layout, undo |
+| `@spherescan/cli` | `validate`, `export svg`, â€¦ |
+| `@spherescan/board` | Shared React canvas (**private** workspace â€” not on npm in v0.1; used by the whiteboard) |
+
+Embed pattern (viewer):
+
+```js
+import { ScanViewer } from "@spherescan/viewer";
+
+const viewer = new ScanViewer({ container: "#canvas" });
+await viewer.importYAML(yamlString);
+```
+
+Modeler adds editing on top of the same model (command stack, create/connect/move, undo).
+
+Public APIs prefer `Scan*` names (`ScanModel`, `ScanViewer`, `ScanModeler`, â€¦). Legacy `Sphere*` / `sphere:` aliases remain for compatibility; new code should use `Scan*` / `scan:`.
+
+---
+
+## Repository layout
+
+```text
+scan-js/
+  packages/model|rules|viewer|modeler|cli|board
+  apps/whiteboard                 # minimal reference UI
+  examples/embed-viewer
+  examples/architectures          # sample .scan.yaml diagrams
+  skills/scan-notation/           # reference AI skill (Apache 2.0)
+  docs/spec/scan-0.1.md           # normative spec (CC BY 4.0)
+  docs/MANUAL.md
+  docs/api/walkthrough.md
+  docs/DEVELOPMENT.md
+  docs/BACKLOG.md
+```
+
+---
+
+## Develop
+
+```bash
+npm install --legacy-peer-deps
+npm run build
+npm test
+npm run validate          # CLI validate on the order-platform fixture
+npm run dev               # reference whiteboard
+```
+
+Open the whiteboard, load a `.scan` / `.yaml` file, edit on canvas, save as SCAN YAML.
+
+**Whiteboard how-to:** [`docs/MANUAL.md`](docs/MANUAL.md) Â· **Local setup:** [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) Â· **API walkthrough:** [`docs/api/walkthrough.md`](docs/api/walkthrough.md)
+
+---
+
+## Validate YAML & use from another project
+
+`@spherescan/*` packages are intended for npm (`@spherescan/model`, `@spherescan/viewer`, â€¦). The GitHub repo is public; see [`docs/PUBLISH.md`](docs/PUBLISH.md) to publish the scope after `npm login`. Until then, clone this repo, build, then validate:
+
+```bash
+npm install --legacy-peer-deps && npm run build
+node packages/cli/dist/cli.js validate /path/to/architecture.scan.yaml
+```
+
+Optional global bin:
+
+```bash
+cd packages/cli && npm link
+scan validate ./architecture.scan.yaml
+```
+
+From another package.json (path must point at a built tree):
+
+```json
+{
+  "devDependencies": {
+    "@spherescan/cli": "file:../scan-js/packages/cli",
+    "@spherescan/model": "file:../scan-js/packages/model"
+  }
+}
+```
+
+Programmatic: `parseScanYaml` + `validateScanModel` from `@spherescan/model`.
+
+When packages are published: `npm i -D @spherescan/cli` / `npx scan validate â€¦`.
+
+---
+
+## Contributing
+
+See **[CONTRIBUTING.md](CONTRIBUTING.md)** for setup, package boundaries, and PR expectations.
+
+This project is **scan-js / SCAN**. Please file issues and PRs against this repositoryâ€™s scope (notation, `@spherescan/*`, whiteboard, CLI, docs). Product-specific chrome, branding, or proprietary hosts are out of scope here.
+
+---
+
+## Licensing
+
+This repository uses different licenses for the SCAN specification and its
+software implementations.
+
+| Material | License |
+|----------|---------|
+| SCAN specification under `docs/spec/` | [CC BY 4.0](LICENSES/CC-BY-4.0.txt) |
+| Schemas, packages, CLI and SDKs | [Apache License 2.0](LICENSE) |
+| Reference modeler and examples | [Apache License 2.0](LICENSE) |
+| Reference SCAN AI skill (`skills/scan-notation/`) | [Apache License 2.0](LICENSE) |
+
+Unless a file states otherwise, source code and machine-readable artifacts are
+licensed under the Apache License 2.0.
+
+Host-editor configs (`.cursor`, `.claude`, Sphere product skills/plans/rules) are
+**not** shipped in this repository. The only AI skill in-tree is
+[`skills/scan-notation/`](skills/scan-notation/).
+
+The names **SCAN**, **Sphere**, their logos, and the **SCAN Certified** designation
+are not granted under these licenses. See [TRADEMARKS.md](TRADEMARKS.md).
+
+CC BY permits commercial reuse and modification but requires credit, a license link, and an indication of changes. [Creative Commons explains those conditions here](https://creativecommons.org/licenses/by/4.0/). Apache 2.0 permits commercial use and redistribution, includes an explicit patent grant, and excludes automatic trademark rights. [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0).

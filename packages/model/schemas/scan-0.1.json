@@ -1,0 +1,353 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/w2b-hq-app-cloud/scan-js/raw/main/packages/model/schemas/scan-0.1.json",
+  "title": "SCAN  System & Component Architecture Notation 0.1",
+  "description": "JSON Schema for SCAN 0.1 documents. Mirrors the Zod metamodel in @spherescan/model. Prefer root key scan; legacy sphere is accepted.",
+  "type": "object",
+  "anyOf": [
+    { "required": ["scan", "system", "views"] },
+    { "required": ["sphere", "system", "views"] }
+  ],
+  "properties": {
+    "scan": {
+      "description": "Notation version (canonical root key).",
+      "oneOf": [{ "type": "string" }, { "type": "number" }]
+    },
+    "sphere": {
+      "description": "Legacy alias for scan; accepted by parsers.",
+      "oneOf": [{ "type": "string" }, { "type": "number" }]
+    },
+    "system": { "$ref": "#/$defs/System" },
+    "components": {
+      "type": "array",
+      "default": [],
+      "items": { "$ref": "#/$defs/Component" }
+    },
+    "channels": {
+      "type": "array",
+      "default": [],
+      "items": { "$ref": "#/$defs/Channel" }
+    },
+    "external_systems": {
+      "type": "array",
+      "default": [],
+      "items": { "$ref": "#/$defs/ExternalSystem" }
+    },
+    "agents": {
+      "type": "array",
+      "default": [],
+      "items": { "$ref": "#/$defs/Agent" }
+    },
+    "agent_runtimes": {
+      "type": "array",
+      "default": [],
+      "items": { "$ref": "#/$defs/AgentRuntime" }
+    },
+    "repositories": {
+      "type": "array",
+      "default": [],
+      "items": { "$ref": "#/$defs/Repository" }
+    },
+    "connections": {
+      "type": "array",
+      "default": [],
+      "items": { "$ref": "#/$defs/Connection" }
+    },
+    "views": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/View" }
+    }
+  },
+  "$defs": {
+    "Port": {
+      "type": "object",
+      "required": ["id", "label"],
+      "properties": {
+        "id": { "type": "string" },
+        "label": { "type": "string" },
+        "protocol": { "type": "string" }
+      }
+    },
+    "RepositoryRef": {
+      "description": "Inline repository pointer on a component or external system.",
+      "oneOf": [
+        { "type": "string" },
+        {
+          "type": "object",
+          "required": ["path"],
+          "properties": {
+            "provider": { "type": "string" },
+            "path": { "type": "string" }
+          }
+        }
+      ]
+    },
+    "System": {
+      "type": "object",
+      "required": ["id", "name"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "purpose": { "type": "string" },
+        "owner": { "type": "string" }
+      }
+    },
+    "ComponentType": {
+      "type": "string",
+      "enum": [
+        "service",
+        "datastore",
+        "search",
+        "external-system",
+        "agent",
+        "repository",
+        "event-stream"
+      ]
+    },
+    "Icon": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Optional diagram icon override: Lucide icon name (e.g. shield), https URL, or data:image URL."
+    },
+    "Component": {
+      "type": "object",
+      "required": ["id", "name", "type"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "type": { "$ref": "#/$defs/ComponentType" },
+        "technology": {
+          "type": "string",
+          "description": "Implementation stack; keep separate from type (role)."
+        },
+        "subtitle": { "type": "string" },
+        "icon": { "$ref": "#/$defs/Icon" },
+        "repository": { "$ref": "#/$defs/RepositoryRef" },
+        "consumes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/Port" }
+        },
+        "exposes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/Port" }
+        },
+        "status": { "type": "string", "enum": ["ok", "warn"] },
+        "warn": { "type": "string" }
+      }
+    },
+    "Channel": {
+      "type": "object",
+      "required": ["id", "name"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "type": { "type": "string", "const": "event-stream", "default": "event-stream" },
+        "technology": { "type": "string" },
+        "icon": { "$ref": "#/$defs/Icon" },
+        "consumes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/Port" }
+        },
+        "exposes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/Port" }
+        }
+      }
+    },
+    "ExternalSystem": {
+      "type": "object",
+      "required": ["id", "name"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "type": { "type": "string", "const": "external-system" },
+        "technology": { "type": "string" },
+        "icon": { "$ref": "#/$defs/Icon" },
+        "repository": { "$ref": "#/$defs/RepositoryRef" },
+        "consumes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/Port" }
+        },
+        "exposes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/Port" }
+        }
+      }
+    },
+    "Agent": {
+      "type": "object",
+      "required": ["id", "name"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "purpose": { "type": "string" },
+        "subtitle": { "type": "string" },
+        "icon": { "$ref": "#/$defs/Icon" },
+        "runtime": {
+          "type": "string",
+          "description": "Id of an agent_runtimes entry."
+        },
+        "consumes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/Port" }
+        },
+        "exposes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/Port" }
+        }
+      }
+    },
+    "AgentRuntime": {
+      "type": "object",
+      "required": ["id", "name"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "type": { "type": "string" }
+      }
+    },
+    "Repository": {
+      "type": "object",
+      "required": ["id", "name"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "provider": { "type": "string" },
+        "path": { "type": "string" },
+        "subtitle": { "type": "string" },
+        "icon": { "$ref": "#/$defs/Icon" },
+        "consumes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/Port" }
+        },
+        "exposes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/Port" }
+        }
+      }
+    },
+    "ConnectionType": {
+      "type": "string",
+      "enum": [
+        "synchronous-request",
+        "event-publication",
+        "event-subscription",
+        "database-access",
+        "stream-consume",
+        "agent-delegation",
+        "git-integration",
+        "grpc-request"
+      ]
+    },
+    "Side": {
+      "type": "string",
+      "enum": ["l", "r", "t", "b"],
+      "description": "Diagram attachment side: left, right, top, bottom."
+    },
+    "ContractRef": {
+      "oneOf": [
+        { "type": "string" },
+        {
+          "type": "object",
+          "properties": {
+            "type": { "type": "string" },
+            "reference": { "type": "string" }
+          }
+        }
+      ]
+    },
+    "Connection": {
+      "type": "object",
+      "required": ["from", "to", "type"],
+      "properties": {
+        "id": { "type": "string" },
+        "from": {
+          "type": "string",
+          "description": "Source element id (component, channel, external, agent, or repository)."
+        },
+        "to": {
+          "type": "string",
+          "description": "Target element id."
+        },
+        "type": { "$ref": "#/$defs/ConnectionType" },
+        "protocol": { "type": "string" },
+        "label": { "type": "string" },
+        "contract": { "$ref": "#/$defs/ContractRef" },
+        "fromSide": { "$ref": "#/$defs/Side" },
+        "toSide": { "$ref": "#/$defs/Side" },
+        "fromPort": {
+          "type": "string",
+          "description": "Optional source port id on `from` (usually an exposes port)."
+        },
+        "toPort": {
+          "type": "string",
+          "description": "Optional target port id on `to` (usually a consumes port)."
+        },
+        "operations": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Endpoints, RPCs, topics, or queries used on this connection (e.g. POST /orders)."
+        }
+      }
+    },
+    "LayoutEntry": {
+      "type": "object",
+      "required": ["x", "y"],
+      "properties": {
+        "x": { "type": "number" },
+        "y": { "type": "number" },
+        "w": { "type": "number" },
+        "h": { "type": "number" }
+      },
+      "description": "Diagram interchange (DI) box for one element id."
+    },
+    "BoundaryKind": {
+      "type": "string",
+      "enum": ["trust", "runtime"],
+      "default": "trust"
+    },
+    "Boundary": {
+      "type": "object",
+      "required": ["id", "label", "members", "x", "y", "w", "h"],
+      "properties": {
+        "id": { "type": "string" },
+        "label": { "type": "string" },
+        "tag": { "type": "string" },
+        "kind": { "$ref": "#/$defs/BoundaryKind" },
+        "icon": { "$ref": "#/$defs/Icon" },
+        "members": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Element ids contained in this boundary."
+        },
+        "x": { "type": "number" },
+        "y": { "type": "number" },
+        "w": { "type": "number" },
+        "h": { "type": "number" }
+      }
+    },
+    "View": {
+      "type": "object",
+      "required": ["id", "layout"],
+      "properties": {
+        "id": { "type": "string" },
+        "type": {
+          "type": "string",
+          "default": "service-architecture",
+          "description": "View kind; v0.1 renderers treat service-architecture as the default board."
+        },
+        "boundaries": {
+          "type": "array",
+          "default": [],
+          "items": { "$ref": "#/$defs/Boundary" }
+        },
+        "layout": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/LayoutEntry" },
+          "description": "Map of element id ? DI box. Semantic model lives outside views; layout is presentation only."
+        }
+      }
+    }
+  }
+}

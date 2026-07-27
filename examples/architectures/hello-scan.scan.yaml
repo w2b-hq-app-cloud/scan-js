@@ -1,0 +1,31 @@
+scan: "0.1"
+
+system:
+  id: hello-scan
+  name: Hello SCAN
+
+components:
+  - id: api
+    name: API
+    type: service
+    technology: Node.js
+    exposes:
+      - id: http
+        label: HTTP
+  - id: db
+    name: Database
+    type: datastore
+    technology: PostgreSQL
+
+connections:
+  - id: api-to-db
+    from: api
+    to: db
+    type: database-access
+    label: SQL
+
+views:
+  - id: board
+    layout:
+      api: { x: 80, y: 100, w: 220, h: 160 }
+      db: { x: 400, y: 100, w: 220, h: 160 }

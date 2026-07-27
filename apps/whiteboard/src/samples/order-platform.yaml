@@ -1,0 +1,316 @@
+scan: "0.1"
+
+system:
+  id: order-platform
+  name: Order Platform
+  purpose: Process customer orders
+  owner: Commerce Team
+
+external_systems:
+  - id: payment-platform
+    name: Payment Platform
+    type: external-system
+    repository: stripe/openapi
+    exposes:
+      - id: pp-rest
+        label: REST
+        protocol: OpenAPI
+
+  - id: fraud-provider
+    name: Fraud Provider
+    type: external-system
+    repository: sift/proto
+    exposes:
+      - id: fp-grpc
+        label: gRPC
+        protocol: Proto
+
+components:
+  - id: order-api
+    name: Order API
+    type: service
+    technology: Spring Boot
+    repository:
+      provider: github
+      path: company/order-api
+    consumes:
+      - id: oa-rest
+        label: REST
+        protocol: OpenAPI
+      - id: oa-grpc
+        label: gRPC
+        protocol: Proto
+    exposes:
+      - id: oa-out
+        label: REST
+        protocol: OpenAPI
+
+  - id: payment-service
+    name: Payment Service
+    type: service
+    technology: Spring Boot
+    repository:
+      provider: github
+      path: company/payment-service
+    consumes:
+      - id: ps-in
+        label: REST
+        protocol: OpenAPI
+    exposes:
+      - id: ps-out
+        label: REST
+        protocol: OpenAPI
+
+  - id: inventory-service
+    name: Inventory Service
+    type: service
+    technology: Spring Boot
+    repository:
+      provider: github
+      path: company/inventory-service
+    status: warn
+    warn: No async contract defined for Order Created events.
+    consumes:
+      - id: is-in
+        label: REST
+        protocol: OpenAPI
+    exposes:
+      - id: is-out
+        label: REST
+        protocol: OpenAPI
+
+  - id: orders-db
+    name: Orders DB
+    type: datastore
+    technology: PostgreSQL
+    repository:
+      provider: github
+      path: company/orders-db
+
+  - id: search-index
+    name: Search Index
+    type: search
+    technology: Elasticsearch
+    consumes:
+      - id: si-in
+        label: OrderCreated
+        protocol: v1
+
+channels:
+  - id: order-created
+    name: Order Created
+    type: event-stream
+    technology: Kafka
+    consumes:
+      - id: oc-in
+        label: OrderCreated
+        protocol: v1
+    exposes:
+      - id: oc-out
+        label: OrderCreated
+        protocol: v1
+
+agents:
+  - id: arch-agent
+    name: Architecture Agent
+    subtitle: Design & Validate
+    purpose: Design & Validate
+    runtime: eng-agent-runtime
+    consumes:
+      - id: aa-in
+        label: Requirements
+        protocol: ADR, PRD
+    exposes:
+      - id: aa-out
+        label: Architecture
+        protocol: Models
+
+  - id: coding-agent
+    name: Coding Agent
+    subtitle: Build & Implement
+    purpose: Build & Implement
+    runtime: eng-agent-runtime
+    consumes:
+      - id: ca-in
+        label: Architecture
+        protocol: Models
+    exposes:
+      - id: ca-out
+        label: Code
+        protocol: Pull Request
+
+  - id: review-agent
+    name: Review Agent
+    subtitle: Review & Quality
+    purpose: Review & Quality
+    runtime: eng-agent-runtime
+    consumes:
+      - id: ra-in
+        label: Pull Request
+    exposes:
+      - id: ra-out
+        label: Quality Report
+        protocol: Results
+
+agent_runtimes:
+  - id: eng-agent-runtime
+    name: Engineering Agent Runtime
+    type: governed-runtime
+
+repositories:
+  - id: github
+    name: GitHub Repository
+    provider: github
+    path: company/order-platform
+    subtitle: company/order-platform
+    consumes:
+      - id: gh-in-1
+        label: Code
+        protocol: PR
+      - id: gh-in-2
+        label: Artifacts
+    exposes:
+      - id: gh-out
+        label: Source
+        protocol: Artifacts
+
+connections:
+  - id: e1
+    from: payment-platform
+    to: order-api
+    type: synchronous-request
+    fromSide: r
+    toSide: l
+    label: REST
+    contract: OpenAPI
+
+  - id: e2
+    from: order-api
+    to: payment-service
+    type: synchronous-request
+    fromSide: r
+    toSide: l
+    label: REST
+    contract: OpenAPI
+
+  - id: e3
+    from: payment-service
+    to: inventory-service
+    type: synchronous-request
+    fromSide: r
+    toSide: l
+    label: REST
+    contract: OpenAPI
+
+  - id: e4
+    from: fraud-provider
+    to: order-api
+    type: grpc-request
+    fromSide: r
+    toSide: l
+    label: gRPC
+    contract: Proto
+
+  - id: e5
+    from: order-api
+    to: orders-db
+    type: database-access
+    fromSide: b
+    toSide: t
+    label: DB Access
+    contract: JDBC
+
+  - id: e6
+    from: order-api
+    to: order-created
+    type: event-publication
+    fromSide: b
+    toSide: t
+    label: Publish
+    contract: AsyncAPI
+
+  - id: e7
+    from: payment-service
+    to: order-created
+    type: event-publication
+    fromSide: b
+    toSide: t
+    label: Publish
+    contract: AsyncAPI
+
+  - id: e8
+    from: order-created
+    to: search-index
+    type: stream-consume
+    fromSide: r
+    toSide: l
+    label: Stream
+    contract: AsyncAPI
+
+  - id: e9
+    from: arch-agent
+    to: coding-agent
+    type: agent-delegation
+    fromSide: r
+    toSide: l
+
+  - id: e10
+    from: coding-agent
+    to: review-agent
+    type: agent-delegation
+    fromSide: r
+    toSide: l
+
+  - id: e11
+    from: review-agent
+    to: github
+    type: git-integration
+    fromSide: r
+    toSide: l
+    label: Git Integration
+
+views:
+  - id: architecture-board
+    type: service-architecture
+    boundaries:
+      - id: g-order
+        label: Order Platform
+        tag: Trust Boundary
+        kind: trust
+        members:
+          - order-api
+          - payment-service
+          - inventory-service
+          - orders-db
+          - order-created
+          - search-index
+        x: 420
+        y: 60
+        w: 1240
+        h: 620
+
+      - id: g-agents
+        label: Engineering Agent Runtime
+        kind: runtime
+        members:
+          - arch-agent
+          - coding-agent
+          - review-agent
+        x: 340
+        y: 780
+        w: 940
+        h: 300
+
+    layout:
+      payment-platform: { x: 60, y: 180, w: 220, h: 150 }
+      fraud-provider: { x: 60, y: 440, w: 220, h: 150 }
+      order-api: { x: 480, y: 180, w: 260, h: 190 }
+      payment-service: { x: 830, y: 180, w: 260, h: 190 }
+      inventory-service: { x: 1180, y: 180, w: 260, h: 190 }
+      orders-db: { x: 500, y: 460, w: 220, h: 160 }
+      order-created: { x: 830, y: 440, w: 260, h: 180 }
+      search-index: { x: 1180, y: 440, w: 260, h: 180 }
+      arch-agent: { x: 380, y: 870, w: 260, h: 190 }
+      coding-agent: { x: 690, y: 870, w: 260, h: 190 }
+      review-agent: { x: 1000, y: 870, w: 260, h: 190 }
+      github: { x: 1360, y: 870, w: 260, h: 180 }

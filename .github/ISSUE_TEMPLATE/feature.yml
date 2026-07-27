@@ -1,0 +1,16 @@
+name: Feature request
+description: Suggest an improvement to SCAN notation or toolkit
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / motivation
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+    validations:
+      required: true

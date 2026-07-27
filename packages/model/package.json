@@ -1,0 +1,43 @@
+﻿{
+  "name": "@spherescan/model",
+  "version": "0.1.0",
+  "description": "SCAN metamodel — System & Component Architecture Notation parse/validate/serialize",
+  "type": "module",
+  "license": "Apache-2.0",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./schema.json": "./schemas/scan-0.1.json"
+  },
+  "files": ["dist", "schemas", "LICENSE", "NOTICE"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "npm run build && node --test dist/**/*.test.js"
+  },
+  "dependencies": {
+    "yaml": "^2.9.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.16.5",
+    "ajv": "^8.20.0",
+    "typescript": "^5.8.3"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/w2b-hq-app-cloud/scan-js.git",
+    "directory": "packages/model"
+  },
+  "homepage": "https://github.com/w2b-hq-app-cloud/scan-js#readme",
+  "bugs": {
+    "url": "https://github.com/w2b-hq-app-cloud/scan-js/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

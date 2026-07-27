@@ -1,0 +1,186 @@
+scan: "0.1"
+
+system:
+  id: cafe-loyalty
+  name: Cafe Loyalty
+  purpose: Dummy board to exercise SCAN skill authoring
+  owner: Demo Team
+
+external_systems:
+  - id: pos-vendor
+    name: POS Vendor
+    type: external-system
+    repository: demo/pos-openapi
+    exposes:
+      - id: pos-rest
+        label: REST
+        protocol: OpenAPI
+
+components:
+  - id: loyalty-api
+    name: Loyalty API
+    type: service
+    technology: NestJS
+    repository:
+      provider: github
+      path: demo/loyalty-api
+    consumes:
+      - id: loyalty-api-in
+        label: REST
+        protocol: OpenAPI
+    exposes:
+      - id: loyalty-api-out
+        label: REST
+        protocol: OpenAPI
+
+  - id: points-db
+    name: Points DB
+    type: datastore
+    technology: PostgreSQL
+    repository:
+      provider: github
+      path: demo/points-db
+
+  - id: offers-search
+    name: Offers Search
+    type: search
+    technology: Elasticsearch
+    consumes:
+      - id: offers-search-in
+        label: PointsEarned
+        protocol: v1
+
+channels:
+  - id: points-earned
+    name: Points Earned
+    type: event-stream
+    technology: Kafka
+    consumes:
+      - id: pe-in
+        label: Event
+        protocol: v1
+    exposes:
+      - id: pe-out
+        label: Event
+        protocol: v1
+
+agents:
+  - id: promo-agent
+    name: Promo Agent
+    purpose: Suggest offers from point events
+    subtitle: Suggest offers
+    runtime: cafe-agent-runtime
+    consumes:
+      - id: promo-in
+        label: Input
+    exposes:
+      - id: promo-out
+        label: Output
+
+agent_runtimes:
+  - id: cafe-agent-runtime
+    name: Cafe Agent Runtime
+    type: governed-runtime
+
+repositories:
+  - id: loyalty-repo
+    name: Loyalty Repo
+    provider: github
+    path: demo/loyalty-platform
+    subtitle: demo/loyalty-platform
+    consumes:
+      - id: lr-in
+        label: Code
+        protocol: PR
+
+connections:
+  - id: e1
+    from: pos-vendor
+    to: loyalty-api
+    type: synchronous-request
+    fromPort: pos-rest
+    toPort: loyalty-api-in
+    label: REST
+    contract: OpenAPI
+    fromSide: r
+    toSide: l
+    operations:
+      - POST /tickets
+      - GET /tickets/{id}
+
+  - id: e2
+    from: loyalty-api
+    to: points-db
+    type: database-access
+    label: DB Access
+    contract: JDBC
+    fromSide: b
+    toSide: t
+    operations:
+      - INSERT points_ledger
+      - SELECT balance BY member
+
+  - id: e3
+    from: loyalty-api
+    to: points-earned
+    type: event-publication
+    label: Publish
+    contract: AsyncAPI
+    fromSide: b
+    toSide: t
+    operations:
+      - PointsEarned
+
+  - id: e4
+    from: points-earned
+    to: offers-search
+    type: stream-consume
+    label: Stream
+    contract: AsyncAPI
+    fromSide: r
+    toSide: l
+    operations:
+      - consume PointsEarned
+
+  - id: e5
+    from: promo-agent
+    to: loyalty-repo
+    type: git-integration
+    label: Git Integration
+    fromSide: r
+    toSide: l
+
+views:
+  - id: architecture-board
+    type: service-architecture
+    boundaries:
+      - id: g-loyalty
+        label: Loyalty Core
+        tag: Trust Boundary
+        kind: trust
+        members:
+          - loyalty-api
+          - points-db
+          - points-earned
+          - offers-search
+        x: 280
+        y: 40
+        w: 720
+        h: 560
+      - id: g-agents
+        label: Cafe Agents
+        kind: runtime
+        members:
+          - promo-agent
+        x: 1040
+        y: 40
+        w: 320
+        h: 280
+    layout:
+      pos-vendor: { x: 40, y: 160, w: 220, h: 150 }
+      loyalty-api: { x: 320, y: 120, w: 260, h: 190 }
+      points-db: { x: 340, y: 360, w: 220, h: 160 }
+      points-earned: { x: 620, y: 360, w: 260, h: 190 }
+      offers-search: { x: 920, y: 360, w: 260, h: 190 }
+      promo-agent: { x: 1080, y: 80, w: 260, h: 190 }
+      loyalty-repo: { x: 1400, y: 80, w: 260, h: 180 }

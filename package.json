@@ -1,0 +1,29 @@
+﻿{
+  "name": "scan-js",
+  "private": true,
+  "description": "SCAN â€” System & Component Architecture Notation: open-source toolkit (model, viewer, modeler, CLI) and reference whiteboard",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/w2b-hq-app-cloud/scan-js.git"
+  },
+  "homepage": "https://github.com/w2b-hq-app-cloud/scan-js#readme",
+  "bugs": {
+    "url": "https://github.com/w2b-hq-app-cloud/scan-js/issues"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "examples/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w @spherescan/whiteboard",
+    "build": "npm run build -w @spherescan/model && npm run build -w @spherescan/rules && npm run build -w @spherescan/viewer && npm run build -w @spherescan/modeler && npm run build -w @spherescan/cli && npm run build -w @spherescan/whiteboard",
+    "typecheck": "npm run typecheck -w @spherescan/model && npm run typecheck -w @spherescan/rules && npm run typecheck -w @spherescan/viewer && npm run typecheck -w @spherescan/modeler && npm run typecheck -w @spherescan/cli && npm run typecheck -w @spherescan/whiteboard",
+    "test": "npm run test -w @spherescan/model && npm run test -w @spherescan/rules && npm run test -w @spherescan/viewer && npm run test -w @spherescan/modeler",
+    "validate": "node packages/cli/dist/cli.js validate packages/model/fixtures/order-platform.yaml",
+    "export:svg": "node packages/cli/dist/cli.js export svg packages/model/fixtures/order-platform.yaml -o order-platform.svg",
+    "check-link": "node scripts/check-scan-link.mjs",
+    "smoke": "node scripts/scan-smoke.mjs"
+  }
+}
