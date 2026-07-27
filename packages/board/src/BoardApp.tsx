@@ -325,6 +325,10 @@ export default function BoardApp({
     updatePort,
     deletePort,
     renameSystem,
+    model,
+    loadYamlText,
+    modeler,
+    ready,
   } = board;
 
   const [selected, setSelected] = useState<string | null>(null);
@@ -404,6 +408,19 @@ export default function BoardApp({
   const panning = useRef<{ sx: number; sy: number; px: number; py: number } | null>(null);
 
   const saveYaml = useCallback(async () => {
+    if (onSaveDocument) {
+      try {
+        // Serialize without clearing dirty state. The board is marked saved
+        // only when the host confirms that persistence succeeded.
+        const saved = await onSaveDocument(modeler.peekYAML());
+        if (saved) modeler.saveYAML();
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Save failed";
+        toast.error("Could not save", { description: message });
+      }
+      return;
+    }
+
     try {
       const result = await downloadYaml();
       if (!result) return;
@@ -416,7 +433,7 @@ export default function BoardApp({
       const message = err instanceof Error ? err.message : "Save failed";
       toast.error("Could not save YAML", { description: message });
     }
-  }, [downloadYaml]);
+  }, [downloadYaml, onSaveDocument, modeler]);
 
   // Keyboard: Cmd+K palette, undo/redo, save, delete
   useEffect(() => {
@@ -534,6 +551,22 @@ export default function BoardApp({
   useEffect(() => {
     onDirtyChange?.(dirty);
   }, [dirty, onDirtyChange]);
+
+  // The modeler mutates its model in place, so `model` retains the same object
+  // identity across commands. `historyStep` changes for each command and makes
+  // this notification fire reliably without inventing another event channel.
+  useEffect(() => {
+    if (!onDocumentChange || !model || !dirty) return;
+    onDocumentChange(modeler.peekYAML());
+  }, [historyStep, model, dirty, onDocumentChange, modeler]);
+
+  const loadedYamlRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!ready || !initialYaml) return;
+    if (loadedYamlRef.current === initialYaml) return;
+    loadedYamlRef.current = initialYaml;
+    void loadYamlText(initialYaml);
+  }, [ready, initialYaml, loadYamlText]);
 
   useEffect(() => {
     if (!warnOnUnload) return;
