@@ -1,6 +1,6 @@
-﻿# @spherescan/model
+# @spherescan/model
 
-SCAN metamodel â€” parse, serialize, and validate System & Component Architecture Notation documents.
+SCAN metamodel - parse, serialize, and validate System & Component Architecture Notation documents.
 
 ```bash
 npm install @spherescan/model

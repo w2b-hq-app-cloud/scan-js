@@ -1,4 +1,4 @@
-﻿---
+---
 name: scan-notation
 description: >-
   Author valid SCAN (System & Component Architecture Notation) 0.1 YAML diagrams
@@ -12,11 +12,11 @@ Copyright 2026 WABLOO PARTNERS SRL
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# SCAN notation â€” construct diagrams
+# SCAN notation - construct diagrams
 
-SCAN describes software systems as **YAML** (or JSON). Semantics live in root collections; diagram boxes live in `views[].layout`. Sphere *uses* SCAN via `@spherescan/*` from sibling repo `scan-js` â€” do not reimplement the canvas here.
+SCAN describes software systems as **YAML** (or JSON). Semantics live in root collections; diagram boxes live in `views[].layout`. Sphere *uses* SCAN via `@spherescan/*` from sibling repo `scan-js` - do not reimplement the canvas here.
 
-**File naming:** save diagrams as **`*.scan.yaml`** (e.g. `checkout.scan.yaml`, `architecture.scan.yaml`). Do **not** use `.sphere.yaml` â€” that extension is legacy.
+**File naming:** save diagrams as **`*.scan.yaml`** (e.g. `checkout.scan.yaml`, `architecture.scan.yaml`). Do **not** use `.sphere.yaml` - that extension is legacy.
 
 **Canonical skill location:** `scan-js/skills/scan-notation/` (this directory when inside scan-js). Cursor installs a synced mirror at `sphere-io/.cursor/skills/scan-notation/`. **Edit the canonical copy**; `python scripts/sync-scan-notation-skill.py` (pre-commit + post-merge) refreshes the Cursor mirror and optional skeletons.
 
@@ -48,7 +48,7 @@ Copy this checklist:
 - [ ] Connection types match kind pairs
 - [ ] fromPort = expose on from; toPort = consume on to (when set)
 - [ ] views[0].layout has every element id
-- [ ] Boundary members âŠ† layout ids; boxes contain members
+- [ ] Boundary members subset of  layout ids; boxes contain members
 - [ ] Saved as *.scan.yaml
 ```
 
@@ -121,11 +121,11 @@ Save this as e.g. `checkout.scan.yaml`.
 ## Ports
 
 ```yaml
-consumes:   # inbound â€” others connect TO this
+consumes:   # inbound - others connect TO this
   - id: svc-in
     label: REST
     protocol: OpenAPI
-exposes:    # outbound â€” this connects FROM this
+exposes:    # outbound - this connects FROM this
   - id: svc-out
     label: REST
     protocol: OpenAPI
@@ -140,13 +140,13 @@ Required: `from`, `to`, `type`. Recommended: `id`, `label`, `contract`, `fromSid
 
 | `type` | Typical use |
 |--------|-------------|
-| `synchronous-request` | REST-style serviceâ†”service or externalâ†’service |
+| `synchronous-request` | REST-style service<->service or external->service |
 | `grpc-request` | gRPC-style |
-| `database-access` | service â†’ datastore |
-| `event-publication` | service â†’ channel |
-| `stream-consume` / `event-subscription` | channel â†’ service/search |
-| `agent-delegation` | agent â†’ agent |
-| `git-integration` | agent â†’ repository |
+| `database-access` | service -> datastore |
+| `event-publication` | service -> channel |
+| `stream-consume` / `event-subscription` | channel -> service/search |
+| `agent-delegation` | agent -> agent |
+| `git-integration` | agent -> repository |
 
 Default labels/contracts often used in fixtures: REST/OpenAPI, gRPC/Proto, DB Access/JDBC, Publish|Stream/AsyncAPI, Git Integration.
 
@@ -157,16 +157,16 @@ Default labels/contracts often used in fixtures: REST/OpenAPI, gRPC/Proto, DB Ac
 ## Layout & boundaries
 
 - Every element that should appear on the board needs `views[].layout[id]: { x, y, w?, h? }`.
-- Suggested default sizes: service/agent/event ~`260Ã—190`, datastore ~`220Ã—160`, external ~`220Ã—150`, repo ~`260Ã—180`.
-- Space nodes ~80â€“120px apart; left-to-right for request flow; DB/events often below services.
+- Suggested default sizes: service/agent/event ~`260x190`, datastore ~`220x160`, external ~`220x150`, repo ~`260x180`.
+- Space nodes ~80-120px apart; left-to-right for request flow; DB/events often below services.
 - `fromSide` / `toSide`: `l` | `r` | `t` | `b` (edge attachment).
 - Boundaries: `kind: trust` | `runtime`; `members` are element ids whose centers sit inside the rect.
 
 ## Authoring tips
 
 - Prefer **many small typed edges** over one vague connection.
-- External systems expose APIs; your services **consume** them (edge often `external â†’ service` or serviceâ†’service after an internal wrapper).
-- Warnings: `status: warn` + `warn: "â€¦"`.
+- External systems expose APIs; your services **consume** them (edge often `external -> service` or service->service after an internal wrapper).
+- Warnings: `status: warn` + `warn: "..."`.
 - Output **complete YAML** the user can drop into the whiteboard or `scan validate`, saved as **`*.scan.yaml`**.
 - Do not put presentation-only fields on components; layout stays under `views`.
 

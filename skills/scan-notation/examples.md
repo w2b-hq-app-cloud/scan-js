@@ -1,6 +1,6 @@
 # SCAN diagram examples
 
-## Example A — service + DB + external REST
+## Example A - service + DB + external REST
 
 ```yaml
 scan: "0.1"
@@ -89,7 +89,7 @@ views:
       billing-db: { x: 180, y: 360, w: 220, h: 160 }
 ```
 
-## Example B — publish / consume events
+## Example B - publish / consume events
 
 ```yaml
 scan: "0.1"
@@ -160,7 +160,7 @@ views:
       search-index: { x: 420, y: 320, w: 260, h: 190 }
 ```
 
-## Example C — agents + git
+## Example C - agents + git
 
 ```yaml
 scan: "0.1"
@@ -231,8 +231,8 @@ views:
 
 ## Anti-patterns
 
-- Putting Kafka topics under `components` with `type: service` — use `channels`.
-- `type: database-access` between two services — use `synchronous-request` or `grpc-request`.
-- Layout missing an element id that appears in `connections` — node won’t render.
+- Putting Kafka topics under `components` with `type: service` - use `channels`.
+- `type: database-access` between two services - use `synchronous-request` or `grpc-request`.
+- Layout missing an element id that appears in `connections` - node won't render.
 - Reusing port ids across different elements is OK; reusing **element** ids is not.
-- Inventing connection types like `http` or `kafka` — use the enum above.
+- Inventing connection types like `http` or `kafka` - use the enum above.

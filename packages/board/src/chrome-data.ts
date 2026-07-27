@@ -1,4 +1,4 @@
-﻿import type { NodeKind } from "@spherescan/viewer";
+import type { NodeKind } from "@spherescan/viewer";
 
 export const commandSuggestions = [
   "Add an inventory service using Spring Boot and PostgreSQL",

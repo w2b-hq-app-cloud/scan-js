@@ -1,6 +1,6 @@
-﻿# @spherescan/viewer
+# @spherescan/viewer
 
-Embeddable SCAN renderer â€” project a model to a board graph and export SVG/PNG.
+Embeddable SCAN renderer - project a model to a board graph and export SVG/PNG.
 
 ```bash
 npm install @spherescan/viewer @spherescan/model

@@ -1,8 +1,8 @@
-﻿# @spherescan/whiteboard
+# @spherescan/whiteboard
 
 Minimal **SCAN** reference modeler (System & Component Architecture Notation).
 
-Open-source scope: canvas, tools, YAML I/O, inspector â€” a demo of the `@spherescan/*`
+Open-source scope: canvas, tools, YAML I/O, inspector - a demo of the `@spherescan/*`
 toolkit. Not a full product platform.
 
 Consumes `@spherescan/model`, `@spherescan/viewer`, `@spherescan/modeler`, `@spherescan/rules`, and `@spherescan/board`.

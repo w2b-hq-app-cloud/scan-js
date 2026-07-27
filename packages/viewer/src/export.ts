@@ -198,7 +198,7 @@ export function graphToSvg(graph: BoardGraph): string {
     .map((g) => {
       const fill = g.color === "agent" ? "rgba(34,197,94,0.04)" : "rgba(59,130,246,0.04)";
       const stroke = g.color === "agent" ? "#22c55e" : "#3b82f6";
-      const title = g.tag ? `${g.title} — ${g.tag}` : g.title;
+      const title = g.tag ? `${g.title} - ${g.tag}` : g.title;
       return (
         `<rect x="${g.x}" y="${g.y}" width="${g.w}" height="${g.h}" fill="${fill}" stroke="${stroke}" stroke-dasharray="8 6" stroke-width="2" rx="12"/>` +
         `<text x="${g.x + 16}" y="${g.y + 28}" font-family="system-ui,sans-serif" font-size="14" fill="#334155">${escapeXml(title)}</text>`

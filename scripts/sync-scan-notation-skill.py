@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Mirror canonical scan-notation skill → Cursor copy + optional skeletons.
+"""Mirror canonical scan-notation skill -> Cursor copy + optional skeletons.
 
 Source of truth: scan-js/skills/scan-notation/
 Destinations:

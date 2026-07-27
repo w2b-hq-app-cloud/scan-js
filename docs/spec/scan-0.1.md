@@ -1,12 +1,12 @@
-﻿# SCAN â€” System & Component Architecture Notation 0.1
+# SCAN - System & Component Architecture Notation 0.1
 
 **SCAN** is the formal notation for describing software systems, components, contracts, data, messaging, and agents.
 
-Sphere (the product) *uses* SCAN. This open-source toolkit implements SCANâ€™s metamodel, viewer, and modeler â€” not the full Sphere platform.
+Sphere (the product) *uses* SCAN. This open-source toolkit implements SCAN's metamodel, viewer, and modeler - not the full Sphere platform.
 
 | Concern | Where it lives |
 |---------|----------------|
-| Semantics (what exists, how it connects) | Root collections: `components`, `channels`, `connections`, â€¦ |
+| Semantics (what exists, how it connects) | Root collections: `components`, `channels`, `connections`, ... |
 | Presentation (diagram DI) | `views[].layout` and `views[].boundaries` boxes |
 | Machine validation | Zod in `@spherescan/model` + JSON Schema [`packages/model/schemas/scan-0.1.json`](../../packages/model/schemas/scan-0.1.json) |
 
@@ -32,7 +32,7 @@ Root version key: `scan: "0.1"` (legacy `sphere:` accepted by the parser and sch
 | `agent_runtimes` | no | Runtime environments for agents |
 | `repositories` | no | Source / artifact repositories as first-class nodes |
 | `connections` | no | Typed edges between elements |
-| `views` | yes (â‰¥1) | Diagram views + layout DI |
+| `views` | yes (>=1) | Diagram views + layout DI |
 
 **Principle:** keep `type` (architectural role) separate from `technology` (implementation stack).
 
@@ -120,7 +120,7 @@ components:
 | `id`, `name`, `type` | yes | |
 | `technology` | no | Implementation hint |
 | `subtitle` | no | Secondary line under the title |
-| `icon` | no | Diagram icon override: Lucide name (`shield`), `https://â€¦`, or `data:image/â€¦` |
+| `icon` | no | Diagram icon override: Lucide name (`shield`), `https://...`, or `data:image/...` |
 | `repository` | no | String path **or** `{ provider?, path }` |
 | `consumes` / `exposes` | no | Port lists |
 | `status` | no | `ok` \| `warn` |
@@ -185,7 +185,7 @@ agents:
     name: Coding Agent
     purpose: Build & Implement
     subtitle: Build & Implement
-    runtime: eng-agent-runtime    # id â†’ agent_runtimes
+    runtime: eng-agent-runtime    # id -> agent_runtimes
     consumes: [ ... ]
     exposes: [ ... ]
 
@@ -250,7 +250,7 @@ connections:
 | `label` | no | Edge label on the diagram |
 | `contract` | no | String **or** `{ type?, reference? }` |
 | `fromSide` / `toSide` | no | Diagram DI: `l` \| `r` \| `t` \| `b` |
-| `fromPort` / `toPort` | no | Port ids on `from` / `to` (expose â†’ consume when present) |
+| `fromPort` / `toPort` | no | Port ids on `from` / `to` (expose -> consume when present) |
 | `operations` | no | List of endpoints / RPCs / topics / queries used on the link |
 
 ```yaml
@@ -274,14 +274,14 @@ connections:
 |------|---------|
 | `synchronous-request` | Request/response (e.g. REST) |
 | `grpc-request` | Synchronous gRPC-style call |
-| `database-access` | Client â†’ datastore |
-| `event-publication` | Producer â†’ channel |
-| `event-subscription` | Channel â†’ consumer (subscription) |
+| `database-access` | Client -> datastore |
+| `event-publication` | Producer -> channel |
+| `event-subscription` | Channel -> consumer (subscription) |
 | `stream-consume` | Stream / topic consume |
-| `agent-delegation` | Agent â†’ agent handoff |
-| `git-integration` | Agent/system â†’ repository |
+| `agent-delegation` | Agent -> agent handoff |
+| `git-integration` | Agent/system -> repository |
 
-Which kind pairs are legal is defined by `@spherescan/rules`, not by this documentâ€™s schema alone. Reference integrity (ids exist) is enforced by `validateScanModel` (Track **A4**).
+Which kind pairs are legal is defined by `@spherescan/rules`, not by this document's schema alone. Reference integrity (ids exist) is enforced by `validateScanModel` (Track **A4**).
 
 ---
 
@@ -312,7 +312,7 @@ views:
 | Field | Required | Notes |
 |-------|----------|-------|
 | `id` | yes | |
-| `layout` | yes | Map of element id â†’ box |
+| `layout` | yes | Map of element id -> box |
 | `type` | no | Default `service-architecture` |
 | `boundaries` | no | Default `[]` |
 
@@ -331,7 +331,7 @@ views:
 | `members` | yes | Element ids inside the boundary |
 | `x`, `y`, `w`, `h` | yes | Boundary rectangle |
 | `kind` | no | `trust` \| `runtime` (default `trust`) |
-| `tag` | no | Secondary label (e.g. â€œTrust Boundaryâ€) |
+| `tag` | no | Secondary label (e.g. "Trust Boundary") |
 | `icon` | no | Same as element `icon` (Lucide name / URL / data URL) |
 
 `fromSide` / `toSide` on connections are also DI (edge routing), co-located with connection semantics for authoring convenience.
@@ -341,7 +341,7 @@ views:
 ## Validation
 
 1. **Structural:** JSON Schema [`scan-0.1.json`](../../packages/model/schemas/scan-0.1.json) (also published as `@spherescan/model/schema.json`) and Zod `scanModelSchema` in `@spherescan/model`.
-2. **Semantic:** `validateScanModel(model)` in `@spherescan/model` â€” id uniqueness, connection/boundary/layout/runtime refs, port ids on connections. Returns `{ ok, issues[] }` with `code`, `path`, `message`, `severity`.
+2. **Semantic:** `validateScanModel(model)` in `@spherescan/model` - id uniqueness, connection/boundary/layout/runtime refs, port ids on connections. Returns `{ ok, issues[] }` with `code`, `path`, `message`, `severity`.
 3. **CLI:** `scan validate <file.yaml>` parses with Zod, then runs `validateScanModel` (exit 1 on errors).
 
 Unknown keys: Zod currently strips extras on parse. Explicit passthrough / strip policy is Track **A2**.
@@ -350,8 +350,8 @@ Unknown keys: Zod currently strips extras on parse. Explicit passthrough / strip
 
 ## Fixtures
 
-- [`packages/model/fixtures/order-platform.yaml`](../../packages/model/fixtures/order-platform.yaml) â€” canonical multi-kind board
-- [`packages/model/fixtures/dummy-cafe.yaml`](../../packages/model/fixtures/dummy-cafe.yaml) â€” second sample
+- [`packages/model/fixtures/order-platform.yaml`](../../packages/model/fixtures/order-platform.yaml) - canonical multi-kind board
+- [`packages/model/fixtures/dummy-cafe.yaml`](../../packages/model/fixtures/dummy-cafe.yaml) - second sample
 
 Both must validate against the JSON Schema and parse with `@spherescan/model`.
 
@@ -363,9 +363,9 @@ Both must validate against the JSON Schema and parse with `@spherescan/model`.
 
 ---
 
-Copyright Â© 2026 WABLOO PARTNERS SRL.
+Copyright (c) 2026 WABLOO PARTNERS SRL.
 
-The SCAN â€” System & Component Architecture Notation specification is licensed
+The SCAN - System & Component Architecture Notation specification is licensed
 under the Creative Commons Attribution 4.0 International License.
 
 To view the license, visit:
@@ -373,5 +373,5 @@ https://creativecommons.org/licenses/by/4.0/
 
 Suggested attribution:
 
-> â€œSCAN â€” System & Component Architecture Notationâ€, WABLOO PARTNERS SRL,
+> "SCAN - System & Component Architecture Notation", WABLOO PARTNERS SRL,
 > licensed under CC BY 4.0. Changes, if any, must be indicated.

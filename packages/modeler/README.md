@@ -1,6 +1,6 @@
-﻿# @spherescan/modeler
+# @spherescan/modeler
 
-SCAN editing API â€” command stack for create, connect, move, delete, auto-layout, undo/redo.
+SCAN editing API - command stack for create, connect, move, delete, auto-layout, undo/redo.
 
 ```bash
 npm install @spherescan/modeler @spherescan/viewer @spherescan/model @spherescan/rules

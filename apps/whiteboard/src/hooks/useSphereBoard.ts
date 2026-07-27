@@ -1,4 +1,4 @@
-﻿export {
+export {
   useScanBoard as useSphereBoard,
   useScanBoard,
   diagramBasename,

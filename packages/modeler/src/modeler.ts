@@ -1,4 +1,4 @@
-﻿import {
+import {
   createEmptyModel,
   parseSphereYaml,
   serializeSphereYaml,
@@ -28,7 +28,7 @@ type ChangeListener = (state: {
 }) => void;
 
 /**
- * SCAN modeler â€” owns the canonical model, command stack, and projection.
+ * SCAN modeler - owns the canonical model, command stack, and projection.
  * Optional container enables embeddable snapshot rendering via ScanViewer.
  */
 export class ScanModeler {

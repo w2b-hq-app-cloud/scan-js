@@ -74,17 +74,17 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "SCAN — Notation modeler" },
+      { title: "SCAN - Notation modeler" },
       {
         name: "description",
         content:
-          "SCAN (System & Component Architecture Notation) — open-source diagram toolkit reference app.",
+          "SCAN (System & Component Architecture Notation) - open-source diagram toolkit reference app.",
       },
-      { property: "og:title", content: "SCAN — Notation modeler" },
+      { property: "og:title", content: "SCAN - Notation modeler" },
       {
         property: "og:description",
         content:
-          "SCAN (System & Component Architecture Notation) — open-source diagram toolkit reference app.",
+          "SCAN (System & Component Architecture Notation) - open-source diagram toolkit reference app.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },

@@ -1,6 +1,6 @@
-﻿# API walkthrough
+# API walkthrough
 
-Import YAML â†’ render â†’ edit â†’ export, using the `@spherescan/*` toolkit.
+Import YAML -> render -> edit -> export, using the `@spherescan/*` toolkit.
 
 ## 1. Validate
 
@@ -43,7 +43,7 @@ const out = modeler.saveYAML();
 node packages/cli/dist/cli.js export svg path/to/architecture.scan.yaml -o out.svg
 ```
 
-Or from the viewer graph: `projectToGraph` â†’ `graphToSvg`.
+Or from the viewer graph: `projectToGraph` -> `graphToSvg`.
 
 ## 5. Embed example
 

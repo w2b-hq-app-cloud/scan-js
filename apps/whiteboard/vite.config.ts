@@ -1,4 +1,4 @@
-﻿import path from "node:path";
+import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
@@ -8,7 +8,7 @@ import tsconfigPaths from "vite-tsconfig-paths";
 import { nitro } from "nitro/vite";
 
 // Nested under sphere-io/scan-js/; Vite treats scan-js/ as workspace root, but
-// deps are hoisted to sphere-io/node_modules â€” allow that path for Nitro SSR.
+// deps are hoisted to sphere-io/node_modules - allow that path for Nitro SSR.
 const appDir = path.dirname(fileURLToPath(import.meta.url));
 const monorepoRoot = path.resolve(appDir, "../../..");
 

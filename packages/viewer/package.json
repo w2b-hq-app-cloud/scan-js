@@ -1,7 +1,7 @@
-﻿{
+{
   "name": "@spherescan/viewer",
   "version": "0.1.0",
-  "description": "SCAN viewer — embeddable System & Component Architecture Notation renderer",
+  "description": "SCAN viewer - embeddable System & Component Architecture Notation renderer",
   "type": "module",
   "license": "Apache-2.0",
   "main": "./dist/index.js",

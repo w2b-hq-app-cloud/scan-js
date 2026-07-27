@@ -1,4 +1,4 @@
-﻿import type {
+import type {
   ConnectionType,
   LayoutEntry,
   SphereModel,
@@ -725,7 +725,7 @@ export class Modeling {
       toPort: options?.toPort,
     };
     next.connections.push(connection);
-    this.replace(next, prev, `Connect ${fromId} â†’ ${toId}`);
+    this.replace(next, prev, `Connect ${fromId} -> ${toId}`);
     return id;
   }
 

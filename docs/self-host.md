@@ -1,4 +1,4 @@
-﻿# Self-host the reference whiteboard
+# Self-host the reference whiteboard
 
 The SCAN whiteboard is a static Vite app under `apps/whiteboard`.
 
@@ -32,4 +32,4 @@ FROM nginx:alpine
 COPY --from=build /app/apps/whiteboard/dist /usr/share/nginx/html
 ```
 
-This ships the **reference modeler only** â€” not Sphere product hosting, collab, or AI services.
+This ships the **reference modeler only** - not Sphere product hosting, collab, or AI services.

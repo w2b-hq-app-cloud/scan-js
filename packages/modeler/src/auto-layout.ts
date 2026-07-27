@@ -1,4 +1,4 @@
-﻿import type {
+import type {
   LayoutEntry,
   SphereConnection,
   SphereModel,
@@ -134,7 +134,7 @@ function splitTallLayers(
         const kidH = Math.max(...kids.map((k) => sizes[k]?.h ?? 160));
         blockH += gapY * 0.75 + kidH;
       } else if (kids.length > 2) {
-        // Side pocket â€” height â‰ˆ parent or kids stack, not stacked under.
+        // Side pocket - height ~= parent or kids stack, not stacked under.
         const kidStack =
           kids.reduce((h, k) => h + (sizes[k]?.h ?? 160) + gapY * 0.5, 0) -
           gapY * 0.5;
@@ -238,7 +238,7 @@ function assignLayers(
   );
   for (const id of ordered) dfs(id);
 
-  // Re-run longest path now that all nodes seeded â€” simple relaxation.
+  // Re-run longest path now that all nodes seeded - simple relaxation.
   for (let pass = 0; pass < nodeIds.length; pass++) {
     let changed = false;
     for (const id of nodeIds) {
@@ -403,7 +403,7 @@ function layoutClusterMembers(
     }
   }
 
-  // Any member not placed (edge cases) â€” stack at bottom.
+  // Any member not placed (edge cases) - stack at bottom.
   let orphanY = 0;
   for (const id of memberIds) {
     if (local[id]) continue;
@@ -412,7 +412,7 @@ function layoutClusterMembers(
     orphanY += size.h + gapY;
   }
 
-  // Attachments centered under a parent can go negative â€” shift into quadrant I.
+  // Attachments centered under a parent can go negative - shift into quadrant I.
   let minX = 0;
   let minY = 0;
   for (const b of Object.values(local)) {
@@ -464,7 +464,7 @@ function layoutClusterRow(
 
   // Synthetic model ranks: trust boundaries before runtime, free last-ish.
   const layer = assignLayers(ids, metaEdges, model);
-  // Override free cluster to sit left or around by connectivity â€” keep computed.
+  // Override free cluster to sit left or around by connectivity - keep computed.
 
   const maxLayer = Math.max(0, ...[...layer.values()]);
   const byLayer: ClusterPlan[][] = Array.from({ length: maxLayer + 1 }, () => []);

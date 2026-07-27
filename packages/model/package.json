@@ -1,7 +1,7 @@
-﻿{
+{
   "name": "@spherescan/model",
   "version": "0.1.0",
-  "description": "SCAN metamodel — System & Component Architecture Notation parse/validate/serialize",
+  "description": "SCAN metamodel - System & Component Architecture Notation parse/validate/serialize",
   "type": "module",
   "license": "Apache-2.0",
   "main": "./dist/index.js",

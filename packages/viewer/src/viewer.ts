@@ -1,4 +1,4 @@
-﻿import {
+import {
   parseSphereYaml,
   type SphereModel,
   serializeSphereYaml,

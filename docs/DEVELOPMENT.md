@@ -1,4 +1,4 @@
-﻿# Development â€” SCAN (`scan-js`)
+# Development - SCAN (`scan-js`)
 
 Local setup for contributing to the SCAN toolkit.
 
@@ -27,9 +27,9 @@ Opens the minimal modeler in `apps/whiteboard`. How-to: [MANUAL.md](MANUAL.md).
 
 ## Packages
 
-Workspaces under `packages/*` and `apps/*`. Build order is handled by the root `build` script (`model` â†’ `rules` â†’ `viewer` â†’ `modeler` â†’ `cli` â†’ whiteboard).
+Workspaces under `packages/*` and `apps/*`. Build order is handled by the root `build` script (`model` -> `rules` -> `viewer` -> `modeler` -> `cli` -> whiteboard).
 
-`@spherescan/board` is a **private** workspace package (source consumed by the whiteboard). It is not published to npm in v0.1 â€” see README.
+`@spherescan/board` is a **private** workspace package (source consumed by the whiteboard). It is not published to npm in v0.1 - see README.
 
 ## Skill sync (when nested under sphere-io)
 

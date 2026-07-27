@@ -28,7 +28,7 @@ test("pointOnCubic interpolates endpoints and bows off the chord", () => {
   const mid = pointOnCubic(a, c1, c2, b, 0.5);
   assert.deepEqual(start, a);
   assert.deepEqual(end, b);
-  // Strong upward bow — mid Y well above the chord (y=0).
+  // Strong upward bow - mid Y well above the chord (y=0).
   assert.ok(mid.y > 40);
 });
 

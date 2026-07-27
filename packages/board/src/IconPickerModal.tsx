@@ -57,7 +57,7 @@ export function IconPickerModal({
   const onFile = (file: File | undefined) => {
     if (!file) return;
     if (!file.type.startsWith("image/")) {
-      setError("Choose an image file (PNG, SVG, JPEG, …)");
+      setError("Choose an image file (PNG, SVG, JPEG, ...)");
       return;
     }
     if (file.size > MAX_UPLOAD_BYTES) {
@@ -173,7 +173,7 @@ export function IconPickerModal({
                     applyUrl();
                   }
                 }}
-                placeholder="https://… or data:image/…"
+                placeholder="https://... or data:image/..."
                 className="w-full rounded-md border border-border bg-background py-2 pl-8 pr-2.5 text-xs outline-none focus:border-primary"
               />
             </div>

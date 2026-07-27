@@ -108,7 +108,7 @@ export type PlaceEdgeLabelOpts = {
   nodes: Box[];
   labelW?: number;
   labelH?: number;
-  /** Extra offset along path normal for near-duplicate labels (±1, ±2…). */
+  /** Extra offset along path normal for near-duplicate labels (+/-1, +/-2...). */
   stagger?: number;
 };
 
@@ -145,7 +145,7 @@ export function placeEdgeLabel(opts: PlaceEdgeLabelOpts): Point {
         bestScore = score;
         best = q;
         if (!hits && nudge === 0 && Math.abs(t - 0.5) < 0.01) {
-          // Perfect mid — still apply stagger below.
+          // Perfect mid - still apply stagger below.
           bestScore = score;
         }
       }
@@ -169,7 +169,7 @@ export function placeEdgeLabel(opts: PlaceEdgeLabelOpts): Point {
 
 /**
  * Assign stagger indices for labels whose midpoints are nearly coincident.
- * Returns a map of edgeId → stagger offset (−2…2).
+ * Returns a map of edgeId -> stagger offset (-2...2).
  */
 export function computeLabelStagger(
   placements: Array<{ id: string; x: number; y: number }>,

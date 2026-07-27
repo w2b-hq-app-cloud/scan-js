@@ -1,6 +1,6 @@
 # Trademarks
 
-**Sphere**, **SCAN — System & Component Architecture Notation**, their associated
+**Sphere**, **SCAN - System & Component Architecture Notation**, their associated
 logos, and the **SCAN Certified** designation are trademarks of WABLOO PARTNERS
 SRL.
 
@@ -11,5 +11,5 @@ affiliation.
 You may accurately state that software implements, supports, or is compatible
 with the SCAN specification.
 
-You may not call a product “Sphere”, use the official SCAN logo as its own
-branding, or claim “SCAN Certified” status without written permission.
+You may not call a product "Sphere", use the official SCAN logo as its own
+branding, or claim "SCAN Certified" status without written permission.

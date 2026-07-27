@@ -1,7 +1,7 @@
-﻿{
+{
   "name": "@spherescan/rules",
   "version": "0.1.0",
-  "description": "SCAN modeling rules — allowed connections and containment",
+  "description": "SCAN modeling rules - allowed connections and containment",
   "type": "module",
   "license": "Apache-2.0",
   "main": "./dist/index.js",

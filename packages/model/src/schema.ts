@@ -13,8 +13,8 @@ const portSchema = z.object({
 /**
  * Optional diagram icon override.
  * - Lucide name (e.g. `shield`, `database`)
- * - `https://…` / `http://…` image URL
- * - `data:image/…` (uploaded file encoded as data URL)
+ * - `https://...` / `http://...` image URL
+ * - `data:image/...` (uploaded file encoded as data URL)
  */
 export const iconSchema = z.string().min(1).optional();
 

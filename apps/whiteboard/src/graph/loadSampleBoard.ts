@@ -1,4 +1,4 @@
-﻿import orderPlatformYaml from "@/samples/order-platform.yaml?raw";
+import orderPlatformYaml from "@/samples/order-platform.yaml?raw";
 import { parseSphereYaml } from "@spherescan/model";
 import { projectToGraph, type BoardGraph } from "@spherescan/viewer";
 

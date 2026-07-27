@@ -1,4 +1,4 @@
-﻿import assert from "node:assert/strict";
+import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -34,7 +34,7 @@ test("allows external to event publication", () => {
   assert.equal(check.allowed, true);
 });
 
-test("port-aware: allow expose â†’ consume", () => {
+test("port-aware: allow expose -> consume", () => {
   const model = parseSphereYaml(fixture);
   const check = canConnect(model, "order-api", "payment-service", undefined, {
     fromPort: "oa-out",

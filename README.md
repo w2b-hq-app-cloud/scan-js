@@ -1,17 +1,17 @@
-﻿# SCAN (`scan-js`)
+# SCAN (`scan-js`)
 
-**System & Component Architecture Notation** â€” an open-source toolkit for describing and editing software architecture diagrams in the browser.
+**System & Component Architecture Notation** - an open-source toolkit for describing and editing software architecture diagrams in the browser.
 
 ![SCAN whiteboard reference UI](docs/screenshot.png)
 
 SCAN is an open-source **notation + embeddable libraries + reference modeler** for
-system and component architecture diagrams â€” not a full product platform.
+system and component architecture diagrams - not a full product platform.
 
 | Layer | Role in SCAN |
 |-------|----------------|
-| **Notation** | YAML/JSON metamodel (`scan: "0.1"`) â€” elements, ports, typed connections, views |
+| **Notation** | YAML/JSON metamodel (`scan: "0.1"`) - elements, ports, typed connections, views |
 | **Libraries** | `@spherescan/model`, `@spherescan/rules`, `@spherescan/viewer`, `@spherescan/modeler`, `@spherescan/cli` |
-| **Reference app** | `apps/whiteboard` â€” minimal modeler to exercise the toolkit |
+| **Reference app** | `apps/whiteboard` - minimal modeler to exercise the toolkit |
 
 This repository (`scan-js`) is the open-source project. Contributions, issues, and roadmap here are about **SCAN**, not any proprietary host product.
 
@@ -19,17 +19,17 @@ This repository (`scan-js`) is the open-source project. Contributions, issues, a
 
 ## What SCAN is
 
-SCAN describes **software systems**: services, data stores, event streams, external systems, agents, and repositories â€” plus **how they connect** (REST, gRPC, DB access, publish/subscribe, agent delegation, git integration).
+SCAN describes **software systems**: services, data stores, event streams, external systems, agents, and repositories - plus **how they connect** (REST, gRPC, DB access, publish/subscribe, agent delegation, git integration).
 
 Canonical form is **YAML** (JSON works with the same schema). A document has:
 
-1. **Semantics** â€” root collections (`components`, `channels`, `connections`, â€¦)
-2. **Presentation (diagram DI)** â€” `views[].layout` boxes and optional `boundaries`
-3. **Validation** â€” Zod + JSON Schema in `@spherescan/model`, connection legality in `@spherescan/rules`
+1. **Semantics** - root collections (`components`, `channels`, `connections`, ...)
+2. **Presentation (diagram DI)** - `views[].layout` boxes and optional `boundaries`
+3. **Validation** - Zod + JSON Schema in `@spherescan/model`, connection legality in `@spherescan/rules`
 
 **Principle:** keep architectural **`type`** (role) separate from **`technology`** (stack), e.g. `type: service` + `technology: Spring Boot`.
 
-Full normative detail: [`docs/spec/scan-0.1.md`](docs/spec/scan-0.1.md) Â· Whiteboard UI: [`docs/MANUAL.md`](docs/MANUAL.md) Â· JSON Schema: [`packages/model/schemas/scan-0.1.json`](packages/model/schemas/scan-0.1.json)
+Full normative detail: [`docs/spec/scan-0.1.md`](docs/spec/scan-0.1.md) · Whiteboard UI: [`docs/MANUAL.md`](docs/MANUAL.md) · JSON Schema: [`packages/model/schemas/scan-0.1.json`](packages/model/schemas/scan-0.1.json)
 
 ---
 
@@ -67,7 +67,7 @@ views:
 | `agents` / `agent_runtimes` | no | Agents and their runtimes |
 | `repositories` | no | Source/artifact repos as first-class nodes |
 | `connections` | no | Typed edges between element ids |
-| `views` | yes (â‰¥1) | Diagram layout + boundaries |
+| `views` | yes (>=1) | Diagram layout + boundaries |
 
 ### Where elements go
 
@@ -80,7 +80,7 @@ views:
 | Third-party system | `external_systems` | |
 | Agent | `agents` | not under `components` |
 | Git / artifact repo **node** | `repositories` | canvas element |
-| Inline repo **ref** on a component | `repository:` field | path only â€” not a box |
+| Inline repo **ref** on a component | `repository:` field | path only - not a box |
 
 ### Ports
 
@@ -97,7 +97,7 @@ exposes:
     protocol: OpenAPI
 ```
 
-When a connection sets `fromPort` / `toPort`, rules require **expose â†’ consume**.
+When a connection sets `fromPort` / `toPort`, rules require **expose -> consume**.
 
 ### Connections
 
@@ -116,14 +116,14 @@ connections:
 |------|---------|
 | `synchronous-request` | Request/response (e.g. REST) |
 | `grpc-request` | Synchronous gRPC-style call |
-| `database-access` | Client â†’ datastore |
-| `event-publication` | Producer â†’ channel |
-| `event-subscription` | Channel â†’ consumer |
+| `database-access` | Client -> datastore |
+| `event-publication` | Producer -> channel |
+| `event-subscription` | Channel -> consumer |
 | `stream-consume` | Stream / topic consume |
-| `agent-delegation` | Agent â†’ agent |
-| `git-integration` | Agent/system â†’ repository |
+| `agent-delegation` | Agent -> agent |
+| `git-integration` | Agent/system -> repository |
 
-**Which pairs are legal** (e.g. serviceâ†’database yes, agentâ†’database no) is enforced by `@spherescan/rules`, not by the schema alone. See connection rules in the [scan-notation skill](skills/scan-notation/connection-rules.md) and `packages/rules`.
+**Which pairs are legal** (e.g. service->database yes, agent->database no) is enforced by `@spherescan/rules`, not by the schema alone. See connection rules in the [scan-notation skill](skills/scan-notation/connection-rules.md) and `packages/rules`.
 
 ### Views (diagram interchange)
 
@@ -199,10 +199,10 @@ Fixture used in tests: [`packages/model/fixtures/order-platform.yaml`](packages/
 |---------|---------|
 | `@spherescan/model` | Parse / serialize / validate SCAN YAML & JSON |
 | `@spherescan/rules` | Legal connection pairs + port checks |
-| `@spherescan/viewer` | Project model â†’ board graph; SVG/PNG export |
+| `@spherescan/viewer` | Project model -> board graph; SVG/PNG export |
 | `@spherescan/modeler` | Command stack: move, connect, create, auto-layout, undo |
-| `@spherescan/cli` | `validate`, `export svg`, â€¦ |
-| `@spherescan/board` | Shared React canvas (**private** workspace â€” not on npm in v0.1; used by the whiteboard) |
+| `@spherescan/cli` | `validate`, `export svg`, ... |
+| `@spherescan/board` | Shared React canvas (**private** workspace - not on npm in v0.1; used by the whiteboard) |
 
 Embed pattern (viewer):
 
@@ -215,7 +215,7 @@ await viewer.importYAML(yamlString);
 
 Modeler adds editing on top of the same model (command stack, create/connect/move, undo).
 
-Public APIs prefer `Scan*` names (`ScanModel`, `ScanViewer`, `ScanModeler`, â€¦). Legacy `Sphere*` / `sphere:` aliases remain for compatibility; new code should use `Scan*` / `scan:`.
+Public APIs prefer `Scan*` names (`ScanModel`, `ScanViewer`, `ScanModeler`, ...). Legacy `Sphere*` / `sphere:` aliases remain for compatibility; new code should use `Scan*` / `scan:`.
 
 ---
 
@@ -249,13 +249,13 @@ npm run dev               # reference whiteboard
 
 Open the whiteboard, load a `.scan` / `.yaml` file, edit on canvas, save as SCAN YAML.
 
-**Whiteboard how-to:** [`docs/MANUAL.md`](docs/MANUAL.md) Â· **Local setup:** [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) Â· **API walkthrough:** [`docs/api/walkthrough.md`](docs/api/walkthrough.md)
+**Whiteboard how-to:** [`docs/MANUAL.md`](docs/MANUAL.md) · **Local setup:** [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) · **API walkthrough:** [`docs/api/walkthrough.md`](docs/api/walkthrough.md)
 
 ---
 
 ## Validate YAML & use from another project
 
-`@spherescan/*` packages are intended for npm (`@spherescan/model`, `@spherescan/viewer`, â€¦). The GitHub repo is public; see [`docs/PUBLISH.md`](docs/PUBLISH.md) to publish the scope after `npm login`. Until then, clone this repo, build, then validate:
+`@spherescan/*` packages are intended for npm (`@spherescan/model`, `@spherescan/viewer`, ...). The GitHub repo is public; see [`docs/PUBLISH.md`](docs/PUBLISH.md) to publish the scope after `npm login`. Until then, clone this repo, build, then validate:
 
 ```bash
 npm install --legacy-peer-deps && npm run build
@@ -282,7 +282,7 @@ From another package.json (path must point at a built tree):
 
 Programmatic: `parseScanYaml` + `validateScanModel` from `@spherescan/model`.
 
-When packages are published: `npm i -D @spherescan/cli` / `npx scan validate â€¦`.
+When packages are published: `npm i -D @spherescan/cli` / `npx scan validate ...`.
 
 ---
 
@@ -290,7 +290,7 @@ When packages are published: `npm i -D @spherescan/cli` / `npx scan validate â�
 
 See **[CONTRIBUTING.md](CONTRIBUTING.md)** for setup, package boundaries, and PR expectations.
 
-This project is **scan-js / SCAN**. Please file issues and PRs against this repositoryâ€™s scope (notation, `@spherescan/*`, whiteboard, CLI, docs). Product-specific chrome, branding, or proprietary hosts are out of scope here.
+This project is **scan-js / SCAN**. Please file issues and PRs against this repository's scope (notation, `@spherescan/*`, whiteboard, CLI, docs). Product-specific chrome, branding, or proprietary hosts are out of scope here.
 
 ---
 

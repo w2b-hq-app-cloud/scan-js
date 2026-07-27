@@ -1,4 +1,4 @@
-﻿export {
+export {
   SCAN_VERSION,
   SPHERE_VERSION,
   scanModelSchema,

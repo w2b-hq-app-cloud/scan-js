@@ -1,4 +1,4 @@
-﻿## Summary
+## Summary
 
 <!-- What does this PR change? Keep scope to SCAN / @spherescan/* / whiteboard / docs. -->
 

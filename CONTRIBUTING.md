@@ -1,8 +1,8 @@
-﻿# Contributing to SCAN (`scan-js`)
+# Contributing to SCAN (`scan-js`)
 
 Thanks for helping improve **System & Component Architecture Notation** and the `@spherescan/*` toolkit.
 
-This repository is the **open-source SCAN project**. Contributions should advance the notation, libraries, reference whiteboard, CLI, and docs â€” not proprietary product hosts.
+This repository is the **open-source SCAN project**. Contributions should advance the notation, libraries, reference whiteboard, CLI, and docs - not proprietary product hosts.
 
 ## Setup
 
@@ -32,7 +32,7 @@ npm run dev
 | Reference UI | `apps/whiteboard` |
 | Spec | `docs/spec/scan-0.1.md` |
 
-Keep the whiteboard **minimal and embeddable** â€” a demo of the toolkit, not a full product shell.
+Keep the whiteboard **minimal and embeddable** - a demo of the toolkit, not a full product shell.
 
 ## Notation changes
 

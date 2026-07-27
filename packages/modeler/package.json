@@ -1,7 +1,7 @@
-﻿{
+{
   "name": "@spherescan/modeler",
   "version": "0.1.0",
-  "description": "SCAN modeler — edit System & Component Architecture Notation with a command stack",
+  "description": "SCAN modeler - edit System & Component Architecture Notation with a command stack",
   "type": "module",
   "license": "Apache-2.0",
   "main": "./dist/index.js",

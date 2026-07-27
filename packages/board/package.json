@@ -1,8 +1,8 @@
-﻿{
+{
   "name": "@spherescan/board",
   "version": "0.1.0",
   "private": true,
-  "description": "SCAN interactive React board — shared canvas for the reference whiteboard (private until 0.2)",
+  "description": "SCAN interactive React board - shared canvas for the reference whiteboard (private until 0.2)",
   "type": "module",
   "license": "Apache-2.0",
   "exports": {

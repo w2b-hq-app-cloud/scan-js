@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/w2b-hq-app-cloud/scan-js/raw/main/packages/model/schemas/scan-0.1.json",
-  "title": "SCAN  System & Component Architecture Notation 0.1",
+  "title": "SCAN  System & Component Architecture Notation 0.1",
   "description": "JSON Schema for SCAN 0.1 documents. Mirrors the Zod metamodel in @spherescan/model. Prefer root key scan; legacy sphere is accepted.",
   "type": "object",
   "anyOf": [

@@ -1,4 +1,4 @@
-﻿/** Re-export board types from @spherescan/viewer for local app imports. */
+/** Re-export board types from @spherescan/viewer for local app imports. */
 export type {
   BoardGraph,
   NodeKind,

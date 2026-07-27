@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env node
+#!/usr/bin/env node
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 WABLOO PARTNERS SRL
 import { readFileSync, writeFileSync } from "node:fs";
@@ -9,7 +9,7 @@ import { graphToSvg, projectToGraph } from "@spherescan/viewer";
 function usage() {
   console.log(`scan <command> [options]
 
-SCAN â€” System & Component Architecture Notation toolkit (open source).
+SCAN - System & Component Architecture Notation toolkit (open source).
 Not the Sphere product platform.
 
 Commands:

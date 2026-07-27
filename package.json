@@ -1,7 +1,7 @@
-﻿{
+{
   "name": "scan-js",
   "private": true,
-  "description": "SCAN â€” System & Component Architecture Notation: open-source toolkit (model, viewer, modeler, CLI) and reference whiteboard",
+  "description": "SCAN - System & Component Architecture Notation: open-source toolkit (model, viewer, modeler, CLI) and reference whiteboard",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",

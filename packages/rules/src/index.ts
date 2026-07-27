@@ -1,4 +1,4 @@
-﻿// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 WABLOO PARTNERS SRL
 
 import type { ConnectionType, SphereModel, SpherePort } from "@spherescan/model";
@@ -18,7 +18,7 @@ export type EntityPorts = {
   exposes: SpherePort[];
 };
 
-/** Map model entity id â†’ coarse kind used by connection rules. */
+/** Map model entity id -> coarse kind used by connection rules. */
 export function resolveEntityKind(model: SphereModel, id: string): EntityKind {
   if (model.external_systems.some((e) => e.id === id)) return "external";
   if (model.channels.some((c) => c.id === id)) return "event";
@@ -192,7 +192,7 @@ export function canConnect(
 
   const matches = RULES.filter((r) => r.from.includes(from) && r.to.includes(to));
   if (!matches.length) {
-    return { allowed: false, reason: `No rule allows ${from} â†’ ${to}` };
+    return { allowed: false, reason: `No rule allows ${from} -> ${to}` };
   }
 
   if (type) {
@@ -200,7 +200,7 @@ export function canConnect(
     if (!ok) {
       return {
         allowed: false,
-        reason: `Connection type ${type} not allowed for ${from} â†’ ${to}`,
+        reason: `Connection type ${type} not allowed for ${from} -> ${to}`,
         suggestedType: matches[0].types[0],
       };
     }

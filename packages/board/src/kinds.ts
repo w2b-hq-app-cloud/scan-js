@@ -1,4 +1,4 @@
-﻿import type { NodeKind } from "@spherescan/viewer";
+import type { NodeKind } from "@spherescan/viewer";
 import {
   Boxes,
   Database,

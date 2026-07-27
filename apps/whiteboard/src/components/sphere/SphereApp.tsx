@@ -1,5 +1,5 @@
-﻿/**
- * SCAN whiteboard â€” same interactive board as Sphere (`@spherescan/board`),
+/**
+ * SCAN whiteboard - same interactive board as Sphere (`@spherescan/board`),
  * with OSS chrome only (`shell="scan"`).
  */
 import BoardApp from "@spherescan/board";

@@ -1,6 +1,6 @@
-﻿# @spherescan/rules
+# @spherescan/rules
 
-Connection legality for SCAN â€” which element kinds may connect and with which port roles.
+Connection legality for SCAN - which element kinds may connect and with which port roles.
 
 ```bash
 npm install @spherescan/rules @spherescan/model

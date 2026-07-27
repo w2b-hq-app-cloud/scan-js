@@ -1,10 +1,10 @@
-﻿# @spherescan/cli
+# @spherescan/cli
 
 Command-line tools for SCAN documents.
 
 ```bash
 npm install -g @spherescan/cli
-# or: npx scan â€¦
+# or: npx scan ...
 scan validate architecture.scan.yaml
 scan export svg architecture.scan.yaml -o out.svg
 ```

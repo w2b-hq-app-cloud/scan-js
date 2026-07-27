@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ScanModeler,
   type CreateKind,
@@ -26,7 +26,7 @@ async function downloadBlob(filename: string, blob: Blob) {
   URL.revokeObjectURL(url);
 }
 
-/** Filename stem from diagram / system name (e.g. "Order Platform" â†’ "order-platform"). */
+/** Filename stem from diagram / system name (e.g. "Order Platform" -> "order-platform"). */
 export function diagramBasename(name: string | undefined | null): string {
   const slug = (name ?? "")
     .trim()

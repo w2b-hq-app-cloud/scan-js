@@ -1,4 +1,4 @@
-﻿import type { SphereConnection, SphereModel, SphereView } from "@spherescan/model";
+import type { SphereConnection, SphereModel, SphereView } from "@spherescan/model";
 import type {
   BoardGraph,
   NodeKind,

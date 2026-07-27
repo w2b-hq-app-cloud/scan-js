@@ -1,7 +1,7 @@
-﻿{
+{
   "name": "@spherescan/cli",
   "version": "0.1.0",
-  "description": "SCAN CLI — validate and export System & Component Architecture Notation diagrams",
+  "description": "SCAN CLI - validate and export System & Component Architecture Notation diagrams",
   "type": "module",
   "license": "Apache-2.0",
   "bin": {

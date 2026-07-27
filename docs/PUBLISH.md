@@ -1,9 +1,9 @@
-﻿# Publishing SCAN to npm (`@spherescan`)
+# Publishing SCAN to npm (`@spherescan`)
 
 > **Full guide:** when nested under sphere-io, see  
 > [`docs/PUBLISH-SCAN-NPM.md`](../../docs/PUBLISH-SCAN-NPM.md).
 
-**Scope:** [npmjs.com/org/spherescan](https://www.npmjs.com/org/spherescan) → `@spherescan/model`, `@spherescan/rules`, `@spherescan/viewer`, `@spherescan/modeler`, `@spherescan/cli`  
+**Scope:** [npmjs.com/org/spherescan](https://www.npmjs.com/org/spherescan) -> `@spherescan/model`, `@spherescan/rules`, `@spherescan/viewer`, `@spherescan/modeler`, `@spherescan/cli`  
 (`@scan` is not available on npm.)
 
 Keep **`@spherescan/board`** private until 0.2.

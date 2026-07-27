@@ -1,4 +1,4 @@
-﻿import {
+import {
   useEffect,
   useMemo,
   useRef,
@@ -243,10 +243,10 @@ export type BoardAppProps = {
   topBarBeforeTitle?: ReactNode;
   /** Sphere product chrome: after save status (e.g. visibility + Library link). */
   topBarAfterStatus?: ReactNode;
-  /** Fired when dirty (unsaved) state changes â€” hosts can show leave confirmations. */
+  /** Fired when dirty (unsaved) state changes - hosts can show leave confirmations. */
   onDirtyChange?: (dirty: boolean) => void;
   /**
-   * Browser `beforeunload` warning (â€œReload site?â€). Default true.
+   * Browser `beforeunload` warning ("Reload site?"). Default true.
    * Sphere product should set false and use a native Modal + router blocker instead.
    */
   warnOnUnload?: boolean;
@@ -314,7 +314,7 @@ export default function BoardApp({
   const [boundaryKind, setBoundaryKind] = useState<"trust" | "runtime">("trust");
   const [showGrid, setShowGrid] = useState(true);
   const [view, setView] = useState<"all" | "external" | "contracts" | "agents">("all");
-  /** Dim non-neighbors when a node/edge is selected â€” reading aid for dense boards. */
+  /** Dim non-neighbors when a node/edge is selected - reading aid for dense boards. */
   const [focusMode, setFocusMode] = useState(true);
   const [preview, setPreview] = useState(false);
   const [palette, setPalette] = useState(false);
@@ -338,7 +338,7 @@ export default function BoardApp({
 
   const canvasRef = useRef<HTMLDivElement>(null);
   const [canvasSize, setCanvasSize] = useState({ w: 1200, h: 800 });
-  /** Last pointer over diagram content (not chrome overlays). Used by Â± zoom. */
+  /** Last pointer over diagram content (not chrome overlays). Used by +/- zoom. */
   const lastPointerOnCanvas = useRef<Point | null>(null);
   const zoomRef = useRef(zoom);
   const panRef = useRef(pan);
@@ -641,7 +641,7 @@ export default function BoardApp({
   const startDrag = (e: React.PointerEvent, id: string) => {
     if (tool === "connect") {
       e.stopPropagation();
-      // Node body: port-less / fallback nodeâ†’node wire
+      // Node body: port-less / fallback node->node wire
       if (!connectFrom) {
         setConnectFrom({ nodeId: id });
         setSelected(id);
@@ -856,7 +856,7 @@ export default function BoardApp({
       setSelectedBoundary(null);
       setTool("select");
       toast.success(`${createKindHints[createKind].label} added`, {
-        description: "Inspect details on the right â€” connect via ports or Connect tool",
+        description: "Inspect details on the right - connect via ports or Connect tool",
       });
       return;
     }
@@ -874,7 +874,7 @@ export default function BoardApp({
         setTool("select");
         toast.success(
           boundaryKind === "trust" ? "Trust boundary added" : "Runtime boundary added",
-          { description: "Drag edges to resize â€” rename in the inspector (F2)" },
+          { description: "Drag edges to resize - rename in the inspector (F2)" },
         );
       } catch (err) {
         const message = err instanceof Error ? err.message : "Could not create boundary";
@@ -1014,7 +1014,7 @@ export default function BoardApp({
       autoLayout();
       requestAnimationFrame(() => fitContent());
       toast.success("Auto-layout applied", {
-        description: "Components and boundaries rearranged â€” undo with Ctrl+Z",
+        description: "Components and boundaries rearranged - undo with Ctrl+Z",
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : "Layout failed";
@@ -1129,7 +1129,7 @@ export default function BoardApp({
         />
       )}
 
-      {/* VIEW TABS â€” shared SCAN board chrome */}
+      {/* VIEW TABS - shared SCAN board chrome */}
       <ViewTabs
         view={view}
         setView={setView}
@@ -1454,7 +1454,7 @@ export default function BoardApp({
                       </ul>
                       {(e.fromPort || e.toPort) && (
                         <div className="mt-2 border-t border-border pt-1.5 text-[9px] text-muted-foreground">
-                          {[e.fromPort, e.toPort].filter(Boolean).join(" â†’ ")}
+                          {[e.fromPort, e.toPort].filter(Boolean).join(" -> ")}
                         </div>
                       )}
                     </div>
@@ -1538,8 +1538,8 @@ export default function BoardApp({
             <span className="font-medium text-foreground">
               {connectFrom
                 ? `Source: ${nodeById[connectFrom.nodeId]?.title ?? connectFrom.nodeId}${
-                    connectFrom.portId ? ` Â· ${connectFrom.portId}` : ""
-                  } â€” click a consume port (or node)`
+                    connectFrom.portId ? ` · ${connectFrom.portId}` : ""
+                  } - click a consume port (or node)`
                 : "Click an expose port (or node) to start"}
             </span>
             <span className="text-muted-foreground">Esc to cancel</span>
@@ -1806,7 +1806,7 @@ export default function BoardApp({
                 setSelected(null);
                 setSelectedEdge(null);
                 toast.success("Trust boundary created", {
-                  description: "Resize to include more components â€” edit name in the inspector",
+                  description: "Resize to include more components - edit name in the inspector",
                 });
               } catch (err) {
                 const message = err instanceof Error ? err.message : "Could not create boundary";
@@ -2034,7 +2034,7 @@ export default function BoardApp({
           />
         </Modal>
 
-        {/* PREVIEW DRAWER / COMMAND PALETTE â€” Sphere product chrome */}
+        {/* PREVIEW DRAWER / COMMAND PALETTE - Sphere product chrome */}
         {isSphere && preview && (
           <PreviewDrawer onCancel={() => setPreview(false)} onApply={() => setPreview(false)} />
         )}
@@ -2199,7 +2199,7 @@ function TopBar({
               onClick={onPalette}
               className="flex items-center gap-2 rounded-lg border border-border bg-surface px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted"
             >
-              <Search className="h-3.5 w-3.5" /> Search components, contractsâ€¦
+              <Search className="h-3.5 w-3.5" /> Search components, contracts...
               <span className="ml-2 flex items-center gap-0.5 rounded bg-muted px-1.5 py-0.5 text-[10px] font-mono">
                 <CommandIcon className="h-3 w-3" /> K
               </span>
@@ -2264,7 +2264,7 @@ function AIBar({
             onKeyDown={(e) => {
               if (e.key === "Enter" && prompt.trim()) onSubmit();
             }}
-            placeholder="Ask Sphere to design or modify this architectureâ€¦"
+            placeholder="Ask Sphere to design or modify this architecture..."
             className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
           />
           <button className="hidden items-center gap-1 rounded-md px-1.5 py-1 text-[10px] text-muted-foreground hover:bg-muted md:flex">
@@ -2543,7 +2543,7 @@ function NodePortsColumns({
               <button
                 key={p.id}
                 type="button"
-                title={`${p.label}${p.protocol ? ` (${p.protocol})` : ""} â€” click to select wire or finish connect`}
+                title={`${p.label}${p.protocol ? ` (${p.protocol})` : ""} - click to select wire or finish connect`}
                 className="flex w-full cursor-pointer items-center gap-1.5 rounded py-0.5 text-left outline-none hover:bg-muted focus:outline-none focus-visible:outline-none"
                 onPointerDown={(e) => onPortPointerDown?.(e, p.id, "consume")}
               >
@@ -2574,7 +2574,7 @@ function NodePortsColumns({
               <button
                 key={p.id}
                 type="button"
-                title={`${p.label}${p.protocol ? ` (${p.protocol})` : ""} â€” click to start a connection`}
+                title={`${p.label}${p.protocol ? ` (${p.protocol})` : ""} - click to start a connection`}
                 className={`flex w-full cursor-pointer items-center justify-end gap-1.5 rounded py-0.5 outline-none hover:bg-muted focus:outline-none focus-visible:outline-none ${
                   connectSourcePortId === p.id
                     ? "bg-primary/15 ring-1 ring-primary/40"
@@ -2997,7 +2997,7 @@ function BoundaryInspector({
             <div className="truncate text-sm font-semibold">{group.title}</div>
             <div className="text-[11px] text-muted-foreground">
               {kind === "runtime" ? "Runtime boundary" : "Trust boundary"}
-              <span className="text-muted-foreground/80"> Â· click icon to change</span>
+              <span className="text-muted-foreground/80"> · click icon to change</span>
             </div>
           </div>
           <button
@@ -3172,7 +3172,7 @@ function NodeInspector({
             <div className="text-base font-semibold">{node.title}</div>
             <div className="text-xs text-muted-foreground">
               {meta.label}
-              {node.subtitle ? ` Â· ${node.subtitle}` : ""}
+              {node.subtitle ? ` · ${node.subtitle}` : ""}
             </div>
             <div className="mt-1 truncate font-mono text-[10px] text-muted-foreground">
               {node.id}
@@ -3261,7 +3261,7 @@ function NodeInspector({
         ) : null}
         {!node.consumes?.length && !node.exposes?.length && (
           <div className="text-[11px] text-muted-foreground">
-            No ports yet. Add Consume / Expose above, then wire on the canvas: Expose â†’ Consume.
+            No ports yet. Add Consume / Expose above, then wire on the canvas: Expose -> Consume.
           </div>
         )}
       </Section>
@@ -3283,15 +3283,15 @@ function NodeInspector({
                   <EdgeIcon kind={e.kind} />
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-[11px] font-medium">
-                      {outbound ? "â†’" : "â†"} {other?.title ?? otherId}
+                      {outbound ? "->" : "â†"} {other?.title ?? otherId}
                     </div>
                     <div className="truncate text-[10px] text-muted-foreground">
                       {e.label ?? edgeKindTitle(e.kind)}
-                      {e.contract ? ` Â· ${e.contract}` : ""}
+                      {e.contract ? ` · ${e.contract}` : ""}
                       {e.fromPort || e.toPort
-                        ? ` Â· ${e.fromPort ?? "â€¢"} â†’ ${e.toPort ?? "â€¢"}`
+                        ? ` · ${e.fromPort ?? "*"} -> ${e.toPort ?? "*"}`
                         : ""}
-                      {e.operations?.length ? ` Â· ${e.operations.length} ops` : ""}
+                      {e.operations?.length ? ` · ${e.operations.length} ops` : ""}
                     </div>
                   </div>
                   <ChevronRight className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
@@ -3321,7 +3321,7 @@ function NodeInspector({
             <div className="min-w-0 flex-1">
               <div className="truncate font-medium">{node.repo}</div>
               <div className="text-[10px] text-muted-foreground">
-                {node.repoUrl ? "Open in new tab" : "Path only â€” no browse URL"}
+                {node.repoUrl ? "Open in new tab" : "Path only - no browse URL"}
               </div>
             </div>
             {node.repoUrl ? (
@@ -3462,7 +3462,7 @@ function EdgeInspector({
         {(edge.fromPort || edge.toPort) && (
           <div className="mt-1.5 flex items-center gap-1 font-mono text-[10px] text-muted-foreground">
             <Link2 className="h-3 w-3 shrink-0" />
-            {edge.fromPort ?? "â€”"} â†’ {edge.toPort ?? "â€”"}
+            {edge.fromPort ?? " - "} -> {edge.toPort ?? " - "}
           </div>
         )}
       </div>
@@ -3503,7 +3503,7 @@ function EdgeInspector({
       <Section title="Endpoints / operations">
         <div className="space-y-2">
           <p className="text-[11px] text-muted-foreground">
-            One per line â€” shown when hovering the connection on the canvas.
+            One per line - shown when hovering the connection on the canvas.
           </p>
           <textarea
             value={operationsText}
@@ -3537,7 +3537,7 @@ function EdgeInspector({
           ))}
         </div>
         <p className="mt-2 text-[10px] text-muted-foreground">
-          Resilience fields are Sphere placeholders â€” not part of SCAN model yet.
+          Resilience fields are Sphere placeholders - not part of SCAN model yet.
         </p>
       </Section>
     </div>
@@ -4011,7 +4011,7 @@ function MiniMap({
   );
 
   const label =
-    systemName.length > 22 ? `${systemName.slice(0, 20)}â€¦` : systemName;
+    systemName.length > 22 ? `${systemName.slice(0, 20)}...` : systemName;
 
   return (
     <div className="overflow-hidden rounded-xl border border-border bg-surface node-shadow">
@@ -4155,11 +4155,11 @@ function ContextMenu({
   const items: { label: string; danger?: boolean; shortcut?: string; action?: () => void }[] = [
     { label: "Connect", action: onConnect },
     { label: "Rename", shortcut: "F2", action: onRename },
-    { label: "Duplicate", shortcut: "âŒ˜D", action: onDuplicate },
+    { label: "Duplicate", shortcut: "Cmd+D", action: onDuplicate },
     { label: "Group into boundary", action: onGroupBoundary },
     { label: "Attach repository" },
     { label: "Add API contract" },
-    { label: "Delete", danger: true, shortcut: "âŒ«", action: onDelete },
+    { label: "Delete", danger: true, shortcut: "Backspace", action: onDelete },
   ];
   return (
     <>
@@ -4314,7 +4314,7 @@ function CommandPalette({ onClose }: { onClose: () => void }) {
             autoFocus
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Search components, contracts, actionsâ€¦"
+            placeholder="Search components, contracts, actions..."
             className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
           />
           <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px]">ESC</span>
@@ -4345,8 +4345,8 @@ function CommandPalette({ onClose }: { onClose: () => void }) {
         </div>
         <div className="flex items-center justify-between border-t border-border px-3 py-2 text-[10px] text-muted-foreground">
           <div className="flex items-center gap-2">
-            <span>â†‘â†“ Navigate</span>
-            <span>âŽ Select</span>
+            <span>updown Navigate</span>
+            <span>âŽ Select</span>
           </div>
           <div className="flex items-center gap-1">
             <CommandIcon className="h-3 w-3" />

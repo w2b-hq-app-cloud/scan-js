@@ -1,4 +1,4 @@
-﻿/** @deprecated Prefer @spherescan/viewer and @spherescan/modeler */
+/** @deprecated Prefer @spherescan/viewer and @spherescan/modeler */
 export type {
   NodeKind,
   Port,
