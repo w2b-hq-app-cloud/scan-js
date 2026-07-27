@@ -243,6 +243,8 @@ export type BoardAppProps = {
   topBarBeforeTitle?: ReactNode;
   /** Sphere product chrome: after save status (e.g. visibility + Library link). */
   topBarAfterStatus?: ReactNode;
+  /** Sphere product chrome: between brand and diagram title (e.g. account menu). */
+  topBarAfterBrand?: ReactNode;
   /** Fired when dirty (unsaved) state changes - hosts can show leave confirmations. */
   onDirtyChange?: (dirty: boolean) => void;
   /**
@@ -250,17 +252,40 @@ export type BoardAppProps = {
    * Sphere product should set false and use a native Modal + router blocker instead.
    */
   warnOnUnload?: boolean;
+  /**
+   * Optional host persistence hook. When supplied, Cmd/Ctrl+S passes the
+   * current YAML document to the host instead of writing a local file.
+   * Return true only after the host has persisted the document successfully.
+   */
+  onSaveDocument?: (yaml: string) => Promise<boolean>;
+  /** Called after a model command changes the document, for host-driven autosave. */
+  onDocumentChange?: (yaml: string) => void;
+  /** YAML supplied by a host to replace the built-in sample document. */
+  initialYaml?: string | null;
+  /**
+   * Start from an empty Untitled board instead of the Order Platform sample.
+   * Ignored when `initialYaml` is supplied (e.g. opening a saved diagram).
+   * Sphere should set this for signed-in users on `/`.
+   */
+  startEmpty?: boolean;
 };
 
 export default function BoardApp({
   shell = "scan",
   topBarBeforeTitle,
   topBarAfterStatus,
+  topBarAfterBrand,
   onDirtyChange,
   warnOnUnload = true,
+  onSaveDocument,
+  onDocumentChange,
+  initialYaml,
+  startEmpty = false,
 }: BoardAppProps) {
   const isSphere = shell === "sphere";
-  const board = useScanBoard();
+  const board = useScanBoard({
+    startEmpty: startEmpty && !initialYaml,
+  });
   const {
     nodes,
     edges,
@@ -269,7 +294,6 @@ export default function BoardApp({
     canRedo,
     dirty,
     historyStep,
-    historyTotal,
     setNodesPreview,
     beginDrag,
     endDrag,
@@ -303,7 +327,7 @@ export default function BoardApp({
     renameSystem,
   } = board;
 
-  const [selected, setSelected] = useState<string | null>("order-api");
+  const [selected, setSelected] = useState<string | null>(null);
   const [selectedBoundary, setSelectedBoundary] = useState<string | null>(null);
   const [hoverEdge, setHoverEdge] = useState<string | null>(null);
   const [selectedEdge, setSelectedEdge] = useState<string | null>(null);
@@ -1077,11 +1101,10 @@ export default function BoardApp({
         systemName={systemName}
         topBarBeforeTitle={topBarBeforeTitle}
         topBarAfterStatus={topBarAfterStatus}
+        topBarAfterBrand={topBarAfterBrand}
         canUndo={canUndo}
         canRedo={canRedo}
         dirty={dirty}
-        historyStep={historyStep}
-        historyTotal={historyTotal}
         onUndo={undo}
         onRedo={redo}
         onNewBoard={() => handleNewBoard()}
@@ -1136,6 +1159,8 @@ export default function BoardApp({
         onAutoLayout={runAutoLayout}
         focusMode={focusMode}
         onToggleFocusMode={() => setFocusMode((v) => !v)}
+        nodes={nodes}
+        groups={groups}
       />
 
       {/* MAIN CANVAS */}
@@ -2052,11 +2077,10 @@ function TopBar({
   systemName,
   topBarBeforeTitle,
   topBarAfterStatus,
+  topBarAfterBrand,
   canUndo,
   canRedo,
   dirty,
-  historyStep,
-  historyTotal,
   onUndo,
   onRedo,
   onNewBoard,
@@ -2071,11 +2095,10 @@ function TopBar({
   systemName: string;
   topBarBeforeTitle?: ReactNode;
   topBarAfterStatus?: ReactNode;
+  topBarAfterBrand?: ReactNode;
   canUndo: boolean;
   canRedo: boolean;
   dirty: boolean;
-  historyStep: number;
-  historyTotal: number;
   onUndo: () => void;
   onRedo: () => void;
   onNewBoard: () => void;
@@ -2087,6 +2110,7 @@ function TopBar({
   onExportPng: () => void;
 }) {
   const isSphere = shell === "sphere";
+  const [coworkOpen, setCoworkOpen] = useState(false);
   return (
     <div
       className={`flex shrink-0 items-center justify-between border-b border-border bg-surface px-4 ${
@@ -2106,6 +2130,12 @@ function TopBar({
           </div>
         </div>
         <div className="mx-2 h-6 w-px bg-border" />
+        {topBarAfterBrand ? (
+          <>
+            {topBarAfterBrand}
+            <div className="mx-2 h-6 w-px bg-border" />
+          </>
+        ) : null}
         <div className="flex items-center gap-1 text-xs text-muted-foreground">
           {topBarBeforeTitle}
           <button
@@ -2116,24 +2146,24 @@ function TopBar({
           >
             {systemName}
           </button>
-          {isSphere && (
-            <>
-              <ChevronRight className="h-3.5 w-3.5" />
-              <button type="button" className="rounded-md px-2 py-1 hover:bg-muted">
-                Architecture Board
-              </button>
-              <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium">
-                v0.1
-              </span>
-            </>
+          {!isSphere && (
+            <span
+              className={`rounded-full px-2 py-0.5 text-[10px] font-medium flex items-center gap-1 ${
+                dirty ? "bg-warn-soft text-warn" : "bg-ok-soft text-ok"
+              }`}
+              title={dirty ? "Unsaved local changes" : "All changes saved"}
+            >
+              {dirty ? (
+                <>
+                  <Circle className="h-2.5 w-2.5 fill-current" /> Unsaved
+                </>
+              ) : (
+                <>
+                  <Check className="h-3 w-3" /> Saved
+                </>
+              )}
+            </span>
           )}
-          <span
-            className={`rounded-full px-2 py-0.5 text-[10px] font-medium flex items-center gap-1 ${
-              dirty ? "bg-warn-soft text-warn" : "bg-ok-soft text-ok"
-            }`}
-          >
-            <Check className="h-3 w-3" /> {dirty ? "Unsaved" : isSphere ? "Latest" : "Saved"}
-          </span>
           {topBarAfterStatus}
         </div>
       </div>
@@ -2145,16 +2175,6 @@ function TopBar({
           <IconBtn label="Redo" onClick={onRedo} variant="ghost" disabled={!canRedo}>
             <Redo2 className="h-4 w-4" />
           </IconBtn>
-          <div className="mx-1 h-5 w-px bg-border" />
-          {isSphere ? (
-            <button className="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-surface">
-              <HistoryIcon className="h-3.5 w-3.5" /> Step {historyStep} / {historyTotal}
-            </button>
-          ) : (
-            <span className="px-2 text-[10px] tabular-nums text-muted-foreground">
-              {historyStep}/{historyTotal}
-            </span>
-          )}
           <div className="mx-1 h-5 w-px bg-border" />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -2204,7 +2224,12 @@ function TopBar({
                 <CommandIcon className="h-3 w-3" /> K
               </span>
             </button>
-            <div className="flex -space-x-2">
+            <button
+              type="button"
+              onClick={() => setCoworkOpen(true)}
+              title="Collaboration coming soon"
+              className="flex -space-x-2 rounded-md p-0.5 hover:bg-muted"
+            >
               {["EM", "JR", "AN"].map((i, idx) => (
                 <div
                   key={i}
@@ -2216,17 +2241,35 @@ function TopBar({
                   {i}
                 </div>
               ))}
-            </div>
+            </button>
             <button
-              onClick={onDownloadYaml}
+              type="button"
+              onClick={() => setCoworkOpen(true)}
               className="rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:opacity-90"
-              title="Save board as YAML (Ctrl+S)"
+              title="Collaboration coming soon"
             >
               Share
             </button>
           </>
         )}
       </div>
+
+      <Modal
+        open={coworkOpen}
+        onClose={() => setCoworkOpen(false)}
+        title="Co-work coming soon"
+        description="Realtime sharing and editing with teammates is on the way. For now, save diagrams to your organization and open them from the Library."
+        tone="info"
+        size="sm"
+        actions={[
+          {
+            label: "Got it",
+            variant: "primary",
+            onClick: () => setCoworkOpen(false),
+            autoFocus: true,
+          },
+        ]}
+      />
     </div>
   );
 }
@@ -2341,26 +2384,51 @@ function ViewTabs({
   onAutoLayout,
   focusMode,
   onToggleFocusMode,
+  nodes,
+  groups,
 }: {
   view: "all" | "external" | "contracts" | "agents";
   setView: (v: "all" | "external" | "contracts" | "agents") => void;
   onAutoLayout: () => void;
   focusMode: boolean;
   onToggleFocusMode: () => void;
+  nodes: SphereNode[];
+  groups: SphereGroup[];
 }) {
+  const externalCount = nodes.filter((n) => n.kind === "external").length;
+  const agentCount = nodes.filter((n) => n.kind === "agent").length;
+  const contractWarn = nodes.filter((n) => n.status === "warn").length;
+  const allCount = nodes.length + groups.length;
+
   const tabs = [
-    { id: "all", label: "All Systems", icon: Layers, count: 11 },
-    { id: "external", label: "External Integrations", icon: Building2Icon, count: 2 },
-    { id: "contracts", label: "Contracts", icon: FileCode2, count: 8, warn: 1 },
-    { id: "agents", label: "Agent Runtime", icon: Bot, count: 4 },
-  ] as const;
+    { id: "all" as const, label: "All Systems", icon: Layers, count: allCount },
+    {
+      id: "external" as const,
+      label: "External Integrations",
+      icon: Building2Icon,
+      count: externalCount,
+    },
+    {
+      id: "contracts" as const,
+      label: "Contracts",
+      icon: FileCode2,
+      count: nodes.length,
+      warn: contractWarn,
+    },
+    {
+      id: "agents" as const,
+      label: "Agent Runtime",
+      icon: Bot,
+      count: agentCount,
+    },
+  ];
   return (
     <div className="flex shrink-0 items-center justify-between border-b border-border bg-background px-4 py-1.5">
       <div className="flex items-center gap-1">
         {tabs.map((t) => (
           <button
             key={t.id}
-            onClick={() => setView(t.id as typeof view)}
+            onClick={() => setView(t.id)}
             className={`flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
               view === t.id
                 ? "bg-surface text-foreground hairline"
@@ -4345,8 +4413,8 @@ function CommandPalette({ onClose }: { onClose: () => void }) {
         </div>
         <div className="flex items-center justify-between border-t border-border px-3 py-2 text-[10px] text-muted-foreground">
           <div className="flex items-center gap-2">
-            <span>updown Navigate</span>
-            <span>âŽ Select</span>
+            <span>Up/Down Navigate</span>
+            <span>Enter Select</span>
           </div>
           <div className="flex items-center gap-1">
             <CommandIcon className="h-3 w-3" />

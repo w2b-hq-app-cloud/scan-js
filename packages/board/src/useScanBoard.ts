@@ -4,8 +4,27 @@ import {
   type CreateKind,
 } from "@spherescan/modeler";
 import type { BoardGraph, SphereNode } from "@spherescan/viewer";
-import { serializeSphereYaml, type SphereModel } from "@spherescan/model";
+import {
+  createEmptyModel,
+  serializeSphereYaml,
+  type SphereModel,
+} from "@spherescan/model";
 import orderPlatformYaml from "./samples/order-platform.yaml?raw";
+
+export type UseScanBoardOptions = {
+  /** Initial document YAML. Defaults to the Order Platform sample. */
+  initialYaml?: string;
+  /** Boot an empty Untitled board instead of the sample (clean until edited). */
+  startEmpty?: boolean;
+};
+
+function emptyBoardYaml(systemName = "Untitled System"): string {
+  return serializeSphereYaml(
+    createEmptyModel(systemName, { viewId: "architecture-board" }),
+  );
+}
+
+const EMPTY_BOARD_YAML = emptyBoardYaml();
 
 function downloadText(filename: string, text: string, mime: string) {
   const blob = new Blob([text], { type: mime });
@@ -87,7 +106,14 @@ async function saveTextConnected(
   return { handle: null, wrote: true, mode: "download" };
 }
 
-export function useScanBoard(initialYaml = orderPlatformYaml) {
+export function useScanBoard(options: UseScanBoardOptions | string = {}) {
+  // Legacy: useScanBoard(yamlString) still works for callers that pass YAML directly.
+  const opts: UseScanBoardOptions =
+    typeof options === "string" ? { initialYaml: options } : options;
+  const bootYaml = opts.startEmpty
+    ? EMPTY_BOARD_YAML
+    : (opts.initialYaml ?? orderPlatformYaml);
+
   const modelerRef = useRef<ScanModeler | null>(null);
   if (!modelerRef.current) {
     modelerRef.current = new ScanModeler({ viewId: "architecture-board" });
@@ -104,7 +130,7 @@ export function useScanBoard(initialYaml = orderPlatformYaml) {
   const [dirty, setDirty] = useState(false);
   const [ready, setReady] = useState(false);
   const [historyStep, setHistoryStep] = useState(0);
-  const [historyTotal, setHistoryTotal] = useState(6);
+  const [historyTotal, setHistoryTotal] = useState(0);
 
   const dragOrigin = useRef<{ id: string; x: number; y: number } | null>(null);
   const boundaryResizeOrigin = useRef<{
@@ -121,8 +147,9 @@ export function useScanBoard(initialYaml = orderPlatformYaml) {
     const syncHistory = () => {
       const idx = modeler.commandStack.currentIndex;
       const size = modeler.commandStack.size;
+      // Position in the undo stack: 0 = original document, size = all edits applied.
       setHistoryStep(Math.max(0, idx + 1));
-      setHistoryTotal(Math.max(6, size));
+      setHistoryTotal(size);
     };
     const off = modeler.on("changed", (state) => {
       setGraph(state.graph);
@@ -132,7 +159,7 @@ export function useScanBoard(initialYaml = orderPlatformYaml) {
       setDirty(state.dirty);
       syncHistory();
     });
-    void modeler.importYAML(initialYaml).then(() => {
+    void modeler.importYAML(bootYaml).then(() => {
       if (cancelled) return;
       syncHistory();
       setReady(true);
@@ -141,7 +168,7 @@ export function useScanBoard(initialYaml = orderPlatformYaml) {
       cancelled = true;
       off();
     };
-  }, [modeler, initialYaml]);
+  }, [modeler, bootYaml]);
 
   const nodes = graph?.nodes ?? [];
   const edges = graph?.edges ?? [];
