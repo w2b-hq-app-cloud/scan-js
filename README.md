@@ -268,6 +268,8 @@ npm run validate          # CLI validate on the order-platform fixture
 npm run dev               # reference whiteboard
 ```
 
+When this tree is **nested under `sphere-io/`**, install once at the **monorepo root** (`sphere-io/`), not inside `scan-js/`. A second `node_modules` here (especially a second `react`) causes invalid hook / SSR crashes in the whiteboard and in Sphere. If both exist, remove `scan-js/node_modules` and reinstall from the parent.
+
 Open the whiteboard, load a `.scan` / `.yaml` file, edit on canvas, save as SCAN YAML.
 
 **Whiteboard how-to:** [`docs/MANUAL.md`](docs/MANUAL.md) · **Local setup:** [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) · **API walkthrough:** [`docs/api/walkthrough.md`](docs/api/walkthrough.md)

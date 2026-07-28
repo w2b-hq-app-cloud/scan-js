@@ -29,5 +29,9 @@
   "dependencies": {
     "@spherescan/model": "^0.1.0",
     "@spherescan/viewer": "^0.1.0"
+  },
+  "overrides": {
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
   }
 }
