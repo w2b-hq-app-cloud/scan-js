@@ -239,6 +239,11 @@ export type BoardShell = "scan" | "sphere";
 export type BoardAppProps = {
   /** `scan` = OSS reference chrome; `sphere` = product AI / Share / collab chrome. Board canvas is identical. */
   shell?: BoardShell;
+  /**
+   * Layout sizing. `viewport` (default) = full browser window; `parent` = fill the host container
+   * (use for embeds inside a page that already has chrome).
+   */
+  fill?: "viewport" | "parent";
   /** Sphere product chrome: inserted before the diagram title (e.g. organization picker). */
   topBarBeforeTitle?: ReactNode;
   /** Sphere product chrome: after save status (e.g. visibility + Library link). */
@@ -272,6 +277,7 @@ export type BoardAppProps = {
 
 export default function BoardApp({
   shell = "scan",
+  fill = "viewport",
   topBarBeforeTitle,
   topBarAfterStatus,
   topBarAfterBrand,
@@ -1127,7 +1133,11 @@ export default function BoardApp({
 
   return (
     <TooltipProvider delayDuration={250}>
-    <div className="relative flex h-screen w-screen flex-col overflow-hidden bg-background text-foreground">
+    <div
+      className={`relative flex flex-col overflow-hidden bg-background text-foreground ${
+        fill === "parent" ? "h-full w-full min-h-0" : "h-screen w-screen"
+      }`}
+    >
       {/* TOP BAR */}
       <TopBar
         shell={shell}

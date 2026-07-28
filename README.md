@@ -10,8 +10,13 @@ system and component architecture diagrams - not a full product platform.
 | Layer | Role in SCAN |
 |-------|----------------|
 | **Notation** | YAML/JSON metamodel (`scan: "0.1"`) - elements, ports, typed connections, views |
-| **Libraries** | `@spherescan/model`, `@spherescan/rules`, `@spherescan/viewer`, `@spherescan/modeler`, `@spherescan/cli` |
+| **Libraries** | [`@spherescan/model`](https://www.npmjs.com/package/@spherescan/model), [`rules`](https://www.npmjs.com/package/@spherescan/rules), [`viewer`](https://www.npmjs.com/package/@spherescan/viewer), [`modeler`](https://www.npmjs.com/package/@spherescan/modeler), [`cli`](https://www.npmjs.com/package/@spherescan/cli) on [npm](https://www.npmjs.com/org/spherescan) |
 | **Reference app** | `apps/whiteboard` - minimal modeler to exercise the toolkit |
+
+```bash
+npm i @spherescan/model @spherescan/viewer
+npx scan validate ./architecture.scan.yaml   # after: npm i -D @spherescan/cli
+```
 
 This repository (`scan-js`) is the open-source project. Contributions, issues, and roadmap here are about **SCAN**, not any proprietary host product.
 
@@ -195,14 +200,29 @@ Fixture used in tests: [`packages/model/fixtures/order-platform.yaml`](packages/
 
 ## Packages
 
+Published on npm under [`@spherescan`](https://www.npmjs.com/org/spherescan) (`0.1.0`):
+
 | Package | Purpose |
 |---------|---------|
-| `@spherescan/model` | Parse / serialize / validate SCAN YAML & JSON |
-| `@spherescan/rules` | Legal connection pairs + port checks |
-| `@spherescan/viewer` | Project model -> board graph; SVG/PNG export |
-| `@spherescan/modeler` | Command stack: move, connect, create, auto-layout, undo |
-| `@spherescan/cli` | `validate`, `export svg`, ... |
-| `@spherescan/board` | Shared React canvas (**private** workspace - not on npm in v0.1; used by the whiteboard) |
+| [`@spherescan/model`](https://www.npmjs.com/package/@spherescan/model) | Parse / serialize / validate SCAN YAML & JSON |
+| [`@spherescan/rules`](https://www.npmjs.com/package/@spherescan/rules) | Legal connection pairs + port checks |
+| [`@spherescan/viewer`](https://www.npmjs.com/package/@spherescan/viewer) | Project model -> board graph; SVG/PNG export |
+| [`@spherescan/modeler`](https://www.npmjs.com/package/@spherescan/modeler) | Command stack: move, connect, create, auto-layout, undo |
+| [`@spherescan/cli`](https://www.npmjs.com/package/@spherescan/cli) | `validate`, `export svg`, ... |
+| `@spherescan/board` | Shared React canvas (**private** — not on npm in v0.1; used by the whiteboard) |
+
+### Install
+
+```bash
+npm i @spherescan/model @spherescan/rules @spherescan/viewer @spherescan/modeler
+npm i -D @spherescan/cli
+```
+
+Validate a diagram:
+
+```bash
+npx scan validate ./architecture.scan.yaml
+```
 
 Embed pattern (viewer):
 
@@ -226,6 +246,7 @@ scan-js/
   packages/model|rules|viewer|modeler|cli|board
   apps/whiteboard                 # minimal reference UI
   examples/embed-viewer
+  examples/embed-board            # host-page rehearsal for @spherescan/board
   examples/architectures          # sample .scan.yaml diagrams
   skills/scan-notation/           # reference AI skill (Apache 2.0)
   docs/spec/scan-0.1.md           # normative spec (CC BY 4.0)
@@ -253,36 +274,23 @@ Open the whiteboard, load a `.scan` / `.yaml` file, edit on canvas, save as SCAN
 
 ---
 
-## Validate YAML & use from another project
+## Validate YAML from source (optional)
 
-`@spherescan/*` packages are intended for npm (`@spherescan/model`, `@spherescan/viewer`, ...). The GitHub repo is public; see [`docs/PUBLISH.md`](docs/PUBLISH.md) to publish the scope after `npm login`. Until then, clone this repo, build, then validate:
+Prefer the published packages above. To run the CLI from a local clone:
 
 ```bash
 npm install --legacy-peer-deps && npm run build
 node packages/cli/dist/cli.js validate /path/to/architecture.scan.yaml
 ```
 
-Optional global bin:
+Optional global bin from this tree:
 
 ```bash
 cd packages/cli && npm link
 scan validate ./architecture.scan.yaml
 ```
 
-From another package.json (path must point at a built tree):
-
-```json
-{
-  "devDependencies": {
-    "@spherescan/cli": "file:../scan-js/packages/cli",
-    "@spherescan/model": "file:../scan-js/packages/model"
-  }
-}
-```
-
-Programmatic: `parseScanYaml` + `validateScanModel` from `@spherescan/model`.
-
-When packages are published: `npm i -D @spherescan/cli` / `npx scan validate ...`.
+Programmatic: `parseScanYaml` + `validateScanModel` from `@spherescan/model`. Publish notes: [`docs/PUBLISH.md`](docs/PUBLISH.md).
 
 ---
 

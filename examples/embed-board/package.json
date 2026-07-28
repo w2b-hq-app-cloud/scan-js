@@ -1,0 +1,33 @@
+{
+  "name": "@spherescan/embed-board",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Rehearsal: host page embedding @spherescan/board with a preloaded SCAN YAML",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@spherescan/board": "0.1.0",
+    "@spherescan/model": "0.1.0",
+    "@spherescan/modeler": "0.1.0",
+    "@spherescan/rules": "0.1.0",
+    "@spherescan/viewer": "0.1.0",
+    "lucide-react": "^0.575.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "sonner": "^2.0.7"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.2.1",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "^5.2.0",
+    "tailwindcss": "^4.2.1",
+    "tw-animate-css": "^1.3.4",
+    "typescript": "^5.8.3",
+    "vite": "^8.0.16"
+  }
+}
