@@ -11,9 +11,14 @@ test("allows service to database", () => {
     const check = canConnect(model, "order-api", "orders-db", "database-access");
     assert.equal(check.allowed, true);
 });
-test("rejects agent to database", () => {
+test("allows agent to database via database-access (relaxed)", () => {
     const model = parseSphereYaml(fixture);
-    const check = canConnect(model, "arch-agent", "orders-db");
+    const check = canConnect(model, "arch-agent", "orders-db", "database-access");
+    assert.equal(check.allowed, true);
+});
+test("rejects agent to database with event-publication", () => {
+    const model = parseSphereYaml(fixture);
+    const check = canConnect(model, "arch-agent", "orders-db", "event-publication");
     assert.equal(check.allowed, false);
 });
 test("suggests type for service to event", () => {
@@ -25,7 +30,22 @@ test("allows external to event publication", () => {
     const check = canConnect(model, "payment-platform", "order-created", "event-publication");
     assert.equal(check.allowed, true);
 });
-test("port-aware: allow expose â†’ consume", () => {
+test("allows service to agent delegation", () => {
+    const model = parseSphereYaml(fixture);
+    const check = canConnect(model, "order-api", "arch-agent", "agent-delegation");
+    assert.equal(check.allowed, true);
+});
+test("allows service to external request", () => {
+    const model = parseSphereYaml(fixture);
+    const check = canConnect(model, "order-api", "payment-platform", "synchronous-request");
+    assert.equal(check.allowed, true);
+});
+test("allows repo to service git-integration", () => {
+    const model = parseSphereYaml(fixture);
+    const check = canConnect(model, "github", "order-api", "git-integration");
+    assert.equal(check.allowed, true);
+});
+test("port-aware: allow expose -> consume", () => {
     const model = parseSphereYaml(fixture);
     const check = canConnect(model, "order-api", "payment-service", undefined, {
         fromPort: "oa-out",

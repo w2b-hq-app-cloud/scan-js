@@ -45,10 +45,10 @@ Copy this checklist:
 - [ ] system.id + system.name
 - [ ] Every element in the right collection
 - [ ] Every connected id exists
-- [ ] Connection types match kind pairs
+- [ ] Connection types are capability-plausible (see connection-rules.md; matrix is suggestions)
 - [ ] fromPort = expose on from; toPort = consume on to (when set)
 - [ ] views[0].layout has every element id
-- [ ] Boundary members subset of  layout ids; boxes contain members
+- [ ] Boundary members subset of layout ids; boxes use label/members + trust|runtime kind
 - [ ] Saved as *.scan.yaml
 ```
 

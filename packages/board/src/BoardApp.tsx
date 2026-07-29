@@ -34,7 +34,6 @@ import {
   Search,
   Send,
   Shield,
-  Slash,
   Sparkles,
   Square,
   Undo2,
@@ -67,7 +66,10 @@ import {
   computeLabelStagger,
   edgePath,
   placeEdgeLabel,
+  projectToGraph,
+  graphToSvg,
 } from "@spherescan/viewer";
+import { parseScanYaml } from "@spherescan/model";
 import type { CreateKind } from "@spherescan/modeler";
 import { toast } from "sonner";
 import {
@@ -166,6 +168,39 @@ function isScanFile(file: File): boolean {
     file.type === "application/x-yaml" ||
     file.type === "text/yaml"
   );
+}
+
+function isAiAttachmentFile(file: File): boolean {
+  const name = file.name.toLowerCase();
+  return (
+    file.type === "text/plain" ||
+    file.type === "text/markdown" ||
+    file.type === "image/png" ||
+    file.type === "image/jpeg" ||
+    name.endsWith(".txt") ||
+    name.endsWith(".md") ||
+    name.endsWith(".png") ||
+    name.endsWith(".jpg") ||
+    name.endsWith(".jpeg")
+  );
+}
+
+function readFileAsText(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : "");
+    reader.onerror = () => reject(reader.error ?? new Error(`Failed to read ${file.name}`));
+    reader.readAsText(file);
+  });
+}
+
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : "");
+    reader.onerror = () => reject(reader.error ?? new Error(`Failed to read ${file.name}`));
+    reader.readAsDataURL(file);
+  });
 }
 
 const kindColorVar: Record<NodeKind, string> = {
@@ -288,12 +323,20 @@ export type BoardAiChatResult = {
   sessionId?: string | null;
 };
 
+export type BoardAiAttachment = {
+  name: string;
+  mimeType: string;
+  kind: "text" | "image";
+  content: string;
+};
+
 export type BoardAiAdapter = {
   chat: (input: {
     message: string;
     yaml: string;
     selection?: string[];
     sessionId?: string | null;
+    attachments?: BoardAiAttachment[];
   }) => Promise<BoardAiChatResult>;
   suggest?: (input: {
     message?: string;
@@ -385,13 +428,16 @@ export default function BoardApp({
   const [palette, setPalette] = useState(false);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; nodeId: string } | null>(null);
   const [prompt, setPrompt] = useState("");
+  const [aiAttachments, setAiAttachments] = useState<BoardAiAttachment[]>([]);
   const [aiBusy, setAiBusy] = useState(false);
   const [aiSessionId, setAiSessionId] = useState<string | null>(null);
   const [aiSuggestions, setAiSuggestions] = useState<string[]>(commandSuggestions);
+  const [aiMenuOpen, setAiMenuOpen] = useState(false);
   const [pendingAi, setPendingAi] = useState<{
     title: string;
     reply: string;
     yaml: string | null;
+    baseYaml: string | null;
   } | null>(null);
   const [connectFrom, setConnectFrom] = useState<{
     nodeId: string;
@@ -1125,7 +1171,9 @@ export default function BoardApp({
           title: "Sphere layout proposal",
           reply: result.reply || "Repositioned diagram elements for readability.",
           yaml: result.yaml,
+          baseYaml: yaml,
         });
+        setAiMenuOpen(false);
         setPreview(true);
       } catch (err) {
         const message = err instanceof Error ? err.message : "Layout agent failed";
@@ -1153,6 +1201,59 @@ export default function BoardApp({
     }
   }, [aiAdapter, autoLayout, fitContent, modeler]);
 
+  const attachAiFiles = useCallback(async (files: FileList | null) => {
+    if (!files?.length) return;
+    const selected = Array.from(files);
+    const unsupported = selected.filter((file) => !isAiAttachmentFile(file));
+    if (unsupported.length) {
+      toast.error("Unsupported attachment type", {
+        description: "Supported: .txt, .md, .jpg, .jpeg, .png",
+      });
+    }
+    const accepted = selected.filter(isAiAttachmentFile).slice(0, 6);
+    if (!accepted.length) return;
+    const nextAttachments: BoardAiAttachment[] = [];
+    for (const file of accepted) {
+      const textLike =
+        file.type === "text/plain" || file.type === "text/markdown" || /\.(txt|md)$/i.test(file.name);
+      const imageLike =
+        file.type === "image/png" || file.type === "image/jpeg" || /\.(png|jpe?g)$/i.test(file.name);
+      if (!textLike && !imageLike) continue;
+      if (textLike) {
+        const text = (await readFileAsText(file)).slice(0, 40000);
+        nextAttachments.push({
+          name: file.name,
+          mimeType: file.type || (file.name.toLowerCase().endsWith(".md") ? "text/markdown" : "text/plain"),
+          kind: "text",
+          content: text,
+        });
+        continue;
+      }
+      const dataUrl = await readFileAsDataUrl(file);
+      const base64 = dataUrl.includes(",") ? dataUrl.slice(dataUrl.indexOf(",") + 1) : "";
+      if (!base64) continue;
+      nextAttachments.push({
+        name: file.name,
+        mimeType: file.type || "image/png",
+        kind: "image",
+        content: base64,
+      });
+    }
+    if (!nextAttachments.length) return;
+    setAiAttachments((prev) => {
+      const merged = [...prev];
+      for (const attachment of nextAttachments) {
+        const already = merged.some((item) => item.name === attachment.name && item.content === attachment.content);
+        if (!already) merged.push(attachment);
+      }
+      return merged.slice(0, 6);
+    });
+  }, []);
+
+  const removeAiAttachment = useCallback((name: string) => {
+    setAiAttachments((prev) => prev.filter((item) => item.name !== name));
+  }, []);
+
   const submitAiChat = useCallback(async () => {
     const message = prompt.trim();
     if (!message || aiBusy) return;
@@ -1161,6 +1262,7 @@ export default function BoardApp({
         title: previewChanges.title,
         reply: "Mock preview (no AI adapter). Wire Sphere agents to apply real changes.",
         yaml: null,
+        baseYaml: modeler.peekYAML(),
       });
       setPreview(true);
       return;
@@ -1174,14 +1276,20 @@ export default function BoardApp({
         yaml,
         selection,
         sessionId: aiSessionId,
+        attachments: aiAttachments,
       });
       if (result.sessionId) setAiSessionId(result.sessionId);
+      // Stick to the latest turn's chips until the next user prompt.
       if (result.suggestions?.length) setAiSuggestions(result.suggestions);
       setPendingAi({
         title: result.yaml ? "Sphere proposes diagram changes" : "Sphere reply",
         reply: result.reply || "Done.",
         yaml: result.yaml ?? null,
+        baseYaml: yaml,
       });
+      setAiAttachments([]);
+      setPrompt("");
+      setAiMenuOpen(false);
       setPreview(true);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Agent request failed";
@@ -1195,24 +1303,14 @@ export default function BoardApp({
     } finally {
       setAiBusy(false);
     }
-  }, [aiAdapter, aiBusy, aiSessionId, modeler, prompt, selected]);
-
-  const refreshAiSuggestions = useCallback(async () => {
-    if (!aiAdapter?.suggest) return;
-    try {
-      const yaml = modeler.peekYAML();
-      const next = await aiAdapter.suggest({ message: prompt, yaml });
-      if (next.length) setAiSuggestions(next);
-    } catch {
-      /* keep previous chips */
-    }
-  }, [aiAdapter, modeler, prompt]);
+  }, [aiAdapter, aiAttachments, aiBusy, aiSessionId, modeler, prompt, selected]);
 
   const applyPendingAi = useCallback(async () => {
     const yaml = pendingAi?.yaml;
     if (!yaml?.trim()) {
       setPreview(false);
       setPendingAi(null);
+      setAiMenuOpen(false);
       return;
     }
     try {
@@ -1220,6 +1318,8 @@ export default function BoardApp({
       requestAnimationFrame(() => fitContent());
       setPreview(false);
       setPendingAi(null);
+      setPrompt("");
+      setAiMenuOpen(false);
       toast.success("Applied Sphere changes");
     } catch (err) {
       const message = err instanceof Error ? err.message : "Could not load YAML";
@@ -1340,9 +1440,12 @@ export default function BoardApp({
           setPrompt={setPrompt}
           busy={aiBusy}
           suggestions={aiSuggestions}
+          attachments={aiAttachments}
+          menuOpen={aiMenuOpen}
+          onMenuOpenChange={setAiMenuOpen}
           onSubmit={() => void submitAiChat()}
-          onFocusPalette={() => setPalette(true)}
-          onOpenSuggestions={() => void refreshAiSuggestions()}
+          onAttachFiles={(files) => void attachAiFiles(files)}
+          onRemoveAttachment={removeAiAttachment}
         />
       )}
 
@@ -2259,15 +2362,44 @@ export default function BoardApp({
             title={pendingAi?.title ?? previewChanges.title}
             reply={pendingAi?.reply ?? ""}
             yaml={pendingAi?.yaml ?? null}
+            baseYaml={pendingAi?.baseYaml ?? null}
             hasYaml={Boolean(pendingAi?.yaml)}
             onCancel={() => {
               setPreview(false);
               setPendingAi(null);
+              setAiMenuOpen(false);
             }}
             onApply={() => void applyPendingAi()}
           />
         )}
-        {isSphere && palette && <CommandPalette onClose={() => setPalette(false)} />}
+        {isSphere && palette && (
+          <CommandPalette
+            onClose={() => setPalette(false)}
+            onCreateComponent={(kind) => {
+              try {
+                const worldCenter = {
+                  x: (canvasSize.w / 2 - panRef.current.x) / zoomRef.current,
+                  y: (canvasSize.h / 2 - panRef.current.y) / zoomRef.current,
+                };
+                const id = createElement(
+                  kind,
+                  Math.round(worldCenter.x / 4) * 4,
+                  Math.round(worldCenter.y / 4) * 4,
+                );
+                setSelected(id);
+                setSelectedEdge(null);
+                setSelectedBoundary(null);
+                setPalette(false);
+                toast.success(`${createKindHints[kind].label} added`, {
+                  description: "Placed at canvas center. Drag to reposition.",
+                });
+              } catch (err) {
+                const message = err instanceof Error ? err.message : "Could not add component";
+                toast.error("Create failed", { description: message });
+              }
+            }}
+          />
+        )}
       </div>
     </div>
     </TooltipProvider>
@@ -2488,47 +2620,68 @@ function AIBar({
   prompt,
   setPrompt,
   onSubmit,
-  onFocusPalette,
   busy = false,
   suggestions,
-  onOpenSuggestions,
+  attachments,
+  onAttachFiles,
+  onRemoveAttachment,
+  menuOpen,
+  onMenuOpenChange,
 }: {
   prompt: string;
   setPrompt: (v: string) => void;
   onSubmit: () => void;
-  onFocusPalette: () => void;
   busy?: boolean;
   suggestions: string[];
-  onOpenSuggestions?: () => void;
+  attachments: BoardAiAttachment[];
+  onAttachFiles: (files: FileList | null) => void;
+  onRemoveAttachment: (name: string) => void;
+  menuOpen: boolean;
+  onMenuOpenChange: (open: boolean) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const attachInputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   return (
     <div className="relative z-30 border-b border-border bg-surface/80 backdrop-blur">
-      <div className="mx-auto flex w-full max-w-5xl items-center gap-2 px-4 py-3">
+      <div className={`mx-auto flex w-full max-w-5xl items-center gap-2 px-4 ${attachments.length ? "pb-10 pt-3" : "py-3"}`}>
         <div className="relative flex flex-1 items-center gap-2 rounded-2xl border border-border bg-surface px-3 py-2 node-shadow focus-within:ring-2 focus-within:ring-primary/30">
           <Sparkles className="h-4 w-4 text-primary" />
 
           <input
+            ref={inputRef}
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
-            onFocus={() => {
-              setOpen(true);
-              onOpenSuggestions?.();
-            }}
-            onBlur={() => setTimeout(() => setOpen(false), 150)}
+            onFocus={() => onMenuOpenChange(true)}
+            onBlur={() => setTimeout(() => onMenuOpenChange(false), 150)}
             onKeyDown={(e) => {
-              if (e.key === "Enter" && prompt.trim() && !busy) onSubmit();
+              if (e.key === "Enter" && prompt.trim() && !busy) {
+                onMenuOpenChange(false);
+                inputRef.current?.blur();
+                onSubmit();
+              }
+              if (e.key === "Escape") {
+                onMenuOpenChange(false);
+                inputRef.current?.blur();
+              }
             }}
             disabled={busy}
             placeholder="Ask Sphere to design or modify this architecture..."
             className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground disabled:opacity-60"
           />
-          <button className="hidden items-center gap-1 rounded-md px-1.5 py-1 text-[10px] text-muted-foreground hover:bg-muted md:flex">
-            <Slash className="h-3 w-3" /> Slash commands
-          </button>
-          <IconBtn label="Attach reference">
+          <IconBtn label="Attach reference" onClick={() => attachInputRef.current?.click()}>
             <Paperclip className="h-4 w-4" />
           </IconBtn>
+          <input
+            ref={attachInputRef}
+            type="file"
+            accept=".txt,.md,.png,.jpg,.jpeg,text/plain,text/markdown,image/png,image/jpeg"
+            multiple
+            className="hidden"
+            onChange={(e) => {
+              onAttachFiles(e.target.files);
+              e.target.value = "";
+            }}
+          />
           <IconBtn label="Voice input">
             <Mic className="h-4 w-4" />
           </IconBtn>
@@ -2537,14 +2690,35 @@ function AIBar({
             Preview changes
           </label>
           <button
-            onClick={() => prompt.trim() && !busy && onSubmit()}
+            onClick={() => {
+              if (!prompt.trim() || busy) return;
+              onMenuOpenChange(false);
+              inputRef.current?.blur();
+              onSubmit();
+            }}
             disabled={busy || !prompt.trim()}
             className="ml-1 flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
           >
             <Send className="h-3.5 w-3.5" /> {busy ? "Thinking…" : "Send"}
           </button>
 
-          {open && (
+          {attachments.length > 0 && (
+            <div className="absolute -bottom-9 left-2 right-2 flex flex-wrap gap-1">
+              {attachments.map((file) => (
+                <button
+                  key={file.name}
+                  type="button"
+                  onClick={() => onRemoveAttachment(file.name)}
+                  className="max-w-[220px] truncate rounded-full border border-border bg-muted px-2 py-0.5 text-[10px] text-muted-foreground hover:bg-muted/70 hover:text-foreground"
+                  title={`Remove ${file.name}`}
+                >
+                  {file.kind === "image" ? "img" : "doc"}: {file.name} ×
+                </button>
+              ))}
+            </div>
+          )}
+
+          {menuOpen && (
             <div className="absolute left-0 right-0 top-full z-30 mt-2 overflow-hidden rounded-xl border border-border bg-popover node-shadow-lg">
               <div className="border-b border-border px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                 Suggested commands
@@ -2579,12 +2753,6 @@ function AIBar({
             </div>
           )}
         </div>
-        <button
-          onClick={onFocusPalette}
-          className="hidden shrink-0 items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-xs text-muted-foreground hover:bg-muted md:flex"
-        >
-          <CommandIcon className="h-3.5 w-3.5" /> Palette
-        </button>
       </div>
     </div>
   );
@@ -4480,13 +4648,149 @@ function ContextMenu({
 
 /* ------------------------- PREVIEW DRAWER ------------------------- */
 
-function YamlPreviewBlock({ yaml }: { yaml: string }) {
+function fitPreviewSvg(svg: string): string {
+  return svg
+    .replace(/<\?xml[^?]*\?>\s*/i, "")
+    .replace(/\swidth="[^"]*"/, ' width="100%"')
+    .replace(/\sheight="[^"]*"/, ' height="auto"');
+}
+
+function formatYamlPreviewError(err: unknown): string {
+  if (
+    err &&
+    typeof err === "object" &&
+    "issues" in err &&
+    Array.isArray((err as { issues: unknown }).issues)
+  ) {
+    const issues = (err as {
+      issues: Array<{ path?: Array<string | number>; message?: string }>;
+    }).issues;
+    return issues
+      .slice(0, 3)
+      .map((issue) => {
+        const path = Array.isArray(issue.path) ? issue.path.join(".") : "";
+        return path ? `${path}: ${issue.message ?? "invalid"}` : (issue.message ?? "invalid");
+      })
+      .join("; ");
+  }
+  return err instanceof Error ? err.message : "Invalid SCAN YAML";
+}
+
+function ScanYamlDiagramPreview({ yaml }: { yaml: string }) {
+  const preview = useMemo(() => {
+    try {
+      const model = parseScanYaml(yaml);
+      const graph = projectToGraph(model);
+      if (!graph.nodes.length && !graph.groups.length) {
+        return { ok: false as const, error: "No diagram elements to preview yet." };
+      }
+      return { ok: true as const, svg: fitPreviewSvg(graphToSvg(graph)) };
+    } catch (err) {
+      return { ok: false as const, error: formatYamlPreviewError(err) };
+    }
+  }, [yaml]);
+
+  return (
+    <div className="mt-4 overflow-hidden rounded-lg border border-border bg-canvas">
+      <div className="flex items-center justify-between border-b border-border bg-muted/40 px-3 py-1.5">
+        <span className="font-mono text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+          Diagram preview
+        </span>
+        <span className="text-[10px] text-muted-foreground">What Apply will load</span>
+      </div>
+      {preview.ok ? (
+        <div
+          className="max-h-[260px] overflow-auto bg-[#f8fafc] p-2 [&_svg]:mx-auto [&_svg]:block [&_svg]:max-w-full"
+          dangerouslySetInnerHTML={{ __html: preview.svg }}
+        />
+      ) : (
+        <div className="px-3 py-3 text-[11px] text-muted-foreground">
+          Preview unavailable: {preview.error}
+        </div>
+      )}
+    </div>
+  );
+}
+
+type DiffLine = { kind: "context" | "add" | "remove"; text: string };
+
+function computeYamlDiff(baseYaml: string, nextYaml: string): DiffLine[] {
+  const a = baseYaml.split("\n");
+  const b = nextYaml.split("\n");
+  const out: DiffLine[] = [];
+  let i = 0;
+  let j = 0;
+  const LOOKAHEAD = 24;
+
+  while (i < a.length && j < b.length) {
+    if (a[i] === b[j]) {
+      out.push({ kind: "context", text: a[i] });
+      i += 1;
+      j += 1;
+      continue;
+    }
+
+    let aMatch = -1;
+    let bMatch = -1;
+    for (let k = 1; k <= LOOKAHEAD; k += 1) {
+      if (aMatch === -1 && i + k < a.length && a[i + k] === b[j]) aMatch = i + k;
+      if (bMatch === -1 && j + k < b.length && b[j + k] === a[i]) bMatch = j + k;
+      if (aMatch !== -1 && bMatch !== -1) break;
+    }
+
+    if (aMatch === -1 && bMatch === -1) {
+      out.push({ kind: "remove", text: a[i] });
+      out.push({ kind: "add", text: b[j] });
+      i += 1;
+      j += 1;
+      continue;
+    }
+    if (aMatch !== -1 && (bMatch === -1 || aMatch - i <= bMatch - j)) {
+      while (i < aMatch) {
+        out.push({ kind: "remove", text: a[i] });
+        i += 1;
+      }
+      continue;
+    }
+    while (j < bMatch) {
+      out.push({ kind: "add", text: b[j] });
+      j += 1;
+    }
+  }
+  while (i < a.length) {
+    out.push({ kind: "remove", text: a[i] });
+    i += 1;
+  }
+  while (j < b.length) {
+    out.push({ kind: "add", text: b[j] });
+    j += 1;
+  }
+  return out;
+}
+
+function YamlPreviewBlock({
+  yaml,
+  baseYaml,
+}: {
+  yaml: string;
+  baseYaml?: string | null;
+}) {
   const TRUNCATE_LINES = 12;
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
-  const lines = yaml.split("\n");
-  const isTruncated = !expanded && lines.length > TRUNCATE_LINES;
-  const displayed = isTruncated ? lines.slice(0, TRUNCATE_LINES).join("\n") : yaml;
+
+  const diffLines = useMemo(() => {
+    if (!baseYaml?.trim()) {
+      return yaml.split("\n").map((text) => ({ kind: "context" as const, text }));
+    }
+    return computeYamlDiff(baseYaml, yaml);
+  }, [baseYaml, yaml]);
+
+  const added = diffLines.filter((line) => line.kind === "add").length;
+  const removed = diffLines.filter((line) => line.kind === "remove").length;
+  const hasDiff = Boolean(baseYaml?.trim()) && (added > 0 || removed > 0);
+  const isTruncated = !expanded && diffLines.length > TRUNCATE_LINES;
+  const visible = isTruncated ? diffLines.slice(0, TRUNCATE_LINES) : diffLines;
 
   const copyYaml = () => {
     void navigator.clipboard.writeText(yaml).then(() => {
@@ -4497,31 +4801,56 @@ function YamlPreviewBlock({ yaml }: { yaml: string }) {
 
   return (
     <div className="mt-4 overflow-hidden rounded-lg border border-border bg-[hsl(var(--muted)/0.6)]">
-      <div className="flex items-center justify-between border-b border-border px-3 py-1.5">
+      <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-1.5">
         <span className="font-mono text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-          SCAN YAML — {lines.length} lines
+          SCAN YAML — {yaml.split("\n").length} lines
         </span>
-        <button
-          onClick={copyYaml}
-          title="Copy YAML"
-          className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-muted-foreground hover:bg-muted hover:text-foreground"
-        >
-          <ClipboardCopy className="h-3 w-3" />
-          {copied ? "Copied!" : "Copy"}
-        </button>
+        <div className="flex items-center gap-2">
+          {hasDiff && (
+            <span className="font-mono text-[10px] tabular-nums">
+              <span className="text-ok">+{added}</span>
+              <span className="text-muted-foreground"> / </span>
+              <span className="text-destructive">-{removed}</span>
+            </span>
+          )}
+          <button
+            onClick={copyYaml}
+            title="Copy YAML"
+            className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            <ClipboardCopy className="h-3 w-3" />
+            {copied ? "Copied!" : "Copy"}
+          </button>
+        </div>
       </div>
-      <pre className="overflow-x-auto px-3 py-2 font-mono text-[11px] leading-relaxed text-foreground">
-        {displayed}
-        {isTruncated && (
-          <span className="text-muted-foreground">{"\n"}…</span>
-        )}
+      <pre className="max-h-[320px] overflow-auto px-3 py-2 font-mono text-[11px] leading-relaxed">
+        {visible.map((line, idx) => {
+          const prefix = line.kind === "add" ? "+" : line.kind === "remove" ? "-" : " ";
+          const cls =
+            line.kind === "add"
+              ? "bg-ok-soft/50 text-ok"
+              : line.kind === "remove"
+                ? "bg-destructive/10 text-destructive"
+                : "text-foreground";
+          return (
+            <div key={`${idx}-${line.kind}-${line.text}`} className={`whitespace-pre-wrap px-1 ${cls}`}>
+              {prefix}
+              {line.text}
+            </div>
+          );
+        })}
+        {isTruncated && <div className="px-1 text-muted-foreground">…</div>}
       </pre>
-      {lines.length > TRUNCATE_LINES && (
+      {diffLines.length > TRUNCATE_LINES && (
         <button
           onClick={() => setExpanded((v) => !v)}
           className="w-full border-t border-border px-3 py-1.5 text-center text-[10px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
         >
-          {expanded ? "Show less" : `Show all ${lines.length} lines`}
+          {expanded
+            ? "Show less"
+            : hasDiff
+              ? `Show full diff (${diffLines.length} lines)`
+              : `Show all ${diffLines.length} lines`}
         </button>
       )}
     </div>
@@ -4532,6 +4861,7 @@ function PreviewDrawer({
   title,
   reply,
   yaml,
+  baseYaml,
   hasYaml,
   onCancel,
   onApply,
@@ -4539,13 +4869,14 @@ function PreviewDrawer({
   title: string;
   reply: string;
   yaml: string | null;
+  baseYaml: string | null;
   hasYaml: boolean;
   onCancel: () => void;
   onApply: () => void;
 }) {
   return (
-    <div className="absolute inset-0 z-30 flex items-center justify-center bg-foreground/10 backdrop-blur-sm">
-      <div className="w-[600px] overflow-hidden rounded-2xl border border-border bg-surface node-shadow-lg">
+    <div className="absolute inset-0 z-40 flex items-center justify-center bg-foreground/10 backdrop-blur-sm">
+      <div className="w-[680px] overflow-hidden rounded-2xl border border-border bg-surface node-shadow-lg">
         <div className="flex items-center gap-3 border-b border-border bg-gradient-to-r from-primary/10 to-event/10 px-5 py-4">
           <div className="grid h-9 w-9 place-items-center rounded-lg bg-gradient-to-br from-primary to-event text-primary-foreground">
             <Sparkles className="h-4 w-4" />
@@ -4562,12 +4893,15 @@ function PreviewDrawer({
             <X className="h-4 w-4" />
           </button>
         </div>
-        <div className="max-h-[480px] overflow-auto p-4">
+        <div className="max-h-[560px] overflow-auto p-4">
           <div className="whitespace-pre-wrap rounded-lg border border-border bg-muted/40 px-3 py-3 text-sm leading-relaxed text-foreground">
             {reply || "No message."}
           </div>
           {hasYaml && yaml ? (
-            <YamlPreviewBlock yaml={yaml} />
+            <>
+              <ScanYamlDiagramPreview yaml={yaml} />
+              <YamlPreviewBlock yaml={yaml} baseYaml={baseYaml} />
+            </>
           ) : (
             <div className="mt-4 rounded-lg bg-muted p-3 text-[11px] text-muted-foreground">
               No YAML was returned. Ask Sphere to add or change architecture elements to get an applyable proposal.
@@ -4606,17 +4940,27 @@ function PreviewDrawer({
 
 /* ------------------------- COMMAND PALETTE ------------------------- */
 
-function CommandPalette({ onClose }: { onClose: () => void }) {
+function CommandPalette({
+  onClose,
+  onCreateComponent,
+}: {
+  onClose: () => void;
+  onCreateComponent: (kind: CreateKind) => void;
+}) {
   const [q, setQ] = useState("");
+  const componentItems: Array<{ icon: typeof Leaf; label: string; meta: string; kind: CreateKind }> = [
+    { icon: Leaf, label: "Service", meta: "Spring Boot / API", kind: "service" },
+    { icon: DbIcon, label: "Datastore", meta: "PostgreSQL / MySQL", kind: "datastore" },
+    { icon: Radio, label: "Event / Stream", meta: "Kafka / Queue / Topic", kind: "event-stream" },
+    { icon: Search, label: "Search", meta: "Elasticsearch / Index", kind: "search" },
+    { icon: Bot, label: "Agent", meta: "Agent runtime", kind: "agent" },
+    { icon: Github, label: "Repository", meta: "Code / Contracts", kind: "repository" },
+    { icon: ExternalLink, label: "External System", meta: "3rd party dependency", kind: "external-system" },
+  ];
   const groups = [
     {
       title: "Components",
-      items: [
-        { icon: Leaf, label: "Order API", meta: "Spring Boot" },
-        { icon: Leaf, label: "Payment Service", meta: "Spring Boot" },
-        { icon: DbIcon, label: "Orders DB", meta: "PostgreSQL" },
-        { icon: Radio, label: "Order Created", meta: "Kafka" },
-      ],
+      items: componentItems,
     },
     {
       title: "Actions",
@@ -4637,6 +4981,17 @@ function CommandPalette({ onClose }: { onClose: () => void }) {
       ],
     },
   ];
+  const query = q.trim().toLowerCase();
+  const visibleGroups = groups
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => {
+        if (!query) return true;
+        const meta = "meta" in item && item.meta ? item.meta : "";
+        return `${group.title} ${item.label} ${meta}`.toLowerCase().includes(query);
+      }),
+    }))
+    .filter((group) => group.items.length > 0);
   return (
     <div className="absolute inset-0 z-40 flex items-start justify-center bg-foreground/10 pt-24 backdrop-blur-sm">
       <div
@@ -4655,7 +5010,7 @@ function CommandPalette({ onClose }: { onClose: () => void }) {
           <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px]">ESC</span>
         </div>
         <div className="max-h-[420px] overflow-auto p-2">
-          {groups.map((g) => (
+          {visibleGroups.map((g) => (
             <div key={g.title} className="mb-2">
               <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                 {g.title}
@@ -4663,7 +5018,13 @@ function CommandPalette({ onClose }: { onClose: () => void }) {
               {g.items.map((it) => (
                 <button
                   key={it.label}
-                  onClick={onClose}
+                  onClick={() => {
+                    if ("kind" in it) {
+                      onCreateComponent(it.kind);
+                      return;
+                    }
+                    onClose();
+                  }}
                   className="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left text-xs hover:bg-muted"
                 >
                   <div className="grid h-6 w-6 place-items-center rounded bg-muted">

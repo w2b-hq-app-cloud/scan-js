@@ -18,6 +18,51 @@ export type EntityPorts = {
   exposes: SpherePort[];
 };
 
+/**
+ * Capability tokens used for relaxed default connection validation.
+ * Kind pairs are suggestions; capabilities decide whether an edge is plausible.
+ */
+export type NodeCapability =
+  | "accept-request"
+  | "initiate-request"
+  | "publish-event"
+  | "consume-event"
+  | "state-access"
+  | "delegate"
+  | "git-source"
+  | "git-consume";
+
+const KIND_CAPABILITIES: Record<Exclude<EntityKind, "unknown">, ReadonlySet<NodeCapability>> = {
+  service: new Set([
+    "accept-request",
+    "initiate-request",
+    "publish-event",
+    "consume-event",
+    "state-access",
+    "delegate",
+    "git-consume",
+  ]),
+  external: new Set([
+    "accept-request",
+    "initiate-request",
+    "publish-event",
+    "consume-event",
+  ]),
+  database: new Set(["state-access"]),
+  search: new Set(["accept-request", "consume-event", "state-access"]),
+  event: new Set(["publish-event", "consume-event"]),
+  agent: new Set([
+    "accept-request",
+    "initiate-request",
+    "publish-event",
+    "consume-event",
+    "delegate",
+    "git-source",
+    "git-consume",
+  ]),
+  repo: new Set(["git-source", "git-consume"]),
+};
+
 /** Map model entity id -> coarse kind used by connection rules. */
 export function resolveEntityKind(model: SphereModel, id: string): EntityKind {
   if (model.external_systems.some((e) => e.id === id)) return "external";
@@ -44,6 +89,11 @@ export function resolveEntityKind(model: SphereModel, id: string): EntityKind {
     default:
       return "unknown";
   }
+}
+
+export function capabilitiesForKind(kind: EntityKind): ReadonlySet<NodeCapability> {
+  if (kind === "unknown") return new Set();
+  return KIND_CAPABILITIES[kind];
 }
 
 /** Resolve consume/expose ports for any model element id. */
@@ -87,41 +137,45 @@ export function resolveEntityPorts(model: SphereModel, id: string): EntityPorts 
   return empty;
 }
 
-type Rule = {
+/**
+ * Pedagogical / suggest-first matrix. Used for suggestedType and documentation;
+ * not the sole legality gate (see capability checks below).
+ */
+type SuggestRule = {
   from: EntityKind[];
   to: EntityKind[];
   types: ConnectionType[];
 };
 
-const RULES: Rule[] = [
+const SUGGEST_RULES: SuggestRule[] = [
   {
-    from: ["external", "service"],
-    to: ["service"],
+    from: ["external", "service", "agent"],
+    to: ["service", "external", "agent", "search"],
     types: ["synchronous-request", "grpc-request"],
   },
   {
-    from: ["service"],
-    to: ["database"],
+    from: ["service", "external", "agent", "database", "search"],
+    to: ["database", "search", "service"],
     types: ["database-access"],
   },
   {
-    from: ["service", "external"],
+    from: ["service", "external", "agent"],
     to: ["event"],
     types: ["event-publication"],
   },
   {
     from: ["event"],
-    to: ["search", "service", "external"],
+    to: ["search", "service", "external", "agent"],
     types: ["stream-consume", "event-subscription"],
   },
   {
-    from: ["agent"],
+    from: ["agent", "service"],
     to: ["agent"],
     types: ["agent-delegation"],
   },
   {
-    from: ["agent"],
-    to: ["repo"],
+    from: ["agent", "service", "repo"],
+    to: ["repo", "service", "agent"],
     types: ["git-integration"],
   },
 ];
@@ -130,6 +184,8 @@ export type ConnectionCheck = {
   allowed: boolean;
   reason?: string;
   suggestedType?: ConnectionType;
+  /** true when allowed via capability fit rather than a classic matrix row */
+  relaxed?: boolean;
 };
 
 export type ConnectPortOptions = {
@@ -171,6 +227,70 @@ function checkPorts(
   return null;
 }
 
+function hasCap(kind: EntityKind, cap: NodeCapability): boolean {
+  return capabilitiesForKind(kind).has(cap);
+}
+
+/**
+ * Capability fit for a connection type. Returns false for structurally
+ * impossible combinations (e.g. database initiating agent-delegation).
+ */
+export function connectionTypeFitsCapabilities(
+  from: EntityKind,
+  to: EntityKind,
+  type: ConnectionType,
+): boolean {
+  switch (type) {
+    case "synchronous-request":
+    case "grpc-request":
+      return hasCap(from, "initiate-request") && hasCap(to, "accept-request");
+    case "event-publication":
+      return hasCap(from, "publish-event") && to === "event";
+    case "event-subscription":
+    case "stream-consume":
+      return from === "event" && hasCap(to, "consume-event");
+    case "database-access":
+      // Prefer store on either end; allow analytics/read patterns in either direction.
+      return (
+        (hasCap(from, "state-access") && hasCap(to, "state-access")) ||
+        (hasCap(from, "initiate-request") && to === "database") ||
+        (from === "database" && hasCap(to, "state-access"))
+      );
+    case "agent-delegation":
+      return hasCap(from, "delegate") && (to === "agent" || to === "service");
+    case "git-integration": {
+      const fromGit = hasCap(from, "git-source") || hasCap(from, "git-consume");
+      const toGit = hasCap(to, "git-source") || hasCap(to, "git-consume");
+      return fromGit && toGit && (from === "repo" || to === "repo");
+    }
+    default:
+      return false;
+  }
+}
+
+function suggestFromMatrix(from: EntityKind, to: EntityKind): ConnectionType | undefined {
+  const matches = SUGGEST_RULES.filter((r) => r.from.includes(from) && r.to.includes(to));
+  return matches[0]?.types[0];
+}
+
+function firstFittingType(from: EntityKind, to: EntityKind): ConnectionType | undefined {
+  const preferred = suggestFromMatrix(from, to);
+  if (preferred && connectionTypeFitsCapabilities(from, to, preferred)) {
+    return preferred;
+  }
+  const order: ConnectionType[] = [
+    "synchronous-request",
+    "grpc-request",
+    "event-publication",
+    "stream-consume",
+    "event-subscription",
+    "database-access",
+    "agent-delegation",
+    "git-integration",
+  ];
+  return order.find((t) => connectionTypeFitsCapabilities(from, to, t));
+}
+
 export function canConnect(
   model: SphereModel,
   fromId: string,
@@ -190,24 +310,38 @@ export function canConnect(
   const portCheck = checkPorts(model, fromId, toId, ports);
   if (portCheck) return portCheck;
 
-  const matches = RULES.filter((r) => r.from.includes(from) && r.to.includes(to));
-  if (!matches.length) {
-    return { allowed: false, reason: `No rule allows ${from} -> ${to}` };
-  }
+  const matrixMatch = SUGGEST_RULES.some(
+    (r) =>
+      r.from.includes(from) &&
+      r.to.includes(to) &&
+      (!type || r.types.includes(type)),
+  );
 
   if (type) {
-    const ok = matches.some((r) => r.types.includes(type));
-    if (!ok) {
+    if (!connectionTypeFitsCapabilities(from, to, type)) {
+      const suggested = firstFittingType(from, to);
       return {
         allowed: false,
-        reason: `Connection type ${type} not allowed for ${from} -> ${to}`,
-        suggestedType: matches[0].types[0],
+        reason: `Connection type ${type} is not semantically plausible for ${from} -> ${to}`,
+        suggestedType: suggested,
       };
     }
-    return { allowed: true };
+    return {
+      allowed: true,
+      suggestedType: type,
+      relaxed: !matrixMatch,
+    };
   }
 
-  return { allowed: true, suggestedType: matches[0].types[0] };
+  const suggested = firstFittingType(from, to);
+  if (!suggested) {
+    return { allowed: false, reason: `No plausible connection for ${from} -> ${to}` };
+  }
+  return {
+    allowed: true,
+    suggestedType: suggested,
+    relaxed: !matrixMatch,
+  };
 }
 
 export function suggestConnectionType(
