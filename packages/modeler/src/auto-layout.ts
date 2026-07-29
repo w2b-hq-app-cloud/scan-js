@@ -39,11 +39,11 @@ type ClusterPlan = {
 const DEFAULTS = {
   originX: 80,
   originY: 60,
-  gapX: 220,
-  gapY: 128,
-  boundaryPad: 64,
-  clusterGapX: 140,
-  clusterGapY: 160,
+  gapX: 100,
+  gapY: 72,
+  boundaryPad: 48,
+  clusterGapX: 96,
+  clusterGapY: 96,
 } as const;
 
 /** Prefer splitting a layer into another column when stacked height exceeds this. */
@@ -58,12 +58,22 @@ function ensureView(model: SphereModel, viewId?: string): SphereView {
   return view;
 }
 
-function boxOf(entry: LayoutEntry | undefined): SizedBox {
+function boxOf(entry: LayoutEntry | undefined, kind?: string): SizedBox {
+  // Always pack with kind-standard sizes so agent-emitted tiny w/h cannot
+  // collapse boxes or undersize fitted boundaries.
+  const defaults =
+    kind === "database"
+      ? { w: 220, h: 160 }
+      : kind === "external"
+        ? { w: 220, h: 150 }
+        : kind === "repo"
+          ? { w: 260, h: 180 }
+          : { w: 260, h: 190 };
   return {
     x: entry?.x ?? 0,
     y: entry?.y ?? 0,
-    w: entry?.w ?? 260,
-    h: entry?.h ?? 180,
+    w: defaults.w,
+    h: defaults.h,
   };
 }
 
@@ -528,7 +538,9 @@ export function computeAutoLayout(
   }
 
   const sizes: Record<string, SizedBox> = {};
-  for (const id of ids) sizes[id] = boxOf(view.layout[id]);
+  for (const id of ids) {
+    sizes[id] = boxOf(view.layout[id], resolveEntityKind(model, id));
+  }
 
   const clusterOf = assignClusters(ids, view.boundaries);
   const boundaryIds = view.boundaries.map((b) => b.id);

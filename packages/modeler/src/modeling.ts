@@ -509,6 +509,16 @@ export class Modeling {
       tag?: string | null;
       kind?: "trust" | "runtime";
       icon?: string | null;
+      color?:
+        | "svc"
+        | "ext"
+        | "data"
+        | "event"
+        | "search"
+        | "agent"
+        | "repo"
+        | "warn"
+        | null;
     },
   ) {
     const prev = cloneModel(this.getModel());
@@ -540,6 +550,10 @@ export class Modeling {
       const icon = patch.icon?.trim();
       if (!icon) delete boundary.icon;
       else boundary.icon = icon;
+    }
+    if ("color" in patch) {
+      if (!patch.color) delete boundary.color;
+      else boundary.color = patch.color;
     }
 
     this.replace(next, prev, `Update boundary ${id}`);

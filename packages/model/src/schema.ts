@@ -141,11 +141,25 @@ const layoutEntrySchema = z.object({
   h: z.number().optional(),
 });
 
+/** Stroke/tint palette for boundaries (matches board CSS tokens). */
+export const boundaryColorSchema = z.enum([
+  "svc",
+  "ext",
+  "data",
+  "event",
+  "search",
+  "agent",
+  "repo",
+  "warn",
+]);
+
 const boundarySchema = z.object({
   id: z.string(),
   label: z.string(),
   tag: z.string().optional(),
   kind: z.enum(["trust", "runtime"]).default("trust"),
+  /** Optional color token; omit to tint from `kind` (trust→svc, runtime→agent). */
+  color: boundaryColorSchema.optional(),
   icon: iconSchema,
   members: z.array(z.string()),
   x: z.number(),

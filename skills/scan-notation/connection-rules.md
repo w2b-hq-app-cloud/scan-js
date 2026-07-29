@@ -82,3 +82,4 @@ View boundaries are **not** connection kinds. Allowed boundary `kind` values:
 - `runtime`
 
 Never use `external` / `service` as boundary `kind`. Put third parties in `external_systems`.
+Optional boundary `color`: `svc` | `ext` | `data` | `event` | `search` | `agent` | `repo` | `warn` (color-codes the dashed box).

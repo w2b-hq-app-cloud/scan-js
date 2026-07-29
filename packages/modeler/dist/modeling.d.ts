@@ -61,6 +61,7 @@ export declare class Modeling {
         tag?: string | null;
         kind?: "trust" | "runtime";
         icon?: string | null;
+        color?: "svc" | "ext" | "data" | "event" | "search" | "agent" | "repo" | "warn" | null;
     }): void;
     deleteBoundary(id: string): void;
     /** Live move while dragging; commit with moveBoundary on pointer up. Moves members with the box. */

@@ -2,11 +2,11 @@ import { resolveEntityKind } from "@spherescan/rules";
 const DEFAULTS = {
     originX: 80,
     originY: 60,
-    gapX: 220,
-    gapY: 128,
-    boundaryPad: 64,
-    clusterGapX: 140,
-    clusterGapY: 160,
+    gapX: 100,
+    gapY: 72,
+    boundaryPad: 48,
+    clusterGapX: 96,
+    clusterGapY: 96,
 };
 /** Prefer splitting a layer into another column when stacked height exceeds this. */
 const MAX_LAYER_STACK_H = 780;
@@ -17,12 +17,21 @@ function ensureView(model, viewId) {
         throw new Error("Model has no views");
     return view;
 }
-function boxOf(entry) {
+function boxOf(entry, kind) {
+    // Always pack with kind-standard sizes so agent-emitted tiny w/h cannot
+    // collapse boxes or undersize fitted boundaries.
+    const defaults = kind === "database"
+        ? { w: 220, h: 160 }
+        : kind === "external"
+            ? { w: 220, h: 150 }
+            : kind === "repo"
+                ? { w: 260, h: 180 }
+                : { w: 260, h: 190 };
     return {
         x: entry?.x ?? 0,
         y: entry?.y ?? 0,
-        w: entry?.w ?? 260,
-        h: entry?.h ?? 180,
+        w: defaults.w,
+        h: defaults.h,
     };
 }
 function center(b) {
@@ -78,7 +87,7 @@ function splitTallLayers(byLayer, sizes, childrenOf, memberSet, gapY, maxH) {
                 blockH += gapY * 0.75 + kidH;
             }
             else if (kids.length > 2) {
-                // Side pocket â€” height â‰ˆ parent or kids stack, not stacked under.
+                // Side pocket - height ~= parent or kids stack, not stacked under.
                 const kidStack = kids.reduce((h, k) => h + (sizes[k]?.h ?? 160) + gapY * 0.5, 0) -
                     gapY * 0.5;
                 blockH = Math.max(blockH, kidStack);
@@ -170,7 +179,7 @@ function assignLayers(nodeIds, edges, model) {
     const ordered = [...nodeIds].sort((a, b) => kindRank(model, a) - kindRank(model, b) || a.localeCompare(b));
     for (const id of ordered)
         dfs(id);
-    // Re-run longest path now that all nodes seeded â€” simple relaxation.
+    // Re-run longest path now that all nodes seeded - simple relaxation.
     for (let pass = 0; pass < nodeIds.length; pass++) {
         let changed = false;
         for (const id of nodeIds) {
@@ -308,7 +317,7 @@ function layoutClusterMembers(memberIds, model, sizes, connections, gapX, gapY) 
             y = attachBottom + gapY;
         }
     }
-    // Any member not placed (edge cases) â€” stack at bottom.
+    // Any member not placed (edge cases) - stack at bottom.
     let orphanY = 0;
     for (const id of memberIds) {
         if (local[id])
@@ -317,7 +326,7 @@ function layoutClusterMembers(memberIds, model, sizes, connections, gapX, gapY) 
         local[id] = { x: 0, y: orphanY, w: size.w, h: size.h };
         orphanY += size.h + gapY;
     }
-    // Attachments centered under a parent can go negative â€” shift into quadrant I.
+    // Attachments centered under a parent can go negative - shift into quadrant I.
     let minX = 0;
     let minY = 0;
     for (const b of Object.values(local)) {
@@ -361,7 +370,7 @@ function layoutClusterRow(clusters, model, connections, originX, originY, cluste
     }
     // Synthetic model ranks: trust boundaries before runtime, free last-ish.
     const layer = assignLayers(ids, metaEdges, model);
-    // Override free cluster to sit left or around by connectivity â€” keep computed.
+    // Override free cluster to sit left or around by connectivity - keep computed.
     const maxLayer = Math.max(0, ...[...layer.values()]);
     const byLayer = Array.from({ length: maxLayer + 1 }, () => []);
     for (const c of clusters) {
@@ -408,8 +417,9 @@ export function computeAutoLayout(model, viewId, options = {}) {
         return { layout: {}, boundaries: [], connectionSides: [] };
     }
     const sizes = {};
-    for (const id of ids)
-        sizes[id] = boxOf(view.layout[id]);
+    for (const id of ids) {
+        sizes[id] = boxOf(view.layout[id], resolveEntityKind(model, id));
+    }
     const clusterOf = assignClusters(ids, view.boundaries);
     const boundaryIds = view.boundaries.map((b) => b.id);
     const clusters = [];

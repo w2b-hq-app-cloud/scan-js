@@ -44,6 +44,7 @@ If you change the SCAN metamodel or rules:
 
 ## Pull requests
 
+- Work on a **feature branch**; open a PR into `main`. Do **not** push commits directly to `main` (protected; reviews land via PR).
 - Keep changes focused and named for **SCAN / scan-js** (not external product brands)
 - Add or update tests when behavior changes (`model`, `rules`, `viewer`, `modeler`)
 - Run `npm run typecheck` and `npm test` before opening a PR

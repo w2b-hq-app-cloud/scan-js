@@ -389,6 +389,16 @@ export function useScanBoard(options: UseScanBoardOptions | string = {}) {
         tag?: string | null;
         kind?: "trust" | "runtime";
         icon?: string | null;
+        color?:
+          | "svc"
+          | "ext"
+          | "data"
+          | "event"
+          | "search"
+          | "agent"
+          | "repo"
+          | "warn"
+          | null;
       },
     ) => modeler.modeling.updateBoundary(id, patch),
     [modeler],

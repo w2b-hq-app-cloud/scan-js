@@ -18,8 +18,8 @@ declare const portSchema: z.ZodObject<{
 /**
  * Optional diagram icon override.
  * - Lucide name (e.g. `shield`, `database`)
- * - `https://…` / `http://…` image URL
- * - `data:image/…` (uploaded file encoded as data URL)
+ * - `https://...` / `http://...` image URL
+ * - `data:image/...` (uploaded file encoded as data URL)
  */
 export declare const iconSchema: z.ZodOptional<z.ZodString>;
 declare const componentSchema: z.ZodObject<{
@@ -189,6 +189,8 @@ declare const layoutEntrySchema: z.ZodObject<{
     w?: number | undefined;
     h?: number | undefined;
 }>;
+/** Stroke/tint palette for boundaries (matches board CSS tokens). */
+export declare const boundaryColorSchema: z.ZodEnum<["svc", "ext", "data", "event", "search", "agent", "repo", "warn"]>;
 declare const viewSchema: z.ZodObject<{
     id: z.ZodString;
     type: z.ZodDefault<z.ZodString>;
@@ -197,6 +199,8 @@ declare const viewSchema: z.ZodObject<{
         label: z.ZodString;
         tag: z.ZodOptional<z.ZodString>;
         kind: z.ZodDefault<z.ZodEnum<["trust", "runtime"]>>;
+        /** Optional color token; omit to tint from `kind` (trust→svc, runtime→agent). */
+        color: z.ZodOptional<z.ZodEnum<["svc", "ext", "data", "event", "search", "agent", "repo", "warn"]>>;
         icon: z.ZodOptional<z.ZodString>;
         members: z.ZodArray<z.ZodString, "many">;
         x: z.ZodNumber;
@@ -214,6 +218,7 @@ declare const viewSchema: z.ZodObject<{
         members: string[];
         icon?: string | undefined;
         tag?: string | undefined;
+        color?: "search" | "agent" | "warn" | "svc" | "ext" | "data" | "event" | "repo" | undefined;
     }, {
         id: string;
         label: string;
@@ -225,6 +230,7 @@ declare const viewSchema: z.ZodObject<{
         icon?: string | undefined;
         tag?: string | undefined;
         kind?: "runtime" | "trust" | undefined;
+        color?: "search" | "agent" | "warn" | "svc" | "ext" | "data" | "event" | "repo" | undefined;
     }>, "many">>;
     layout: z.ZodRecord<z.ZodString, z.ZodObject<{
         x: z.ZodNumber;
@@ -256,6 +262,7 @@ declare const viewSchema: z.ZodObject<{
         members: string[];
         icon?: string | undefined;
         tag?: string | undefined;
+        color?: "search" | "agent" | "warn" | "svc" | "ext" | "data" | "event" | "repo" | undefined;
     }[];
     layout: Record<string, {
         x: number;
@@ -283,6 +290,7 @@ declare const viewSchema: z.ZodObject<{
         icon?: string | undefined;
         tag?: string | undefined;
         kind?: "runtime" | "trust" | undefined;
+        color?: "search" | "agent" | "warn" | "svc" | "ext" | "data" | "event" | "repo" | undefined;
     }[] | undefined;
 }>;
 export declare const scanModelSchema: z.ZodEffects<z.ZodObject<{
@@ -759,6 +767,8 @@ export declare const scanModelSchema: z.ZodEffects<z.ZodObject<{
             label: z.ZodString;
             tag: z.ZodOptional<z.ZodString>;
             kind: z.ZodDefault<z.ZodEnum<["trust", "runtime"]>>;
+            /** Optional color token; omit to tint from `kind` (trust→svc, runtime→agent). */
+            color: z.ZodOptional<z.ZodEnum<["svc", "ext", "data", "event", "search", "agent", "repo", "warn"]>>;
             icon: z.ZodOptional<z.ZodString>;
             members: z.ZodArray<z.ZodString, "many">;
             x: z.ZodNumber;
@@ -776,6 +786,7 @@ export declare const scanModelSchema: z.ZodEffects<z.ZodObject<{
             members: string[];
             icon?: string | undefined;
             tag?: string | undefined;
+            color?: "search" | "agent" | "warn" | "svc" | "ext" | "data" | "event" | "repo" | undefined;
         }, {
             id: string;
             label: string;
@@ -787,6 +798,7 @@ export declare const scanModelSchema: z.ZodEffects<z.ZodObject<{
             icon?: string | undefined;
             tag?: string | undefined;
             kind?: "runtime" | "trust" | undefined;
+            color?: "search" | "agent" | "warn" | "svc" | "ext" | "data" | "event" | "repo" | undefined;
         }>, "many">>;
         layout: z.ZodRecord<z.ZodString, z.ZodObject<{
             x: z.ZodNumber;
@@ -818,6 +830,7 @@ export declare const scanModelSchema: z.ZodEffects<z.ZodObject<{
             members: string[];
             icon?: string | undefined;
             tag?: string | undefined;
+            color?: "search" | "agent" | "warn" | "svc" | "ext" | "data" | "event" | "repo" | undefined;
         }[];
         layout: Record<string, {
             x: number;
@@ -845,6 +858,7 @@ export declare const scanModelSchema: z.ZodEffects<z.ZodObject<{
             icon?: string | undefined;
             tag?: string | undefined;
             kind?: "runtime" | "trust" | undefined;
+            color?: "search" | "agent" | "warn" | "svc" | "ext" | "data" | "event" | "repo" | undefined;
         }[] | undefined;
     }>, "many">;
 }, "strip", z.ZodTypeAny, {
@@ -989,6 +1003,7 @@ export declare const scanModelSchema: z.ZodEffects<z.ZodObject<{
             members: string[];
             icon?: string | undefined;
             tag?: string | undefined;
+            color?: "search" | "agent" | "warn" | "svc" | "ext" | "data" | "event" | "repo" | undefined;
         }[];
         layout: Record<string, {
             x: number;
@@ -1026,6 +1041,7 @@ export declare const scanModelSchema: z.ZodEffects<z.ZodObject<{
             icon?: string | undefined;
             tag?: string | undefined;
             kind?: "runtime" | "trust" | undefined;
+            color?: "search" | "agent" | "warn" | "svc" | "ext" | "data" | "event" | "repo" | undefined;
         }[] | undefined;
     }[];
     sphere?: string | number | undefined;
@@ -1291,6 +1307,7 @@ export declare const scanModelSchema: z.ZodEffects<z.ZodObject<{
             members: string[];
             icon?: string | undefined;
             tag?: string | undefined;
+            color?: "search" | "agent" | "warn" | "svc" | "ext" | "data" | "event" | "repo" | undefined;
         }[];
         layout: Record<string, {
             x: number;
@@ -1776,6 +1793,8 @@ export declare const sphereModelSchema: z.ZodEffects<z.ZodObject<{
             label: z.ZodString;
             tag: z.ZodOptional<z.ZodString>;
             kind: z.ZodDefault<z.ZodEnum<["trust", "runtime"]>>;
+            /** Optional color token; omit to tint from `kind` (trust→svc, runtime→agent). */
+            color: z.ZodOptional<z.ZodEnum<["svc", "ext", "data", "event", "search", "agent", "repo", "warn"]>>;
             icon: z.ZodOptional<z.ZodString>;
             members: z.ZodArray<z.ZodString, "many">;
             x: z.ZodNumber;
@@ -1793,6 +1812,7 @@ export declare const sphereModelSchema: z.ZodEffects<z.ZodObject<{
             members: string[];
             icon?: string | undefined;
             tag?: string | undefined;
+            color?: "search" | "agent" | "warn" | "svc" | "ext" | "data" | "event" | "repo" | undefined;
         }, {
             id: string;
             label: string;
@@ -1804,6 +1824,7 @@ export declare const sphereModelSchema: z.ZodEffects<z.ZodObject<{
             icon?: string | undefined;
             tag?: string | undefined;
             kind?: "runtime" | "trust" | undefined;
+            color?: "search" | "agent" | "warn" | "svc" | "ext" | "data" | "event" | "repo" | undefined;
         }>, "many">>;
         layout: z.ZodRecord<z.ZodString, z.ZodObject<{
             x: z.ZodNumber;
@@ -1835,6 +1856,7 @@ export declare const sphereModelSchema: z.ZodEffects<z.ZodObject<{
             members: string[];
             icon?: string | undefined;
             tag?: string | undefined;
+            color?: "search" | "agent" | "warn" | "svc" | "ext" | "data" | "event" | "repo" | undefined;
         }[];
         layout: Record<string, {
             x: number;
@@ -1862,6 +1884,7 @@ export declare const sphereModelSchema: z.ZodEffects<z.ZodObject<{
             icon?: string | undefined;
             tag?: string | undefined;
             kind?: "runtime" | "trust" | undefined;
+            color?: "search" | "agent" | "warn" | "svc" | "ext" | "data" | "event" | "repo" | undefined;
         }[] | undefined;
     }>, "many">;
 }, "strip", z.ZodTypeAny, {
@@ -2006,6 +2029,7 @@ export declare const sphereModelSchema: z.ZodEffects<z.ZodObject<{
             members: string[];
             icon?: string | undefined;
             tag?: string | undefined;
+            color?: "search" | "agent" | "warn" | "svc" | "ext" | "data" | "event" | "repo" | undefined;
         }[];
         layout: Record<string, {
             x: number;
@@ -2043,6 +2067,7 @@ export declare const sphereModelSchema: z.ZodEffects<z.ZodObject<{
             icon?: string | undefined;
             tag?: string | undefined;
             kind?: "runtime" | "trust" | undefined;
+            color?: "search" | "agent" | "warn" | "svc" | "ext" | "data" | "event" | "repo" | undefined;
         }[] | undefined;
     }[];
     sphere?: string | number | undefined;
@@ -2308,6 +2333,7 @@ export declare const sphereModelSchema: z.ZodEffects<z.ZodObject<{
             members: string[];
             icon?: string | undefined;
             tag?: string | undefined;
+            color?: "search" | "agent" | "warn" | "svc" | "ext" | "data" | "event" | "repo" | undefined;
         }[];
         layout: Record<string, {
             x: number;

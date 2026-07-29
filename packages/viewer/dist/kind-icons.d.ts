@@ -25,7 +25,7 @@ export type IconChild = {
 export type KindVisual = {
     color: string;
     soft: string;
-    /** Lucide 24×24 icon children (stroke icons). */
+    /** Lucide 24x24 icon children (stroke icons). */
     icon: IconChild[];
 };
 /**

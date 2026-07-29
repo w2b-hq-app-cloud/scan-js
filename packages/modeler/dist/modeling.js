@@ -482,6 +482,12 @@ export class Modeling {
             else
                 boundary.icon = icon;
         }
+        if ("color" in patch) {
+            if (!patch.color)
+                delete boundary.color;
+            else
+                boundary.color = patch.color;
+        }
         this.replace(next, prev, `Update boundary ${id}`);
     }
     deleteBoundary(id) {
@@ -648,7 +654,7 @@ export class Modeling {
             toPort: options?.toPort,
         };
         next.connections.push(connection);
-        this.replace(next, prev, `Connect ${fromId} â†’ ${toId}`);
+        this.replace(next, prev, `Connect ${fromId} -> ${toId}`);
         return id;
     }
     addPort(elementId, role, port) {

@@ -282,10 +282,14 @@ test("updateElementIcon + boundary icon + undo", async () => {
     modeler.getModel()!.components.find((c) => c.id === "order-api")!.icon,
     "server",
   );
-  modeler.modeling.updateBoundary("g-order", { icon: "shield" });
+  modeler.modeling.updateBoundary("g-order", { icon: "shield", color: "warn" });
   assert.equal(
     modeler.getModel()!.views[0].boundaries.find((b) => b.id === "g-order")!.icon,
     "shield",
+  );
+  assert.equal(
+    modeler.getModel()!.views[0].boundaries.find((b) => b.id === "g-order")!.color,
+    "warn",
   );
   modeler.modeling.updateElementIcon("order-api", null);
   assert.equal(

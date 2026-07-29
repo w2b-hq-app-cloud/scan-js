@@ -53,13 +53,15 @@ import {
   ExternalLink,
   Link2,
   Menu,
+  RefreshCw,
+  Loader2,
 } from "lucide-react";
 import {
   commandSuggestions,
-  recentPrompts,
+  recentPrompts as seedRecentPrompts,
   previewChanges,
 } from "./chrome-data";
-import type { SphereNode, SphereEdge, SphereGroup, NodeKind } from "@spherescan/viewer";
+import type { SphereNode, SphereEdge, SphereGroup, NodeKind, BoundaryColor } from "@spherescan/viewer";
 import {
   LABEL_LOD_ZOOM,
   anchorPoint,
@@ -68,6 +70,10 @@ import {
   placeEdgeLabel,
   projectToGraph,
   graphToSvg,
+  BOUNDARY_COLORS,
+  boundaryColorMeta,
+  boundaryFillMix,
+  boundaryStroke,
 } from "@spherescan/viewer";
 import { parseScanYaml } from "@spherescan/model";
 import type { CreateKind } from "@spherescan/modeler";
@@ -90,6 +96,41 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "./ui/tooltip";
+
+const RECENT_PROMPTS_KEY = "sphere.board.recentPrompts";
+const MAX_RECENT_PROMPTS = 8;
+
+function readStoredRecentPrompts(): string[] {
+  if (typeof window === "undefined") return [...seedRecentPrompts];
+  try {
+    const raw = window.localStorage.getItem(RECENT_PROMPTS_KEY);
+    if (!raw) return [...seedRecentPrompts];
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [...seedRecentPrompts];
+    const cleaned = parsed
+      .filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+      .map((item) => item.trim())
+      .slice(0, MAX_RECENT_PROMPTS);
+    return cleaned.length ? cleaned : [...seedRecentPrompts];
+  } catch {
+    return [...seedRecentPrompts];
+  }
+}
+
+function rememberRecentPrompt(previous: string[], message: string): string[] {
+  const trimmed = message.trim();
+  if (!trimmed) return previous;
+  const next = [trimmed, ...previous.filter((item) => item !== trimmed)].slice(
+    0,
+    MAX_RECENT_PROMPTS,
+  );
+  try {
+    window.localStorage.setItem(RECENT_PROMPTS_KEY, JSON.stringify(next));
+  } catch {
+    /* ignore quota / private mode */
+  }
+  return next;
+}
 
 type Point = { x: number; y: number };
 
@@ -432,6 +473,7 @@ export default function BoardApp({
   const [aiBusy, setAiBusy] = useState(false);
   const [aiSessionId, setAiSessionId] = useState<string | null>(null);
   const [aiSuggestions, setAiSuggestions] = useState<string[]>(commandSuggestions);
+  const [aiRecentPrompts, setAiRecentPrompts] = useState<string[]>(seedRecentPrompts);
   const [aiMenuOpen, setAiMenuOpen] = useState(false);
   const [pendingAi, setPendingAi] = useState<{
     title: string;
@@ -525,6 +567,10 @@ export default function BoardApp({
       toast.error("Could not save YAML", { description: message });
     }
   }, [downloadYaml, onSaveDocument, modeler]);
+
+  useEffect(() => {
+    setAiRecentPrompts(readStoredRecentPrompts());
+  }, []);
 
   // Keyboard: Cmd+K palette, undo/redo, save, delete
   useEffect(() => {
@@ -1257,6 +1303,7 @@ export default function BoardApp({
   const submitAiChat = useCallback(async () => {
     const message = prompt.trim();
     if (!message || aiBusy) return;
+    setAiRecentPrompts((prev) => rememberRecentPrompt(prev, message));
     if (!aiAdapter?.chat) {
       setPendingAi({
         title: previewChanges.title,
@@ -1314,6 +1361,8 @@ export default function BoardApp({
       return;
     }
     try {
+      // Fail fast with the same checks as the diagram preview.
+      parseScanYaml(yaml);
       await loadYamlText(yaml);
       requestAnimationFrame(() => fitContent());
       setPreview(false);
@@ -1332,6 +1381,62 @@ export default function BoardApp({
       });
     }
   }, [fitContent, loadYamlText, pendingAi]);
+
+  const regenerateAiFix = useCallback(
+    async (validationError: string) => {
+      const brokenYaml = pendingAi?.yaml?.trim();
+      if (!brokenYaml || aiBusy) return;
+      if (!aiAdapter?.chat) {
+        toast.error("AI adapter unavailable");
+        return;
+      }
+      const baseYaml = pendingAi?.baseYaml ?? modeler.peekYAML();
+      const message = [
+        "The SCAN YAML you proposed failed validation and cannot be previewed or applied.",
+        `Validation errors: ${validationError}`,
+        "",
+        "Return a corrected full document using the JSON contract.",
+        "Fix schema issues only; preserve the intended architecture and ids when possible.",
+        "Every component, external_system, channel, agent, and repository needs a string `name` (not title/label).",
+        "Boundary fields stay `label` + `members` (kind trust|runtime only).",
+        "",
+        "Invalid YAML to fix:",
+        "```yaml",
+        brokenYaml.slice(0, 14000),
+        "```",
+      ].join("\n");
+
+      setAiBusy(true);
+      try {
+        const result = await aiAdapter.chat({
+          message,
+          yaml: baseYaml,
+          sessionId: aiSessionId,
+        });
+        if (result.sessionId) setAiSessionId(result.sessionId);
+        if (result.suggestions?.length) setAiSuggestions(result.suggestions);
+        setPendingAi({
+          title: result.yaml ? "Sphere proposes diagram changes" : "Sphere reply",
+          reply: result.reply || "Regenerated.",
+          yaml: result.yaml ?? null,
+          baseYaml,
+        });
+        setPreview(true);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Agent request failed";
+        toast.error("Regenerate failed", {
+          description: msg.slice(0, 200),
+          action: {
+            label: "Copy error",
+            onClick: () => void navigator.clipboard.writeText(msg),
+          },
+        });
+      } finally {
+        setAiBusy(false);
+      }
+    },
+    [aiAdapter, aiBusy, aiSessionId, modeler, pendingAi],
+  );
 
   const zoomIn = () => zoomAt(zoomRef.current + 0.15, lastPointerOnCanvas.current);
   const zoomOut = () => zoomAt(zoomRef.current - 0.15, lastPointerOnCanvas.current);
@@ -1440,6 +1545,7 @@ export default function BoardApp({
           setPrompt={setPrompt}
           busy={aiBusy}
           suggestions={aiSuggestions}
+          recent={aiRecentPrompts}
           attachments={aiAttachments}
           menuOpen={aiMenuOpen}
           onMenuOpenChange={setAiMenuOpen}
@@ -1537,7 +1643,7 @@ export default function BoardApp({
                   width: 10,
                   height: 10,
                   background: "var(--surface, #fff)",
-                  border: `2px solid ${g.color === "svc" ? "var(--svc)" : "var(--agent)"}`,
+                  border: `2px solid ${boundaryStroke(g.color)}`,
                   borderRadius: 2,
                   zIndex: 6,
                   pointerEvents: "auto",
@@ -1572,11 +1678,8 @@ export default function BoardApp({
                     top: g.y,
                     width: g.w,
                     height: g.h,
-                    borderColor: g.color === "svc" ? "var(--svc)" : "var(--agent)",
-                    background:
-                      g.color === "svc"
-                        ? "color-mix(in oklab, var(--svc) 3%, transparent)"
-                        : "color-mix(in oklab, var(--agent) 3%, transparent)",
+                    borderColor: boundaryStroke(g.color),
+                    background: boundaryFillMix(g.color),
                     pointerEvents: tool === "select" ? "auto" : "none",
                     cursor: tool === "select" ? "move" : undefined,
                   }}
@@ -1586,7 +1689,7 @@ export default function BoardApp({
                     <button
                       type="button"
                       className="flex items-center gap-2 rounded-full bg-surface px-3 py-1 text-xs font-semibold hairline hover:ring-2 hover:ring-primary/20"
-                      style={{ color: g.color === "svc" ? "var(--svc)" : "var(--agent)" }}
+                      style={{ color: boundaryStroke(g.color) }}
                       onDoubleClick={(e) => {
                         e.stopPropagation();
                         setBoundaryRenameModal({ id: g.id, value: g.title });
@@ -1601,7 +1704,7 @@ export default function BoardApp({
                     >
                       <ElementIcon
                         icon={g.icon}
-                        Fallback={g.color === "svc" ? Shield : Bot}
+                        Fallback={g.kind === "runtime" ? Bot : Shield}
                         className="h-3.5 w-3.5"
                       />
                       {g.title}
@@ -2364,12 +2467,15 @@ export default function BoardApp({
             yaml={pendingAi?.yaml ?? null}
             baseYaml={pendingAi?.baseYaml ?? null}
             hasYaml={Boolean(pendingAi?.yaml)}
+            busy={aiBusy}
             onCancel={() => {
+              if (aiBusy) return;
               setPreview(false);
               setPendingAi(null);
               setAiMenuOpen(false);
             }}
             onApply={() => void applyPendingAi()}
+            onRegenerate={(error) => void regenerateAiFix(error)}
           />
         )}
         {isSphere && palette && (
@@ -2622,6 +2728,7 @@ function AIBar({
   onSubmit,
   busy = false,
   suggestions,
+  recent,
   attachments,
   onAttachFiles,
   onRemoveAttachment,
@@ -2633,6 +2740,7 @@ function AIBar({
   onSubmit: () => void;
   busy?: boolean;
   suggestions: string[];
+  recent: string[];
   attachments: BoardAiAttachment[];
   onAttachFiles: (files: FileList | null) => void;
   onRemoveAttachment: (name: string) => void;
@@ -2739,16 +2847,20 @@ function AIBar({
                 Recent
               </div>
               <div className="pb-2">
-                {recentPrompts.map((s) => (
-                  <button
-                    key={s}
-                    onMouseDown={() => setPrompt(s)}
-                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-muted-foreground hover:bg-muted"
-                  >
-                    <HistoryIcon className="h-3.5 w-3.5" />
-                    {s}
-                  </button>
-                ))}
+                {recent.length === 0 ? (
+                  <div className="px-3 py-2 text-xs text-muted-foreground">No recent prompts yet</div>
+                ) : (
+                  recent.map((s) => (
+                    <button
+                      key={s}
+                      onMouseDown={() => setPrompt(s)}
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-muted-foreground hover:bg-muted"
+                    >
+                      <HistoryIcon className="h-3.5 w-3.5 shrink-0" />
+                      <span className="truncate">{s}</span>
+                    </button>
+                  ))
+                )}
               </div>
             </div>
           )}
@@ -3314,6 +3426,7 @@ function Inspector({
       tag?: string | null;
       kind?: "trust" | "runtime";
       icon?: string | null;
+      color?: BoundaryColor | null;
     },
   ) => void;
   onUpdateElementIcon: (id: string, icon: string | null) => void;
@@ -3397,6 +3510,7 @@ function BoundaryInspector({
       tag?: string | null;
       kind?: "trust" | "runtime";
       icon?: string | null;
+      color?: BoundaryColor | null;
     },
   ) => void;
   onDelete: (id: string) => void;
@@ -3424,8 +3538,8 @@ function BoundaryInspector({
     kind !== (group.kind ?? "trust");
 
   const Fallback = kind === "runtime" ? Bot : Shield;
-  const soft = kind === "runtime" ? "bg-agent-soft" : "bg-svc-soft";
-  const color = kind === "runtime" ? "text-agent" : "text-svc";
+  const softClass = kind === "runtime" ? "bg-agent-soft" : "bg-svc-soft";
+  const colorClass = kind === "runtime" ? "text-agent" : "text-svc";
 
   return (
     <div className="flex-1 overflow-auto">
@@ -3435,12 +3549,12 @@ function BoundaryInspector({
             type="button"
             title="Change icon"
             onClick={() => setIconOpen(true)}
-            className={`grid h-10 w-10 place-items-center rounded-lg ring-offset-2 transition hover:ring-2 hover:ring-primary/30 ${soft}`}
+            className={`grid h-10 w-10 place-items-center rounded-lg ring-offset-2 transition hover:ring-2 hover:ring-primary/30 ${softClass}`}
           >
             <ElementIcon
               icon={group.icon}
               Fallback={Fallback}
-              className={`h-5 w-5 ${color}`}
+              className={`h-5 w-5 ${colorClass}`}
             />
           </button>
           <div className="min-w-0 flex-1">
@@ -3487,6 +3601,34 @@ function BoundaryInspector({
               </button>
             ))}
           </div>
+        </Section>
+
+        <Section title="Color">
+          <div className="flex flex-wrap gap-2">
+            {BOUNDARY_COLORS.map((token) => {
+              const meta = boundaryColorMeta[token];
+              const selected = group.color === token;
+              return (
+                <button
+                  key={token}
+                  type="button"
+                  title={meta.label}
+                  aria-label={meta.label}
+                  aria-pressed={selected}
+                  onClick={() => onUpdate(group.id, { color: token })}
+                  className={`h-7 w-7 rounded-full transition ${
+                    selected
+                      ? "ring-2 ring-foreground ring-offset-2 ring-offset-background"
+                      : "hover:scale-110"
+                  }`}
+                  style={{ backgroundColor: meta.hex }}
+                />
+              );
+            })}
+          </div>
+          <p className="mt-1.5 text-[10px] text-muted-foreground">
+            {boundaryColorMeta[group.color].label}
+          </p>
         </Section>
 
         <Section title="Tag">
@@ -3558,8 +3700,8 @@ function BoundaryInspector({
         title="Boundary icon"
         currentIcon={group.icon}
         fallbackIcon={Fallback}
-        softClass={soft}
-        colorClass={color}
+        softClass={softClass}
+        colorClass={colorClass}
         onSave={(icon) => onUpdate(group.id, { icon })}
       />
     </div>
@@ -4676,8 +4818,15 @@ function formatYamlPreviewError(err: unknown): string {
   return err instanceof Error ? err.message : "Invalid SCAN YAML";
 }
 
-function ScanYamlDiagramPreview({ yaml }: { yaml: string }) {
+function ScanYamlDiagramPreview({
+  yaml,
+  error,
+}: {
+  yaml: string;
+  error: string | null;
+}) {
   const preview = useMemo(() => {
+    if (error) return { ok: false as const, error };
     try {
       const model = parseScanYaml(yaml);
       const graph = projectToGraph(model);
@@ -4688,7 +4837,7 @@ function ScanYamlDiagramPreview({ yaml }: { yaml: string }) {
     } catch (err) {
       return { ok: false as const, error: formatYamlPreviewError(err) };
     }
-  }, [yaml]);
+  }, [yaml, error]);
 
   return (
     <div className="mt-4 overflow-hidden rounded-lg border border-border bg-canvas">
@@ -4704,12 +4853,31 @@ function ScanYamlDiagramPreview({ yaml }: { yaml: string }) {
           dangerouslySetInnerHTML={{ __html: preview.svg }}
         />
       ) : (
-        <div className="px-3 py-3 text-[11px] text-muted-foreground">
-          Preview unavailable: {preview.error}
+        <div className="space-y-2 px-3 py-3">
+          <div className="flex items-start gap-2 text-[11px] text-destructive">
+            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <span>Preview unavailable: {preview.error}</span>
+          </div>
+          <p className="text-[10px] text-muted-foreground">
+            Use Regenerate to send this error back to Sphere AI for a corrected YAML.
+          </p>
         </div>
       )}
     </div>
   );
+}
+
+function validatePreviewYaml(yaml: string): string | null {
+  try {
+    const model = parseScanYaml(yaml);
+    const graph = projectToGraph(model);
+    if (!graph.nodes.length && !graph.groups.length) {
+      return "No diagram elements to preview yet.";
+    }
+    return null;
+  } catch (err) {
+    return formatYamlPreviewError(err);
+  }
 }
 
 type DiffLine = { kind: "context" | "add" | "remove"; text: string };
@@ -4863,17 +5031,27 @@ function PreviewDrawer({
   yaml,
   baseYaml,
   hasYaml,
+  busy = false,
   onCancel,
   onApply,
+  onRegenerate,
 }: {
   title: string;
   reply: string;
   yaml: string | null;
   baseYaml: string | null;
   hasYaml: boolean;
+  busy?: boolean;
   onCancel: () => void;
   onApply: () => void;
+  onRegenerate: (validationError: string) => void;
 }) {
+  const previewError = useMemo(
+    () => (hasYaml && yaml ? validatePreviewYaml(yaml) : null),
+    [hasYaml, yaml],
+  );
+  const canApply = hasYaml && !previewError && !busy;
+
   return (
     <div className="absolute inset-0 z-40 flex items-center justify-center bg-foreground/10 backdrop-blur-sm">
       <div className="w-[680px] overflow-hidden rounded-2xl border border-border bg-surface node-shadow-lg">
@@ -4885,11 +5063,17 @@ function PreviewDrawer({
             <div className="text-sm font-semibold">{title}</div>
             <div className="text-[11px] text-muted-foreground">
               {hasYaml
-                ? "Preview before applying to the architecture board"
+                ? previewError
+                  ? "YAML has validation issues — regenerate to fix"
+                  : "Preview before applying to the architecture board"
                 : "Reply only — no diagram changes proposed"}
             </div>
           </div>
-          <button onClick={onCancel} className="rounded-md p-1 hover:bg-muted">
+          <button
+            onClick={onCancel}
+            disabled={busy}
+            className="rounded-md p-1 hover:bg-muted disabled:opacity-40"
+          >
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -4899,7 +5083,7 @@ function PreviewDrawer({
           </div>
           {hasYaml && yaml ? (
             <>
-              <ScanYamlDiagramPreview yaml={yaml} />
+              <ScanYamlDiagramPreview yaml={yaml} error={previewError} />
               <YamlPreviewBlock yaml={yaml} baseYaml={baseYaml} />
             </>
           ) : (
@@ -4907,7 +5091,7 @@ function PreviewDrawer({
               No YAML was returned. Ask Sphere to add or change architecture elements to get an applyable proposal.
             </div>
           )}
-          {hasYaml && (
+          {hasYaml && !previewError && (
             <div className="mt-3 rounded-lg bg-ok-soft/40 border border-ok/30 p-3 text-[11px] text-muted-foreground">
               Applying will replace the current board document with the agent YAML (undo with Ctrl+Z after load via a new history root).
             </div>
@@ -4915,18 +5099,39 @@ function PreviewDrawer({
         </div>
         <div className="flex items-center justify-between border-t border-border px-5 py-3">
           <span className="text-[11px] text-muted-foreground">
-            {hasYaml ? "SCAN YAML ready" : "Chat only"}
+            {busy
+              ? "Regenerating…"
+              : previewError
+                ? "Validation failed"
+                : hasYaml
+                  ? "SCAN YAML ready"
+                  : "Chat only"}
           </span>
           <div className="flex items-center gap-2">
             <button
               onClick={onCancel}
-              className="rounded-lg border border-border bg-surface px-3 py-1.5 text-xs font-medium hover:bg-muted"
+              disabled={busy}
+              className="rounded-lg border border-border bg-surface px-3 py-1.5 text-xs font-medium hover:bg-muted disabled:opacity-40"
             >
               Cancel
             </button>
+            {previewError && (
+              <button
+                onClick={() => onRegenerate(previewError)}
+                disabled={busy}
+                className="flex items-center gap-1.5 rounded-lg border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/15 disabled:opacity-40"
+              >
+                {busy ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-3.5 w-3.5" />
+                )}
+                {busy ? "Fixing…" : "Regenerate"}
+              </button>
+            )}
             <button
               onClick={onApply}
-              disabled={!hasYaml}
+              disabled={!canApply}
               className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:opacity-90 disabled:opacity-40"
             >
               <Check className="h-3.5 w-3.5" /> Apply changes
@@ -4948,7 +5153,12 @@ function CommandPalette({
   onCreateComponent: (kind: CreateKind) => void;
 }) {
   const [q, setQ] = useState("");
-  const componentItems: Array<{ icon: typeof Leaf; label: string; meta: string; kind: CreateKind }> = [
+  type PaletteIcon = React.ComponentType<{ className?: string }>;
+  type PaletteItem =
+    | { icon: PaletteIcon; label: string; meta: string; kind: CreateKind }
+    | { icon: PaletteIcon; label: string; meta?: undefined; kind?: undefined };
+
+  const componentItems: PaletteItem[] = [
     { icon: Leaf, label: "Service", meta: "Spring Boot / API", kind: "service" },
     { icon: DbIcon, label: "Datastore", meta: "PostgreSQL / MySQL", kind: "datastore" },
     { icon: Radio, label: "Event / Stream", meta: "Kafka / Queue / Topic", kind: "event-stream" },
@@ -4957,7 +5167,7 @@ function CommandPalette({
     { icon: Github, label: "Repository", meta: "Code / Contracts", kind: "repository" },
     { icon: ExternalLink, label: "External System", meta: "3rd party dependency", kind: "external-system" },
   ];
-  const groups = [
+  const groups: Array<{ title: string; items: PaletteItem[] }> = [
     {
       title: "Components",
       items: componentItems,
@@ -4987,7 +5197,7 @@ function CommandPalette({
       ...group,
       items: group.items.filter((item) => {
         if (!query) return true;
-        const meta = "meta" in item && item.meta ? item.meta : "";
+        const meta = item.meta ?? "";
         return `${group.title} ${item.label} ${meta}`.toLowerCase().includes(query);
       }),
     }))
@@ -5019,7 +5229,7 @@ function CommandPalette({
                 <button
                   key={it.label}
                   onClick={() => {
-                    if ("kind" in it) {
+                    if (it.kind) {
                       onCreateComponent(it.kind);
                       return;
                     }
@@ -5031,9 +5241,9 @@ function CommandPalette({
                     <it.icon className="h-3.5 w-3.5" />
                   </div>
                   <span className="flex-1">{it.label}</span>
-                  {"meta" in it && it.meta && (
+                  {it.meta ? (
                     <span className="text-[10px] text-muted-foreground">{it.meta}</span>
-                  )}
+                  ) : null}
                 </button>
               ))}
             </div>
