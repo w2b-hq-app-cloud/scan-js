@@ -480,6 +480,10 @@ export default function BoardApp({
     reply: string;
     yaml: string | null;
     baseYaml: string | null;
+    /** Original user prompt (for regenerate after truncation/stub). */
+    userMessage?: string;
+    attachments?: BoardAiAttachment[];
+    incomplete?: boolean;
   } | null>(null);
   const [connectFrom, setConnectFrom] = useState<{
     nodeId: string;
@@ -1328,13 +1332,26 @@ export default function BoardApp({
       if (result.sessionId) setAiSessionId(result.sessionId);
       // Stick to the latest turn's chips until the next user prompt.
       if (result.suggestions?.length) setAiSuggestions(result.suggestions);
+      const incomplete =
+        !result.yaml &&
+        /truncated|incomplete stub|incomplete SCAN|starting point|Regenerate/i.test(
+          result.reply || "",
+        );
       setPendingAi({
-        title: result.yaml ? "Sphere proposes diagram changes" : "Sphere reply",
+        title: result.yaml
+          ? "Sphere proposes diagram changes"
+          : incomplete
+            ? "Incomplete agent response"
+            : "Sphere reply",
         reply: result.reply || "Done.",
         yaml: result.yaml ?? null,
         baseYaml: yaml,
+        userMessage: message,
+        attachments: [...aiAttachments],
+        incomplete,
       });
-      setAiAttachments([]);
+      // Keep attachments when incomplete so Regenerate can resend the image.
+      if (!incomplete) setAiAttachments([]);
       setPrompt("");
       setAiMenuOpen(false);
       setPreview(true);
@@ -1384,27 +1401,40 @@ export default function BoardApp({
 
   const regenerateAiFix = useCallback(
     async (validationError: string) => {
-      const brokenYaml = pendingAi?.yaml?.trim();
-      if (!brokenYaml || aiBusy) return;
+      if (aiBusy) return;
       if (!aiAdapter?.chat) {
         toast.error("AI adapter unavailable");
         return;
       }
       const baseYaml = pendingAi?.baseYaml ?? modeler.peekYAML();
-      const message = [
-        "The SCAN YAML you proposed failed validation and cannot be previewed or applied.",
-        `Validation errors: ${validationError}`,
-        "",
-        "Return a corrected full document using the JSON contract.",
-        "Fix schema issues only; preserve the intended architecture and ids when possible.",
-        "Every component, external_system, channel, agent, and repository needs a string `name` (not title/label).",
-        "Boundary fields stay `label` + `members` (kind trust|runtime only).",
-        "",
-        "Invalid YAML to fix:",
-        "```yaml",
-        brokenYaml.slice(0, 14000),
-        "```",
-      ].join("\n");
+      const brokenYaml = pendingAi?.yaml?.trim() ?? "";
+      const prior = (pendingAi?.userMessage ?? "").trim();
+      const attachments = pendingAi?.attachments?.length
+        ? pendingAi.attachments
+        : aiAttachments;
+      const message = brokenYaml
+        ? [
+            "The SCAN YAML you proposed failed validation and cannot be previewed or applied.",
+            `Validation errors: ${validationError}`,
+            "",
+            "Return a corrected **complete** document. Prefer JSON with `yaml: null` plus a separate ```yaml fence.",
+            "Fix schema issues; preserve intended architecture and ids when possible.",
+            "Every component/external_system/channel/agent/repository needs a string `name`.",
+            "",
+            "Invalid YAML to fix:",
+            "```yaml",
+            brokenYaml.slice(0, 14000),
+            "```",
+          ].join("\n")
+        : [
+            "Your previous response was incomplete or truncated. Return the **full** SCAN diagram now.",
+            prior ? `Original user request:\n${prior}` : "",
+            validationError ? `Context: ${validationError}` : "",
+            "Prefer JSON metadata (`yaml: null`) plus a separate ```yaml fence with the complete document.",
+            "Include all boundaries, components, and main connections from any attached image. No stubs.",
+          ]
+            .filter(Boolean)
+            .join("\n\n");
 
       setAiBusy(true);
       try {
@@ -1412,15 +1442,29 @@ export default function BoardApp({
           message,
           yaml: baseYaml,
           sessionId: aiSessionId,
+          attachments,
         });
         if (result.sessionId) setAiSessionId(result.sessionId);
         if (result.suggestions?.length) setAiSuggestions(result.suggestions);
+        const incomplete =
+          !result.yaml &&
+          /truncated|incomplete stub|incomplete SCAN|starting point|Regenerate/i.test(
+            result.reply || "",
+          );
         setPendingAi({
-          title: result.yaml ? "Sphere proposes diagram changes" : "Sphere reply",
+          title: result.yaml
+            ? "Sphere proposes diagram changes"
+            : incomplete
+              ? "Incomplete agent response"
+              : "Sphere reply",
           reply: result.reply || "Regenerated.",
           yaml: result.yaml ?? null,
           baseYaml,
+          userMessage: prior || pendingAi?.userMessage,
+          attachments,
+          incomplete,
         });
+        if (!incomplete) setAiAttachments([]);
         setPreview(true);
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Agent request failed";
@@ -1435,7 +1479,7 @@ export default function BoardApp({
         setAiBusy(false);
       }
     },
-    [aiAdapter, aiBusy, aiSessionId, modeler, pendingAi],
+    [aiAdapter, aiAttachments, aiBusy, aiSessionId, modeler, pendingAi],
   );
 
   const zoomIn = () => zoomAt(zoomRef.current + 0.15, lastPointerOnCanvas.current);
@@ -2467,6 +2511,7 @@ export default function BoardApp({
             yaml={pendingAi?.yaml ?? null}
             baseYaml={pendingAi?.baseYaml ?? null}
             hasYaml={Boolean(pendingAi?.yaml)}
+            incomplete={Boolean(pendingAi?.incomplete)}
             busy={aiBusy}
             onCancel={() => {
               if (aiBusy) return;
@@ -5031,6 +5076,7 @@ function PreviewDrawer({
   yaml,
   baseYaml,
   hasYaml,
+  incomplete = false,
   busy = false,
   onCancel,
   onApply,
@@ -5041,6 +5087,7 @@ function PreviewDrawer({
   yaml: string | null;
   baseYaml: string | null;
   hasYaml: boolean;
+  incomplete?: boolean;
   busy?: boolean;
   onCancel: () => void;
   onApply: () => void;
@@ -5051,6 +5098,7 @@ function PreviewDrawer({
     [hasYaml, yaml],
   );
   const canApply = hasYaml && !previewError && !busy;
+  const showRegenerate = Boolean(previewError || incomplete);
 
   return (
     <div className="absolute inset-0 z-40 flex items-center justify-center bg-foreground/10 backdrop-blur-sm">
@@ -5062,11 +5110,13 @@ function PreviewDrawer({
           <div className="flex-1">
             <div className="text-sm font-semibold">{title}</div>
             <div className="text-[11px] text-muted-foreground">
-              {hasYaml
-                ? previewError
-                  ? "YAML has validation issues — regenerate to fix"
-                  : "Preview before applying to the architecture board"
-                : "Reply only — no diagram changes proposed"}
+              {incomplete && !hasYaml
+                ? "Incomplete or truncated response — regenerate for the full diagram"
+                : hasYaml
+                  ? previewError
+                    ? "YAML has validation issues — regenerate to fix"
+                    : "Preview before applying to the architecture board"
+                  : "Reply only — no diagram changes proposed"}
             </div>
           </div>
           <button
@@ -5088,7 +5138,9 @@ function PreviewDrawer({
             </>
           ) : (
             <div className="mt-4 rounded-lg bg-muted p-3 text-[11px] text-muted-foreground">
-              No YAML was returned. Ask Sphere to add or change architecture elements to get an applyable proposal.
+              {incomplete
+                ? "No complete YAML was returned. Use Regenerate to retry with the same prompt and attachments."
+                : "No YAML was returned. Ask Sphere to add or change architecture elements to get an applyable proposal."}
             </div>
           )}
           {hasYaml && !previewError && (
@@ -5103,9 +5155,11 @@ function PreviewDrawer({
               ? "Regenerating…"
               : previewError
                 ? "Validation failed"
-                : hasYaml
-                  ? "SCAN YAML ready"
-                  : "Chat only"}
+                : incomplete
+                  ? "Incomplete response"
+                  : hasYaml
+                    ? "SCAN YAML ready"
+                    : "Chat only"}
           </span>
           <div className="flex items-center gap-2">
             <button
@@ -5115,9 +5169,14 @@ function PreviewDrawer({
             >
               Cancel
             </button>
-            {previewError && (
+            {showRegenerate && (
               <button
-                onClick={() => onRegenerate(previewError)}
+                onClick={() =>
+                  onRegenerate(
+                    previewError ??
+                      "Previous response was truncated or incomplete — return the full SCAN document.",
+                  )
+                }
                 disabled={busy}
                 className="flex items-center gap-1.5 rounded-lg border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/15 disabled:opacity-40"
               >
