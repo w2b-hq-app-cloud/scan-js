@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `@spherescan/board`: double-click a component opens the rename modal; Cmd/Ctrl+D and Cmd/Ctrl+C/V work for boundaries as well as elements.
+- `@spherescan/board`: connect mode shows a draft rubber-band after the first click, exits to select on success or empty-canvas cancel.
+- `@spherescan/board` / `@spherescan/viewer`: toggle **straight 90° arrows** (orthogonal routing) with hop arcs where edges cross; **edge attachment** (L/T/R/B from travel direction) is shared by curved and straight modes.
+- `@spherescan/board` / `@spherescan/modeler`: runtime boundaries are labeled **Runtime** (not Agent Runtime) with a Cpu icon by default.
 - `@spherescan/board`: AI YAML preview now shows visual line numbers in the preview gutter for reference, while copy-to-clipboard still copies raw YAML only (no numbers).
 - `@spherescan/board`: removed the decorative "Preview changes" checkbox from the AI bar; agent replies always open the preview drawer.
 - `skills/scan-notation`: prefer **outer-shell** boundaries when recreating from diagrams; do not nest or mirror every inner visual subgroup.

@@ -38,10 +38,11 @@ export function isBoundaryColor(value: unknown): value is BoundaryColor {
 /** Resolve stored color, falling back from legacy kind-only tinting. */
 export function resolveBoundaryColor(
   color: BoundaryColor | undefined,
-  kind?: "trust" | "runtime",
+  _kind?: "trust" | "runtime",
 ): BoundaryColor {
   if (color && isBoundaryColor(color)) return color;
-  return kind === "runtime" ? "agent" : "svc";
+  // Trust and Runtime both default to service tint (Runtime is not agent-only).
+  return "svc";
 }
 
 export function boundaryStroke(color: BoundaryColor): string {

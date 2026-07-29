@@ -23,16 +23,26 @@ export {
   isBoundaryColor,
   resolveBoundaryColor,
   type BoundaryColorMeta,
-} from "./boundary-colors.js";export {
+} from "./boundary-colors.js";
+export {
   LABEL_LOD_ZOOM,
   anchorPoint,
   computeLabelStagger,
   edgeControls,
   edgePath,
+  orthogonalWaypoints,
+  pickEdgeSides,
+  pickOrthogonalSides,
   placeEdgeLabel,
   pointOnCubic,
+  pointOnPolyline,
+  resolveEdgeAnchors,
+  resolveOrthogonalAnchors,
+  routeOrthogonalEdges,
   type Box,
+  type EdgeRouteMode,
   type Point,
+  type RoutedEdgeInput,
   type Side,
 } from "./edge-geometry.js";
 export { ScanViewer, SphereViewer } from "./viewer.js";

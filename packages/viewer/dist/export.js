@@ -1,6 +1,16 @@
 import { edgeVisual, kindVisuals, renderLucideIcon, warnVisual, } from "./kind-icons.js";
-import { anchorPoint, computeLabelStagger, edgePath, placeEdgeLabel, } from "./edge-geometry.js";
+import { computeLabelStagger, edgePath, placeEdgeLabel, resolveEdgeAnchors, } from "./edge-geometry.js";
 import { boundaryExportFill, boundaryExportStroke } from "./boundary-colors.js";
+function edgeFanIndex(edges, edgeId) {
+    const target = edges.find((e) => e.id === edgeId);
+    if (!target)
+        return { index: 0, count: 1 };
+    const peers = edges.filter((e) => e.from === target.from && e.to === target.to);
+    return {
+        index: Math.max(0, peers.findIndex((e) => e.id === edgeId)),
+        count: peers.length || 1,
+    };
+}
 export function diagramBounds(graph, pad = 40) {
     const boxes = [
         ...graph.groups.map((g) => ({ x: g.x, y: g.y, w: g.w, h: g.h })),
@@ -171,16 +181,32 @@ export function graphToSvg(graph) {
         const to = graph.nodes.find((n) => n.id === e.to);
         if (!from || !to)
             return null;
-        const a = anchorPoint(from, e.fromSide ?? "r");
-        const bPt = anchorPoint(to, e.toSide ?? "l");
+        const fan = edgeFanIndex(graph.edges, e.id);
+        const anchors = resolveEdgeAnchors(from, to, fan.index, fan.count);
         const rough = placeEdgeLabel({
-            a,
-            b: bPt,
-            aSide: e.fromSide ?? "r",
-            bSide: e.toSide ?? "l",
+            a: anchors.a,
+            b: anchors.b,
+            aSide: anchors.fromSide,
+            bSide: anchors.toSide,
             nodes: nodeBoxes,
+            fromBox: from,
+            toBox: to,
+            fanIndex: fan.index,
+            fanCount: fan.count,
         });
-        return { id: e.id, x: rough.x, y: rough.y, e, a, bPt, from, to };
+        return {
+            id: e.id,
+            x: rough.x,
+            y: rough.y,
+            e,
+            a: anchors.a,
+            bPt: anchors.b,
+            fromSide: anchors.fromSide,
+            toSide: anchors.toSide,
+            from,
+            to,
+            fan,
+        };
     })
         .filter(Boolean);
     const staggerMap = computeLabelStagger(labeled.map((l) => ({ id: l.id, x: l.x, y: l.y })));
@@ -190,8 +216,8 @@ export function graphToSvg(graph) {
         const to = graph.nodes.find((n) => n.id === e.to);
         if (!from || !to)
             return "";
-        const a = anchorPoint(from, e.fromSide ?? "r");
-        const bPt = anchorPoint(to, e.toSide ?? "l");
+        const fan = edgeFanIndex(graph.edges, e.id);
+        const anchors = resolveEdgeAnchors(from, to, fan.index, fan.count);
         const style = edgeStroke(e.kind);
         const dashed = style.dash ? ` stroke-dasharray="${style.dash}"` : "";
         const marker = e.kind === "flow" || e.kind === "db"
@@ -199,16 +225,20 @@ export function graphToSvg(graph) {
             : e.kind === "async" || e.kind === "stream"
                 ? "url(#arrow-event)"
                 : "url(#arrow)";
-        const d = edgePath(a, bPt, e.fromSide ?? "r", e.toSide ?? "l");
+        const d = edgePath(anchors.a, anchors.b, anchors.fromSide, anchors.toSide);
         let labelSvg = "";
         if (e.label) {
             const mid = placeEdgeLabel({
-                a,
-                b: bPt,
-                aSide: e.fromSide ?? "r",
-                bSide: e.toSide ?? "l",
+                a: anchors.a,
+                b: anchors.b,
+                aSide: anchors.fromSide,
+                bSide: anchors.toSide,
                 nodes: nodeBoxes,
                 stagger: staggerMap.get(e.id) ?? 0,
+                fromBox: from,
+                toBox: to,
+                fanIndex: fan.index,
+                fanCount: fan.count,
             });
             const ev = edgeVisual(e.kind);
             const contractLine = e.contract ? 12 : 0;

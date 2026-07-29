@@ -43,6 +43,14 @@ export declare class Modeling {
         x: number;
         y: number;
     }): string;
+    /**
+     * Clone a trust/runtime boundary with a new id and offset rect.
+     * Membership is re-derived from element centers inside the new box.
+     */
+    duplicateBoundary(id: string, offset?: {
+        x: number;
+        y: number;
+    }): string;
     deleteConnection(connectionId: string): void;
     updateConnection(connectionId: string, patch: {
         label?: string | null;

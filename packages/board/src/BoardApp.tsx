@@ -17,6 +17,7 @@ import {
   Circle,
   ClipboardCopy,
   Command as CommandIcon,
+  Cpu,
   Download,
   Filter,
   Github,
@@ -38,6 +39,7 @@ import {
   Square,
   Undo2,
   Upload,
+  Waypoints,
   X,
   ZoomIn,
   ZoomOut,
@@ -74,6 +76,8 @@ import {
   boundaryColorMeta,
   boundaryFillMix,
   boundaryStroke,
+  resolveEdgeAnchors,
+  routeOrthogonalEdges,
 } from "@spherescan/viewer";
 import { parseScanYaml } from "@spherescan/model";
 import type { CreateKind } from "@spherescan/modeler";
@@ -428,6 +432,7 @@ export default function BoardApp({
     redo,
     deleteElement,
     duplicateElement,
+    duplicateBoundary,
     createElement,
     connect,
     autoLayout,
@@ -462,6 +467,8 @@ export default function BoardApp({
   const [createKind, setCreateKind] = useState<CreateKind>("service");
   const [boundaryKind, setBoundaryKind] = useState<"trust" | "runtime">("trust");
   const [showGrid, setShowGrid] = useState(true);
+  /** Orthogonal (90°) edges with hop arcs at crossings. */
+  const [orthogonalEdges, setOrthogonalEdges] = useState(true);
   const [view, setView] = useState<"all" | "external" | "contracts" | "agents">("all");
   /** Dim non-neighbors when a node/edge is selected - reading aid for dense boards. */
   const [focusMode, setFocusMode] = useState(true);
@@ -489,6 +496,13 @@ export default function BoardApp({
     nodeId: string;
     portId?: string;
   } | null>(null);
+  /** World-space cursor while a connect draft is active (rubber-band preview). */
+  const [connectCursor, setConnectCursor] = useState<Point | null>(null);
+  const boardClipboard = useRef<
+    | { kind: "element"; id: string }
+    | { kind: "boundary"; id: string }
+    | null
+  >(null);
   const [yamlDragDepth, setYamlDragDepth] = useState(0);
   const [renameModal, setRenameModal] = useState<{ nodeId: string; value: string } | null>(null);
   const [boundaryRenameModal, setBoundaryRenameModal] = useState<{
@@ -590,17 +604,63 @@ export default function BoardApp({
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "d") {
         const tag = (e.target as HTMLElement)?.tagName;
         if (tag === "INPUT" || tag === "TEXTAREA") return;
-        if (!selected) return;
+        if (!selected && !selectedBoundary) return;
         e.preventDefault();
         try {
-          const id = duplicateElement(selected);
-          setSelected(id);
-          setSelectedEdge(null);
-          setSelectedBoundary(null);
-          toast.success("Duplicated");
+          if (selectedBoundary) {
+            const id = duplicateBoundary(selectedBoundary);
+            setSelectedBoundary(id);
+            setSelected(null);
+            setSelectedEdge(null);
+            toast.success("Boundary duplicated");
+          } else if (selected) {
+            const id = duplicateElement(selected);
+            setSelected(id);
+            setSelectedEdge(null);
+            setSelectedBoundary(null);
+            toast.success("Duplicated");
+          }
         } catch (err) {
           const message = err instanceof Error ? err.message : "Duplicate failed";
           toast.error("Could not duplicate", { description: message });
+        }
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "c") {
+        const tag = (e.target as HTMLElement)?.tagName;
+        if (tag === "INPUT" || tag === "TEXTAREA") return;
+        if (selectedBoundary) {
+          e.preventDefault();
+          boardClipboard.current = { kind: "boundary", id: selectedBoundary };
+          toast.message("Boundary copied", { description: "Ctrl/⌘+V to paste" });
+        } else if (selected) {
+          e.preventDefault();
+          boardClipboard.current = { kind: "element", id: selected };
+          toast.message("Copied", { description: "Ctrl/⌘+V to paste" });
+        }
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "v") {
+        const tag = (e.target as HTMLElement)?.tagName;
+        if (tag === "INPUT" || tag === "TEXTAREA") return;
+        const clip = boardClipboard.current;
+        if (!clip) return;
+        e.preventDefault();
+        try {
+          if (clip.kind === "boundary") {
+            const id = duplicateBoundary(clip.id);
+            setSelectedBoundary(id);
+            setSelected(null);
+            setSelectedEdge(null);
+            toast.success("Boundary pasted");
+          } else {
+            const id = duplicateElement(clip.id);
+            setSelected(id);
+            setSelectedBoundary(null);
+            setSelectedEdge(null);
+            toast.success("Pasted");
+          }
+        } catch (err) {
+          const message = err instanceof Error ? err.message : "Paste failed";
+          toast.error("Could not paste", { description: message });
         }
       }
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z" && !e.shiftKey) {
@@ -655,6 +715,7 @@ export default function BoardApp({
         setCtxMenu(null);
         if (tool === "connect") {
           setConnectFrom(null);
+          setConnectCursor(null);
           setTool("select");
           toast.message(connectFrom ? "Connect cancelled" : "Connect mode off");
         } else if (tool === "create" || tool === "boundary") {
@@ -662,6 +723,7 @@ export default function BoardApp({
           toast.message("Place cancelled");
         } else {
           setConnectFrom(null);
+          setConnectCursor(null);
         }
       }
     };
@@ -676,6 +738,7 @@ export default function BoardApp({
     deleteElement,
     deleteBoundary,
     duplicateElement,
+    duplicateBoundary,
     board,
     connectFrom,
     saveYaml,
@@ -686,7 +749,10 @@ export default function BoardApp({
   ]);
 
   useEffect(() => {
-    if (tool !== "connect") setConnectFrom(null);
+    if (tool !== "connect") {
+      setConnectFrom(null);
+      setConnectCursor(null);
+    }
   }, [tool]);
 
   useEffect(() => {
@@ -737,6 +803,8 @@ export default function BoardApp({
 
   const focusIds = useMemo(() => {
     if (!focusMode) return null;
+    // While wiring, keep every component fully visible — focus dimming hides valid targets.
+    if (tool === "connect" || connectFrom) return null;
     const seed = new Set<string>();
     if (selected) seed.add(selected);
     if (selectedEdge) {
@@ -762,24 +830,70 @@ export default function BoardApp({
       }
     }
     return hop;
-  }, [focusMode, selected, selectedEdge, hoverEdge, edges]);
+  }, [focusMode, selected, selectedEdge, hoverEdge, edges, tool, connectFrom]);
 
-  const edgeLabelPositions = useMemo(() => {
-    const boxes = nodes.map((n) => ({ x: n.x, y: n.y, w: n.w, h: n.h }));
-    const rough: Array<{ id: string; x: number; y: number }> = [];
+  const edgeFanById = useMemo(() => {
+    const counts = new Map<string, number>();
     for (const e of edges) {
-      if (!e.label) continue;
+      const key = `${e.from}->${e.to}`;
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    const seen = new Map<string, number>();
+    const out = new Map<string, { index: number; count: number }>();
+    for (const e of edges) {
+      const key = `${e.from}->${e.to}`;
+      const index = seen.get(key) ?? 0;
+      seen.set(key, index + 1);
+      out.set(e.id, { index, count: counts.get(key) ?? 1 });
+    }
+    return out;
+  }, [edges]);
+
+  /** Direction-based edge anchors (shared by curved + orthogonal). */
+  const edgeAnchorsById = useMemo(() => {
+    const out = new Map<
+      string,
+      { a: Point; b: Point; fromSide: "l" | "r" | "t" | "b"; toSide: "l" | "r" | "t" | "b" }
+    >();
+    for (const e of edges) {
       const from = nodeById[e.from];
       const to = nodeById[e.to];
       if (!from || !to) continue;
-      const a = anchorPoint(from, e.fromSide ?? "r");
-      const b = anchorPoint(to, e.toSide ?? "l");
+      const fan = edgeFanById.get(e.id);
+      out.set(
+        e.id,
+        resolveEdgeAnchors(
+          { x: from.x, y: from.y, w: from.w, h: from.h },
+          { x: to.x, y: to.y, w: to.w, h: to.h },
+          fan?.index ?? 0,
+          fan?.count ?? 1,
+        ),
+      );
+    }
+    return out;
+  }, [edges, nodeById, edgeFanById]);
+
+  const edgeLabelPositions = useMemo(() => {
+    const boxes = nodes.map((n) => ({ x: n.x, y: n.y, w: n.w, h: n.h }));
+    const routeMode = orthogonalEdges ? "orthogonal" : "bezier";
+    const rough: Array<{ id: string; x: number; y: number }> = [];
+    for (const e of edges) {
+      if (!e.label) continue;
+      const anchors = edgeAnchorsById.get(e.id);
+      const from = nodeById[e.from];
+      const to = nodeById[e.to];
+      if (!anchors || !from || !to) continue;
       const p = placeEdgeLabel({
-        a,
-        b,
-        aSide: e.fromSide ?? "r",
-        bSide: e.toSide ?? "l",
+        a: anchors.a,
+        b: anchors.b,
+        aSide: anchors.fromSide,
+        bSide: anchors.toSide,
         nodes: boxes,
+        mode: routeMode,
+        fromBox: from,
+        toBox: to,
+        fanIndex: edgeFanById.get(e.id)?.index,
+        fanCount: edgeFanById.get(e.id)?.count,
       });
       rough.push({ id: e.id, x: p.x, y: p.y });
     }
@@ -787,25 +901,49 @@ export default function BoardApp({
     const out = new Map<string, Point>();
     for (const e of edges) {
       if (!e.label) continue;
+      const anchors = edgeAnchorsById.get(e.id);
       const from = nodeById[e.from];
       const to = nodeById[e.to];
-      if (!from || !to) continue;
-      const a = anchorPoint(from, e.fromSide ?? "r");
-      const b = anchorPoint(to, e.toSide ?? "l");
+      if (!anchors || !from || !to) continue;
       out.set(
         e.id,
         placeEdgeLabel({
-          a,
-          b,
-          aSide: e.fromSide ?? "r",
-          bSide: e.toSide ?? "l",
+          a: anchors.a,
+          b: anchors.b,
+          aSide: anchors.fromSide,
+          bSide: anchors.toSide,
           nodes: boxes,
           stagger: stagger.get(e.id) ?? 0,
+          mode: routeMode,
+          fromBox: from,
+          toBox: to,
+          fanIndex: edgeFanById.get(e.id)?.index,
+          fanCount: edgeFanById.get(e.id)?.count,
         }),
       );
     }
     return out;
-  }, [edges, nodes, nodeById]);
+  }, [edges, nodes, nodeById, orthogonalEdges, edgeAnchorsById, edgeFanById]);
+
+  const orthogonalEdgePaths = useMemo(() => {
+    if (!orthogonalEdges) return null;
+    const routed = edges
+      .map((e) => {
+        const from = nodeById[e.from];
+        const to = nodeById[e.to];
+        if (!from || !to) return null;
+        const fan = edgeFanById.get(e.id);
+        return {
+          id: e.id,
+          from: { x: from.x, y: from.y, w: from.w, h: from.h },
+          to: { x: to.x, y: to.y, w: to.w, h: to.h },
+          fanIndex: fan?.index ?? 0,
+          fanCount: fan?.count ?? 1,
+        };
+      })
+      .filter((e): e is NonNullable<typeof e> => Boolean(e));
+    return routeOrthogonalEdges(routed);
+  }, [orthogonalEdges, edges, nodeById, edgeFanById]);
 
   // Filter based on view + optional focus neighborhood
   const dimmed = useCallback(
@@ -842,6 +980,7 @@ export default function BoardApp({
       // Node body: port-less / fallback node->node wire
       if (!connectFrom) {
         setConnectFrom({ nodeId: id });
+        setConnectCursor(clientToWorld(e.clientX, e.clientY));
         setSelected(id);
         setSelectedEdge(null);
       } else if (connectFrom.nodeId !== id) {
@@ -857,6 +996,8 @@ export default function BoardApp({
           toast.error("Cannot connect", { description: message });
         }
         setConnectFrom(null);
+        setConnectCursor(null);
+        setTool("select");
       }
       return;
     }
@@ -878,6 +1019,7 @@ export default function BoardApp({
       if (role === "expose") {
         setTool("connect");
         setConnectFrom({ nodeId, portId });
+        setConnectCursor(null);
         setSelected(nodeId);
         setSelectedEdge(null);
         setSelectedBoundary(null);
@@ -923,6 +1065,7 @@ export default function BoardApp({
         toast.error("Cannot connect", { description: message });
       }
       setConnectFrom(null);
+      setConnectCursor(null);
       setTool("select");
       return;
     }
@@ -937,6 +1080,7 @@ export default function BoardApp({
       toast.error("Cannot connect", { description: message });
     }
     setConnectFrom(null);
+    setConnectCursor(null);
     setTool("select");
   };
 
@@ -987,6 +1131,9 @@ export default function BoardApp({
         x: e.clientX - rect.left,
         y: e.clientY - rect.top,
       };
+    }
+    if (connectFrom) {
+      setConnectCursor(clientToWorld(e.clientX, e.clientY));
     }
     if (resizingBoundary.current) {
       const r = resizingBoundary.current;
@@ -1092,7 +1239,11 @@ export default function BoardApp({
       setSelectedBoundary(null);
       setSelectedEdge(null);
       setCtxMenu(null);
-      setConnectFrom(null);
+      if (connectFrom || tool === "connect") {
+        setConnectFrom(null);
+        setConnectCursor(null);
+        setTool("select");
+      }
     }
   };
 
@@ -1748,7 +1899,7 @@ export default function BoardApp({
                     >
                       <ElementIcon
                         icon={g.icon}
-                        Fallback={g.kind === "runtime" ? Bot : Shield}
+                        Fallback={g.kind === "runtime" ? Cpu : Shield}
                         className="h-3.5 w-3.5"
                       />
                       {g.title}
@@ -1818,8 +1969,11 @@ export default function BoardApp({
                 const from = nodeById[e.from];
                 const to = nodeById[e.to];
                 if (!from || !to) return null;
-                const a = anchorPoint(from, e.fromSide ?? "r");
-                const b = anchorPoint(to, e.toSide ?? "l");
+                const anchors = edgeAnchorsById.get(e.id);
+                const a = anchors?.a ?? anchorPoint(from, e.fromSide ?? "r");
+                const b = anchors?.b ?? anchorPoint(to, e.toSide ?? "l");
+                const fromSide = anchors?.fromSide ?? e.fromSide ?? "r";
+                const toSide = anchors?.toSide ?? e.toSide ?? "l";
                 const s = edgeStyle(e.kind);
                 const active = hoverEdge === e.id || selectedEdge === e.id;
                 const faded = edgeDimmed(e) && !active;
@@ -1829,10 +1983,13 @@ export default function BoardApp({
                     : e.kind === "async" || e.kind === "stream"
                       ? "url(#arrow-event)"
                       : "url(#arrow)";
+                const d =
+                  orthogonalEdgePaths?.get(e.id) ??
+                  edgePath(a, b, fromSide, toSide);
                 return (
                   <g key={e.id} className="pointer-events-auto">
                     <path
-                      d={edgePath(a, b, e.fromSide ?? "r", e.toSide ?? "l")}
+                      d={d}
                       stroke={s.stroke}
                       strokeWidth={active ? s.width + 1.5 : s.width}
                       strokeDasharray={s.dash}
@@ -1852,6 +2009,27 @@ export default function BoardApp({
                   </g>
                 );
               })}
+              {connectFrom &&
+                connectCursor &&
+                (() => {
+                  const from = nodeById[connectFrom.nodeId];
+                  if (!from) return null;
+                  const a = connectFrom.portId
+                    ? anchorPoint(from, "r")
+                    : { x: from.x + from.w / 2, y: from.y + from.h / 2 };
+                  return (
+                    <path
+                      d={`M ${a.x} ${a.y} L ${connectCursor.x} ${connectCursor.y}`}
+                      stroke="var(--primary)"
+                      strokeWidth={2}
+                      strokeDasharray="6 4"
+                      fill="none"
+                      opacity={0.85}
+                      markerEnd="url(#arrow)"
+                      pointerEvents="none"
+                    />
+                  );
+                })()}
             </svg>
 
             {/* EDGE LABELS */}
@@ -1996,6 +2174,14 @@ export default function BoardApp({
                   setSelected(n.id);
                   setSelectedEdge(null);
                 }}
+                onDoubleClick={(e) => {
+                  e.stopPropagation();
+                  if (tool === "connect") return;
+                  setSelected(n.id);
+                  setSelectedEdge(null);
+                  setSelectedBoundary(null);
+                  setRenameModal({ nodeId: n.id, value: n.title });
+                }}
               />
             ))}
           </div>
@@ -2033,7 +2219,7 @@ export default function BoardApp({
             <Square className="h-3.5 w-3.5 text-primary" />
             <span className="font-medium text-foreground">
               Click canvas to place{" "}
-              {boundaryKind === "trust" ? "Trust Boundary" : "Agent Runtime"}
+              {boundaryKind === "trust" ? "Trust Boundary" : "Runtime"}
             </span>
             <span className="text-muted-foreground">Esc to cancel</span>
           </div>
@@ -2046,6 +2232,8 @@ export default function BoardApp({
             setTool={setTool}
             showGrid={showGrid}
             setShowGrid={setShowGrid}
+            orthogonalEdges={orthogonalEdges}
+            setOrthogonalEdges={setOrthogonalEdges}
             onPickCreate={(kind) => {
               setCreateKind(kind);
               setTool("create");
@@ -3213,6 +3401,7 @@ function NodeCard({
   onContextMenu,
   onPortPointerDown,
   onClick,
+  onDoubleClick,
 }: {
   node: SphereNode;
   selected: boolean;
@@ -3229,6 +3418,7 @@ function NodeCard({
     role: "expose" | "consume",
   ) => void;
   onClick: (e: React.MouseEvent) => void;
+  onDoubleClick?: (e: React.MouseEvent) => void;
 }) {
   const meta = kindMeta[node.kind];
   const isDb = node.kind === "database";
@@ -3244,6 +3434,7 @@ function NodeCard({
       onPointerDown={onPointerDown}
       onContextMenu={onContextMenu}
       onClick={onClick}
+      onDoubleClick={onDoubleClick}
     >
       {isDb && (
         <DbCylinder
@@ -3578,9 +3769,9 @@ function BoundaryInspector({
     (tag.trim() || undefined) !== (group.tag || undefined) ||
     kind !== (group.kind ?? "trust");
 
-  const Fallback = kind === "runtime" ? Bot : Shield;
-  const softClass = kind === "runtime" ? "bg-agent-soft" : "bg-svc-soft";
-  const colorClass = kind === "runtime" ? "text-agent" : "text-svc";
+  const Fallback = kind === "runtime" ? Cpu : Shield;
+  const softClass = kind === "runtime" ? "bg-muted" : "bg-svc-soft";
+  const colorClass = kind === "runtime" ? "text-muted-foreground" : "text-svc";
 
   return (
     <div className="flex-1 overflow-auto">
@@ -4269,6 +4460,8 @@ function ToolRail({
   setTool,
   showGrid,
   setShowGrid,
+  orthogonalEdges,
+  setOrthogonalEdges,
   onPickCreate,
   onPickBoundary,
 }: {
@@ -4276,6 +4469,8 @@ function ToolRail({
   setTool: (t: "select" | "pan" | "connect" | "create" | "boundary") => void;
   showGrid: boolean;
   setShowGrid: (b: boolean) => void;
+  orthogonalEdges: boolean;
+  setOrthogonalEdges: (b: boolean) => void;
   onPickCreate: (kind: CreateKind) => void;
   onPickBoundary: (kind: "trust" | "runtime") => void;
 }) {
@@ -4314,6 +4509,14 @@ function ToolRail({
         active={showGrid}
       >
         <Grid3x3 className="h-4 w-4" />
+      </IconBtn>
+      <IconBtn
+        label={orthogonalEdges ? "Curved arrows" : "Straight 90° arrows"}
+        tooltipSide="right"
+        onClick={() => setOrthogonalEdges(!orthogonalEdges)}
+        active={orthogonalEdges}
+      >
+        <Waypoints className="h-4 w-4" />
       </IconBtn>
     </div>
   );
@@ -4379,7 +4582,7 @@ function PopoverBoundary({
   const [open, setOpen] = useState(false);
   const items: { kind: "trust" | "runtime"; label: string; hint: string; Icon: typeof Shield }[] = [
     { kind: "trust", label: "Trust Boundary", hint: "Security / ownership box", Icon: Shield },
-    { kind: "runtime", label: "Agent Runtime", hint: "Runtime / execution box", Icon: Bot },
+    { kind: "runtime", label: "Runtime", hint: "Execution / deploy box for any services", Icon: Cpu },
   ];
   return (
     <div className="relative">
@@ -4408,11 +4611,11 @@ function PopoverBoundary({
             >
               <div
                 className={`grid h-6 w-6 place-items-center rounded ${
-                  it.kind === "runtime" ? "bg-agent-soft" : "bg-svc-soft"
+                  it.kind === "runtime" ? "bg-muted" : "bg-svc-soft"
                 }`}
               >
                 <it.Icon
-                  className={`h-3.5 w-3.5 ${it.kind === "runtime" ? "text-agent" : "text-svc"}`}
+                  className={`h-3.5 w-3.5 ${it.kind === "runtime" ? "text-muted-foreground" : "text-svc"}`}
                 />
               </div>
               <div className="min-w-0">
