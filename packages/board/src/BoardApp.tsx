@@ -15,6 +15,7 @@ import {
   ChevronDown,
   ChevronRight,
   Circle,
+  ClipboardCopy,
   Command as CommandIcon,
   Download,
   Filter,
@@ -273,6 +274,35 @@ export type BoardAppProps = {
    * Sphere should set this for signed-in users on `/`.
    */
   startEmpty?: boolean;
+  /**
+   * Optional host AI adapter (Sphere product). When set, chat / suggestions /
+   * auto-layout call the host instead of mock chrome-data.
+   */
+  aiAdapter?: BoardAiAdapter | null;
+};
+
+export type BoardAiChatResult = {
+  reply: string;
+  yaml?: string | null;
+  suggestions?: string[];
+  sessionId?: string | null;
+};
+
+export type BoardAiAdapter = {
+  chat: (input: {
+    message: string;
+    yaml: string;
+    selection?: string[];
+    sessionId?: string | null;
+  }) => Promise<BoardAiChatResult>;
+  suggest?: (input: {
+    message?: string;
+    yaml: string;
+  }) => Promise<string[]>;
+  layout?: (input: { yaml: string }) => Promise<{
+    reply?: string;
+    yaml: string;
+  }>;
 };
 
 export default function BoardApp({
@@ -287,6 +317,7 @@ export default function BoardApp({
   onDocumentChange,
   initialYaml,
   startEmpty = false,
+  aiAdapter = null,
 }: BoardAppProps) {
   const isSphere = shell === "sphere";
   const board = useScanBoard({
@@ -354,6 +385,14 @@ export default function BoardApp({
   const [palette, setPalette] = useState(false);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; nodeId: string } | null>(null);
   const [prompt, setPrompt] = useState("");
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiSessionId, setAiSessionId] = useState<string | null>(null);
+  const [aiSuggestions, setAiSuggestions] = useState<string[]>(commandSuggestions);
+  const [pendingAi, setPendingAi] = useState<{
+    title: string;
+    reply: string;
+    yaml: string | null;
+  } | null>(null);
   const [connectFrom, setConnectFrom] = useState<{
     nodeId: string;
     portId?: string;
@@ -1072,7 +1111,36 @@ export default function BoardApp({
     applyViewport(nextZoom, nextPan);
   }, [applyViewport, board.modeler]);
 
-  const runAutoLayout = useCallback(() => {
+  const runAutoLayout = useCallback(async () => {
+    if (aiAdapter?.layout) {
+      setAiBusy(true);
+      try {
+        const yaml = modeler.peekYAML();
+        const result = await aiAdapter.layout({ yaml });
+        if (!result.yaml?.trim()) {
+          toast.error("Layout agent returned no YAML");
+          return;
+        }
+        setPendingAi({
+          title: "Sphere layout proposal",
+          reply: result.reply || "Repositioned diagram elements for readability.",
+          yaml: result.yaml,
+        });
+        setPreview(true);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Layout agent failed";
+        toast.error("Auto-layout failed", {
+          description: message.slice(0, 200),
+          action: {
+            label: "Copy error",
+            onClick: () => void navigator.clipboard.writeText(message),
+          },
+        });
+      } finally {
+        setAiBusy(false);
+      }
+      return;
+    }
     try {
       autoLayout();
       requestAnimationFrame(() => fitContent());
@@ -1083,7 +1151,87 @@ export default function BoardApp({
       const message = err instanceof Error ? err.message : "Layout failed";
       toast.error("Auto-layout failed", { description: message });
     }
-  }, [autoLayout, fitContent]);
+  }, [aiAdapter, autoLayout, fitContent, modeler]);
+
+  const submitAiChat = useCallback(async () => {
+    const message = prompt.trim();
+    if (!message || aiBusy) return;
+    if (!aiAdapter?.chat) {
+      setPendingAi({
+        title: previewChanges.title,
+        reply: "Mock preview (no AI adapter). Wire Sphere agents to apply real changes.",
+        yaml: null,
+      });
+      setPreview(true);
+      return;
+    }
+    setAiBusy(true);
+    try {
+      const yaml = modeler.peekYAML();
+      const selection = selected ? [selected] : undefined;
+      const result = await aiAdapter.chat({
+        message,
+        yaml,
+        selection,
+        sessionId: aiSessionId,
+      });
+      if (result.sessionId) setAiSessionId(result.sessionId);
+      if (result.suggestions?.length) setAiSuggestions(result.suggestions);
+      setPendingAi({
+        title: result.yaml ? "Sphere proposes diagram changes" : "Sphere reply",
+        reply: result.reply || "Done.",
+        yaml: result.yaml ?? null,
+      });
+      setPreview(true);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Agent request failed";
+      toast.error("Sphere AI failed", {
+        description: msg.slice(0, 200),
+        action: {
+          label: "Copy error",
+          onClick: () => void navigator.clipboard.writeText(msg),
+        },
+      });
+    } finally {
+      setAiBusy(false);
+    }
+  }, [aiAdapter, aiBusy, aiSessionId, modeler, prompt, selected]);
+
+  const refreshAiSuggestions = useCallback(async () => {
+    if (!aiAdapter?.suggest) return;
+    try {
+      const yaml = modeler.peekYAML();
+      const next = await aiAdapter.suggest({ message: prompt, yaml });
+      if (next.length) setAiSuggestions(next);
+    } catch {
+      /* keep previous chips */
+    }
+  }, [aiAdapter, modeler, prompt]);
+
+  const applyPendingAi = useCallback(async () => {
+    const yaml = pendingAi?.yaml;
+    if (!yaml?.trim()) {
+      setPreview(false);
+      setPendingAi(null);
+      return;
+    }
+    try {
+      await loadYamlText(yaml);
+      requestAnimationFrame(() => fitContent());
+      setPreview(false);
+      setPendingAi(null);
+      toast.success("Applied Sphere changes");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Could not load YAML";
+      toast.error("Apply failed", {
+        description: message,
+        action: {
+          label: "Copy error",
+          onClick: () => void navigator.clipboard.writeText(message),
+        },
+      });
+    }
+  }, [fitContent, loadYamlText, pendingAi]);
 
   const zoomIn = () => zoomAt(zoomRef.current + 0.15, lastPointerOnCanvas.current);
   const zoomOut = () => zoomAt(zoomRef.current - 0.15, lastPointerOnCanvas.current);
@@ -1190,8 +1338,11 @@ export default function BoardApp({
         <AIBar
           prompt={prompt}
           setPrompt={setPrompt}
-          onSubmit={() => setPreview(true)}
+          busy={aiBusy}
+          suggestions={aiSuggestions}
+          onSubmit={() => void submitAiChat()}
           onFocusPalette={() => setPalette(true)}
+          onOpenSuggestions={() => void refreshAiSuggestions()}
         />
       )}
 
@@ -1199,7 +1350,7 @@ export default function BoardApp({
       <ViewTabs
         view={view}
         setView={setView}
-        onAutoLayout={runAutoLayout}
+        onAutoLayout={() => void runAutoLayout()}
         focusMode={focusMode}
         onToggleFocusMode={() => setFocusMode((v) => !v)}
         nodes={nodes}
@@ -2104,7 +2255,17 @@ export default function BoardApp({
 
         {/* PREVIEW DRAWER / COMMAND PALETTE - Sphere product chrome */}
         {isSphere && preview && (
-          <PreviewDrawer onCancel={() => setPreview(false)} onApply={() => setPreview(false)} />
+          <PreviewDrawer
+            title={pendingAi?.title ?? previewChanges.title}
+            reply={pendingAi?.reply ?? ""}
+            yaml={pendingAi?.yaml ?? null}
+            hasYaml={Boolean(pendingAi?.yaml)}
+            onCancel={() => {
+              setPreview(false);
+              setPendingAi(null);
+            }}
+            onApply={() => void applyPendingAi()}
+          />
         )}
         {isSphere && palette && <CommandPalette onClose={() => setPalette(false)} />}
       </div>
@@ -2324,16 +2485,21 @@ function AiOrb() {
 }
 
 function AIBar({
-
   prompt,
   setPrompt,
   onSubmit,
   onFocusPalette,
+  busy = false,
+  suggestions,
+  onOpenSuggestions,
 }: {
   prompt: string;
   setPrompt: (v: string) => void;
   onSubmit: () => void;
   onFocusPalette: () => void;
+  busy?: boolean;
+  suggestions: string[];
+  onOpenSuggestions?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   return (
@@ -2345,13 +2511,17 @@ function AIBar({
           <input
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
-            onFocus={() => setOpen(true)}
+            onFocus={() => {
+              setOpen(true);
+              onOpenSuggestions?.();
+            }}
             onBlur={() => setTimeout(() => setOpen(false), 150)}
             onKeyDown={(e) => {
-              if (e.key === "Enter" && prompt.trim()) onSubmit();
+              if (e.key === "Enter" && prompt.trim() && !busy) onSubmit();
             }}
+            disabled={busy}
             placeholder="Ask Sphere to design or modify this architecture..."
-            className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+            className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground disabled:opacity-60"
           />
           <button className="hidden items-center gap-1 rounded-md px-1.5 py-1 text-[10px] text-muted-foreground hover:bg-muted md:flex">
             <Slash className="h-3 w-3" /> Slash commands
@@ -2367,10 +2537,11 @@ function AIBar({
             Preview changes
           </label>
           <button
-            onClick={() => prompt.trim() && onSubmit()}
-            className="ml-1 flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:opacity-90"
+            onClick={() => prompt.trim() && !busy && onSubmit()}
+            disabled={busy || !prompt.trim()}
+            className="ml-1 flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
           >
-            <Send className="h-3.5 w-3.5" /> Send
+            <Send className="h-3.5 w-3.5" /> {busy ? "Thinking…" : "Send"}
           </button>
 
           {open && (
@@ -2379,7 +2550,7 @@ function AIBar({
                 Suggested commands
               </div>
               <div className="max-h-60 overflow-auto py-1">
-                {commandSuggestions.map((s) => (
+                {suggestions.map((s) => (
                   <button
                     key={s}
                     onMouseDown={() => setPrompt(s)}
@@ -4309,57 +4480,109 @@ function ContextMenu({
 
 /* ------------------------- PREVIEW DRAWER ------------------------- */
 
-function PreviewDrawer({ onCancel, onApply }: { onCancel: () => void; onApply: () => void }) {
+function YamlPreviewBlock({ yaml }: { yaml: string }) {
+  const TRUNCATE_LINES = 12;
+  const [expanded, setExpanded] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const lines = yaml.split("\n");
+  const isTruncated = !expanded && lines.length > TRUNCATE_LINES;
+  const displayed = isTruncated ? lines.slice(0, TRUNCATE_LINES).join("\n") : yaml;
+
+  const copyYaml = () => {
+    void navigator.clipboard.writeText(yaml).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    });
+  };
+
+  return (
+    <div className="mt-4 overflow-hidden rounded-lg border border-border bg-[hsl(var(--muted)/0.6)]">
+      <div className="flex items-center justify-between border-b border-border px-3 py-1.5">
+        <span className="font-mono text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+          SCAN YAML — {lines.length} lines
+        </span>
+        <button
+          onClick={copyYaml}
+          title="Copy YAML"
+          className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-muted-foreground hover:bg-muted hover:text-foreground"
+        >
+          <ClipboardCopy className="h-3 w-3" />
+          {copied ? "Copied!" : "Copy"}
+        </button>
+      </div>
+      <pre className="overflow-x-auto px-3 py-2 font-mono text-[11px] leading-relaxed text-foreground">
+        {displayed}
+        {isTruncated && (
+          <span className="text-muted-foreground">{"\n"}…</span>
+        )}
+      </pre>
+      {lines.length > TRUNCATE_LINES && (
+        <button
+          onClick={() => setExpanded((v) => !v)}
+          className="w-full border-t border-border px-3 py-1.5 text-center text-[10px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+        >
+          {expanded ? "Show less" : `Show all ${lines.length} lines`}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function PreviewDrawer({
+  title,
+  reply,
+  yaml,
+  hasYaml,
+  onCancel,
+  onApply,
+}: {
+  title: string;
+  reply: string;
+  yaml: string | null;
+  hasYaml: boolean;
+  onCancel: () => void;
+  onApply: () => void;
+}) {
   return (
     <div className="absolute inset-0 z-30 flex items-center justify-center bg-foreground/10 backdrop-blur-sm">
-      <div className="w-[560px] overflow-hidden rounded-2xl border border-border bg-surface node-shadow-lg">
+      <div className="w-[600px] overflow-hidden rounded-2xl border border-border bg-surface node-shadow-lg">
         <div className="flex items-center gap-3 border-b border-border bg-gradient-to-r from-primary/10 to-event/10 px-5 py-4">
           <div className="grid h-9 w-9 place-items-center rounded-lg bg-gradient-to-br from-primary to-event text-primary-foreground">
             <Sparkles className="h-4 w-4" />
           </div>
           <div className="flex-1">
-            <div className="text-sm font-semibold">{previewChanges.title}</div>
+            <div className="text-sm font-semibold">{title}</div>
             <div className="text-[11px] text-muted-foreground">
-              Preview before applying to the architecture board
+              {hasYaml
+                ? "Preview before applying to the architecture board"
+                : "Reply only — no diagram changes proposed"}
             </div>
           </div>
           <button onClick={onCancel} className="rounded-md p-1 hover:bg-muted">
             <X className="h-4 w-4" />
           </button>
         </div>
-        <div className="max-h-[380px] overflow-auto p-4">
-          <div className="space-y-1.5">
-            {previewChanges.additions.map((a, i) => {
-              const meta = kindMeta[a.kind];
-              return (
-                <div
-                  key={i}
-                  className="flex items-center gap-3 rounded-lg border border-ok/30 bg-ok-soft/40 px-3 py-2"
-                >
-                  <span className="grid h-5 w-5 place-items-center rounded bg-ok/15 text-[11px] font-bold text-ok">
-                    +
-                  </span>
-                  <div className={`grid h-7 w-7 place-items-center rounded ${meta.soft}`}>
-                    <meta.Icon className={`h-3.5 w-3.5 ${meta.color}`} />
-                  </div>
-                  <div className="flex-1">
-                    <div className="text-xs font-medium">{a.label}</div>
-                    <div className="text-[10px] text-muted-foreground">{a.detail}</div>
-                  </div>
-                  <span className="text-[10px] text-ok">Ready</span>
-                </div>
-              );
-            })}
+        <div className="max-h-[480px] overflow-auto p-4">
+          <div className="whitespace-pre-wrap rounded-lg border border-border bg-muted/40 px-3 py-3 text-sm leading-relaxed text-foreground">
+            {reply || "No message."}
           </div>
-          <div className="mt-4 rounded-lg bg-muted p-3 text-[11px] text-muted-foreground">
-            Sphere will not touch existing services. All additions inherit the Order Platform
-            trust boundary.
-          </div>
+          {hasYaml && yaml ? (
+            <YamlPreviewBlock yaml={yaml} />
+          ) : (
+            <div className="mt-4 rounded-lg bg-muted p-3 text-[11px] text-muted-foreground">
+              No YAML was returned. Ask Sphere to add or change architecture elements to get an applyable proposal.
+            </div>
+          )}
+          {hasYaml && (
+            <div className="mt-3 rounded-lg bg-ok-soft/40 border border-ok/30 p-3 text-[11px] text-muted-foreground">
+              Applying will replace the current board document with the agent YAML (undo with Ctrl+Z after load via a new history root).
+            </div>
+          )}
         </div>
         <div className="flex items-center justify-between border-t border-border px-5 py-3">
-          <button className="text-[11px] text-muted-foreground hover:text-foreground">
-            View diff
-          </button>
+          <span className="text-[11px] text-muted-foreground">
+            {hasYaml ? "SCAN YAML ready" : "Chat only"}
+          </span>
           <div className="flex items-center gap-2">
             <button
               onClick={onCancel}
@@ -4369,7 +4592,8 @@ function PreviewDrawer({ onCancel, onApply }: { onCancel: () => void; onApply: (
             </button>
             <button
               onClick={onApply}
-              className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:opacity-90"
+              disabled={!hasYaml}
+              className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:opacity-90 disabled:opacity-40"
             >
               <Check className="h-3.5 w-3.5" /> Apply changes
             </button>
