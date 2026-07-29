@@ -2838,10 +2838,6 @@ function AIBar({
           <IconBtn label="Voice input">
             <Mic className="h-4 w-4" />
           </IconBtn>
-          <label className="flex cursor-pointer items-center gap-1.5 rounded-md bg-muted px-2 py-1 text-[10px] font-medium">
-            <input type="checkbox" defaultChecked className="h-3 w-3 accent-primary" />
-            Preview changes
-          </label>
           <button
             onClick={() => {
               if (!prompt.trim() || busy) return;
@@ -5004,6 +5000,7 @@ function YamlPreviewBlock({
   const hasDiff = Boolean(baseYaml?.trim()) && (added > 0 || removed > 0);
   const isTruncated = !expanded && diffLines.length > TRUNCATE_LINES;
   const visible = isTruncated ? diffLines.slice(0, TRUNCATE_LINES) : diffLines;
+  const lineDigits = Math.max(2, String(diffLines.length).length);
 
   const copyYaml = () => {
     void navigator.clipboard.writeText(yaml).then(() => {
@@ -5038,6 +5035,7 @@ function YamlPreviewBlock({
       </div>
       <pre className="max-h-[320px] overflow-auto px-3 py-2 font-mono text-[11px] leading-relaxed">
         {visible.map((line, idx) => {
+          const lineNo = idx + 1;
           const prefix = line.kind === "add" ? "+" : line.kind === "remove" ? "-" : " ";
           const cls =
             line.kind === "add"
@@ -5046,9 +5044,18 @@ function YamlPreviewBlock({
                 ? "bg-destructive/10 text-destructive"
                 : "text-foreground";
           return (
-            <div key={`${idx}-${line.kind}-${line.text}`} className={`whitespace-pre-wrap px-1 ${cls}`}>
-              {prefix}
-              {line.text}
+            <div key={`${idx}-${line.kind}-${line.text}`} className={`flex whitespace-pre-wrap px-1 ${cls}`}>
+              <span
+                className="select-none pr-2 text-muted-foreground/80"
+                style={{ minWidth: `${lineDigits}ch`, textAlign: "right" }}
+                aria-hidden="true"
+              >
+                {lineNo}
+              </span>
+              <span>
+                {prefix}
+                {line.text}
+              </span>
             </div>
           );
         })}

@@ -1,15 +1,15 @@
 import { resolveEntityKind } from "@spherescan/rules";
 const DEFAULTS = {
-    originX: 80,
-    originY: 60,
-    gapX: 100,
-    gapY: 72,
-    boundaryPad: 48,
-    clusterGapX: 96,
-    clusterGapY: 96,
+    originX: 48,
+    originY: 40,
+    gapX: 56,
+    gapY: 48,
+    boundaryPad: 28,
+    clusterGapX: 36,
+    clusterGapY: 36,
 };
 /** Prefer splitting a layer into another column when stacked height exceeds this. */
-const MAX_LAYER_STACK_H = 780;
+const MAX_LAYER_STACK_H = 640;
 const ATTACH_TYPES = new Set(["database-access", "event-publication"]);
 function ensureView(model, viewId) {
     const view = (viewId ? model.views.find((v) => v.id === viewId) : undefined) ?? model.views[0];
@@ -349,7 +349,17 @@ function layoutClusterMembers(memberIds, model, sizes, connections, gapX, gapY) 
     }
     return { local, width, height };
 }
-function layoutClusterRow(clusters, model, connections, originX, originY, clusterGapX, clusterGapY) {
+function rectsOverlap(a, b, gapX, gapY) {
+    return (a.x < b.x + b.w + gapX &&
+        a.x + a.w + gapX > b.x &&
+        a.y < b.y + b.h + gapY &&
+        a.y + a.h + gapY > b.y);
+}
+/**
+ * Pack clusters like Tetris / skyline: keep meta-layer left→right flow, then
+ * place each box in the lowest-then-leftmost free slot (no large column gutters).
+ */
+function layoutClusterRow(clusters, model, connections, originX, originY, clusterGapX, clusterGapY, hintLayout) {
     if (!clusters.length)
         return { origin: {} };
     const ids = clusters.map((c) => c.id);
@@ -368,15 +378,17 @@ function layoutClusterRow(clusters, model, connections, originX, originY, cluste
         if (idSet.has(a) && idSet.has(b))
             metaEdges.push({ from: a, to: b });
     }
-    // Synthetic model ranks: trust boundaries before runtime, free last-ish.
     const layer = assignLayers(ids, metaEdges, model);
-    // Override free cluster to sit left or around by connectivity - keep computed.
-    const maxLayer = Math.max(0, ...[...layer.values()]);
-    const byLayer = Array.from({ length: maxLayer + 1 }, () => []);
-    for (const c of clusters) {
-        byLayer[layer.get(c.id) ?? 0].push(c);
-    }
-    // Within layer: trust first, then runtime, then free; stable by id.
+    const hintX = (c) => {
+        if (!hintLayout)
+            return 0;
+        const xs = c.memberIds
+            .map((id) => hintLayout[id]?.x)
+            .filter((v) => typeof v === "number");
+        if (!xs.length)
+            return Number.POSITIVE_INFINITY;
+        return xs.reduce((sum, v) => sum + v, 0) / xs.length;
+    };
     const rankCluster = (c) => {
         if (!c.boundaryId)
             return 2;
@@ -387,21 +399,45 @@ function layoutClusterRow(clusters, model, connections, originX, originY, cluste
             return 1;
         return 1;
     };
-    for (const row of byLayer) {
-        row.sort((a, b) => rankCluster(a) - rankCluster(b) || a.id.localeCompare(b.id));
-    }
+    const ordered = [...clusters].sort((a, b) => (layer.get(a.id) ?? 0) - (layer.get(b.id) ?? 0) ||
+        hintX(a) - hintX(b) ||
+        rankCluster(a) - rankCluster(b) ||
+        a.id.localeCompare(b.id));
+    const placed = [];
     const origin = {};
-    let x = originX;
-    for (let li = 0; li < byLayer.length; li++) {
-        const row = byLayer[li];
-        let y = originY;
-        let colW = 0;
-        for (const c of row) {
-            origin[c.id] = { x, y };
-            y += c.height + clusterGapY;
-            colW = Math.max(colW, c.width);
+    for (const c of ordered) {
+        const w = Math.max(1, c.width);
+        const h = Math.max(1, c.height);
+        const candidates = [{ x: originX, y: originY }];
+        for (const p of placed) {
+            candidates.push({ x: p.x + p.w + clusterGapX, y: p.y });
+            candidates.push({ x: p.x, y: p.y + p.h + clusterGapY });
         }
-        x += colW + clusterGapX;
+        let best = null;
+        let bestScore = Number.POSITIVE_INFINITY;
+        for (const cand of candidates) {
+            const trial = { x: cand.x, y: cand.y, w, h };
+            if (placed.some((p) => rectsOverlap(trial, p, clusterGapX, clusterGapY)))
+                continue;
+            // Prefer low Y (pack up), then low X (pack left) — Tetris skyline.
+            const score = trial.y * 100_000 + trial.x;
+            if (score < bestScore) {
+                bestScore = score;
+                best = { x: trial.x, y: trial.y };
+            }
+        }
+        if (!best) {
+            // Fallback: append to the right of the current AABB.
+            let maxX = originX;
+            let maxY = originY;
+            for (const p of placed) {
+                maxX = Math.max(maxX, p.x + p.w + clusterGapX);
+                maxY = Math.max(maxY, p.y);
+            }
+            best = { x: maxX, y: originY };
+        }
+        origin[c.id] = best;
+        placed.push({ id: c.id, x: best.x, y: best.y, w, h });
     }
     return { origin };
 }
@@ -425,17 +461,9 @@ export function computeAutoLayout(model, viewId, options = {}) {
     const clusters = [];
     for (const bid of boundaryIds) {
         const members = ids.filter((id) => clusterOf.get(id) === bid);
-        if (!members.length) {
-            clusters.push({
-                id: `boundary:${bid}`,
-                boundaryId: bid,
-                memberIds: [],
-                local: {},
-                width: 320,
-                height: 200,
-            });
+        // Skip empty shells — they waste board space and confuse membership sync.
+        if (!members.length)
             continue;
-        }
         const placed = layoutClusterMembers(members, model, sizes, model.connections, opts.gapX, opts.gapY);
         const pad = opts.boundaryPad;
         // Local coords already member-relative; expand for padding when measuring cluster.
@@ -510,7 +538,7 @@ export function computeAutoLayout(model, viewId, options = {}) {
             type: "git-integration",
         });
     }
-    const { origin } = layoutClusterRow(clusters, model, soft, opts.originX, opts.originY, opts.clusterGapX, opts.clusterGapY);
+    const { origin } = layoutClusterRow(clusters, model, soft, opts.originX, opts.originY, opts.clusterGapX, opts.clusterGapY, view.layout);
     const layout = {};
     const boundaries = [];
     for (const c of clusters) {

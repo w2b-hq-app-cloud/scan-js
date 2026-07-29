@@ -688,6 +688,10 @@ export class Modeling {
       boundary.members = [...box.members];
     }
 
+    // Drop empty shells left out of the pack (or emptied by exclusive assignment).
+    const packedIds = new Set(planned.boundaries.map((b) => b.id));
+    view.boundaries = view.boundaries.filter((b) => packedIds.has(b.id));
+
     for (const side of planned.connectionSides) {
       const conn = next.connections.find((c) => c.id === side.id);
       if (!conn) continue;
