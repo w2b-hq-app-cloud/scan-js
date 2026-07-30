@@ -14,7 +14,7 @@ type ChangeListener = (state: {
     dirty: boolean;
 }) => void;
 /**
- * SCAN modeler â€” owns the canonical model, command stack, and projection.
+ * SCAN modeler - owns the canonical model, command stack, and projection.
  * Optional container enables embeddable snapshot rendering via ScanViewer.
  */
 export declare class ScanModeler {

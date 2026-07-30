@@ -40,6 +40,7 @@ export type SphereEdge = {
     /** Endpoints / RPCs / topics shown on hover and in the inspector */
     operations?: string[];
 };
+export type BoundaryColor = "svc" | "ext" | "data" | "event" | "search" | "agent" | "repo" | "warn";
 export type SphereGroup = {
     id: string;
     title: string;
@@ -52,7 +53,8 @@ export type SphereGroup = {
     y: number;
     w: number;
     h: number;
-    color: "svc" | "agent";
+    /** Palette token for dashed stroke / soft fill. */
+    color: BoundaryColor;
 };
 export type BoardGraph = {
     nodes: SphereNode[];

@@ -10,8 +10,8 @@ const portSchema = z.object({
 /**
  * Optional diagram icon override.
  * - Lucide name (e.g. `shield`, `database`)
- * - `https://…` / `http://…` image URL
- * - `data:image/…` (uploaded file encoded as data URL)
+ * - `https://...` / `http://...` image URL
+ * - `data:image/...` (uploaded file encoded as data URL)
  */
 export const iconSchema = z.string().min(1).optional();
 const repositoryRefSchema = z.union([
@@ -127,11 +127,24 @@ const layoutEntrySchema = z.object({
     w: z.number().optional(),
     h: z.number().optional(),
 });
+/** Stroke/tint palette for boundaries (matches board CSS tokens). */
+export const boundaryColorSchema = z.enum([
+    "svc",
+    "ext",
+    "data",
+    "event",
+    "search",
+    "agent",
+    "repo",
+    "warn",
+]);
 const boundarySchema = z.object({
     id: z.string(),
     label: z.string(),
     tag: z.string().optional(),
     kind: z.enum(["trust", "runtime"]).default("trust"),
+    /** Optional color token; omit to tint from `kind` (trust→svc, runtime→agent). */
+    color: boundaryColorSchema.optional(),
     icon: iconSchema,
     members: z.array(z.string()),
     x: z.number(),

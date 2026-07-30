@@ -37,17 +37,17 @@ type ClusterPlan = {
 };
 
 const DEFAULTS = {
-  originX: 80,
-  originY: 60,
-  gapX: 220,
-  gapY: 128,
-  boundaryPad: 64,
-  clusterGapX: 140,
-  clusterGapY: 160,
+  originX: 48,
+  originY: 40,
+  gapX: 56,
+  gapY: 48,
+  boundaryPad: 28,
+  clusterGapX: 36,
+  clusterGapY: 36,
 } as const;
 
 /** Prefer splitting a layer into another column when stacked height exceeds this. */
-const MAX_LAYER_STACK_H = 780;
+const MAX_LAYER_STACK_H = 640;
 
 const ATTACH_TYPES = new Set(["database-access", "event-publication"]);
 
@@ -58,12 +58,22 @@ function ensureView(model: SphereModel, viewId?: string): SphereView {
   return view;
 }
 
-function boxOf(entry: LayoutEntry | undefined): SizedBox {
+function boxOf(entry: LayoutEntry | undefined, kind?: string): SizedBox {
+  // Always pack with kind-standard sizes so agent-emitted tiny w/h cannot
+  // collapse boxes or undersize fitted boundaries.
+  const defaults =
+    kind === "database"
+      ? { w: 220, h: 160 }
+      : kind === "external"
+        ? { w: 220, h: 150 }
+        : kind === "repo"
+          ? { w: 260, h: 180 }
+          : { w: 260, h: 190 };
   return {
     x: entry?.x ?? 0,
     y: entry?.y ?? 0,
-    w: entry?.w ?? 260,
-    h: entry?.h ?? 180,
+    w: defaults.w,
+    h: defaults.h,
   };
 }
 
@@ -437,6 +447,24 @@ function layoutClusterMembers(
   return { local, width, height };
 }
 
+function rectsOverlap(
+  a: { x: number; y: number; w: number; h: number },
+  b: { x: number; y: number; w: number; h: number },
+  gapX: number,
+  gapY: number,
+): boolean {
+  return (
+    a.x < b.x + b.w + gapX &&
+    a.x + a.w + gapX > b.x &&
+    a.y < b.y + b.h + gapY &&
+    a.y + a.h + gapY > b.y
+  );
+}
+
+/**
+ * Pack clusters like Tetris / skyline: keep meta-layer left→right flow, then
+ * place each box in the lowest-then-leftmost free slot (no large column gutters).
+ */
 function layoutClusterRow(
   clusters: ClusterPlan[],
   model: SphereModel,
@@ -445,6 +473,7 @@ function layoutClusterRow(
   originY: number,
   clusterGapX: number,
   clusterGapY: number,
+  hintLayout?: Record<string, LayoutEntry>,
 ): { origin: Record<string, { x: number; y: number }> } {
   if (!clusters.length) return { origin: {} };
 
@@ -462,17 +491,17 @@ function layoutClusterRow(
     if (idSet.has(a) && idSet.has(b)) metaEdges.push({ from: a, to: b });
   }
 
-  // Synthetic model ranks: trust boundaries before runtime, free last-ish.
   const layer = assignLayers(ids, metaEdges, model);
-  // Override free cluster to sit left or around by connectivity - keep computed.
 
-  const maxLayer = Math.max(0, ...[...layer.values()]);
-  const byLayer: ClusterPlan[][] = Array.from({ length: maxLayer + 1 }, () => []);
-  for (const c of clusters) {
-    byLayer[layer.get(c.id) ?? 0].push(c);
-  }
+  const hintX = (c: ClusterPlan): number => {
+    if (!hintLayout) return 0;
+    const xs = c.memberIds
+      .map((id) => hintLayout[id]?.x)
+      .filter((v): v is number => typeof v === "number");
+    if (!xs.length) return Number.POSITIVE_INFINITY;
+    return xs.reduce((sum, v) => sum + v, 0) / xs.length;
+  };
 
-  // Within layer: trust first, then runtime, then free; stable by id.
   const rankCluster = (c: ClusterPlan) => {
     if (!c.boundaryId) return 2;
     const b = model.views[0]?.boundaries.find((x) => x.id === c.boundaryId);
@@ -480,23 +509,54 @@ function layoutClusterRow(
     if (b?.kind === "runtime") return 1;
     return 1;
   };
-  for (const row of byLayer) {
-    row.sort((a, b) => rankCluster(a) - rankCluster(b) || a.id.localeCompare(b.id));
+
+  const ordered = [...clusters].sort(
+    (a, b) =>
+      (layer.get(a.id) ?? 0) - (layer.get(b.id) ?? 0) ||
+      hintX(a) - hintX(b) ||
+      rankCluster(a) - rankCluster(b) ||
+      a.id.localeCompare(b.id),
+  );
+
+  const placed: Array<{ id: string; x: number; y: number; w: number; h: number }> = [];
+  const origin: Record<string, { x: number; y: number }> = {};
+
+  for (const c of ordered) {
+    const w = Math.max(1, c.width);
+    const h = Math.max(1, c.height);
+    const candidates: Array<{ x: number; y: number }> = [{ x: originX, y: originY }];
+    for (const p of placed) {
+      candidates.push({ x: p.x + p.w + clusterGapX, y: p.y });
+      candidates.push({ x: p.x, y: p.y + p.h + clusterGapY });
+    }
+
+    let best: { x: number; y: number } | null = null;
+    let bestScore = Number.POSITIVE_INFINITY;
+    for (const cand of candidates) {
+      const trial = { x: cand.x, y: cand.y, w, h };
+      if (placed.some((p) => rectsOverlap(trial, p, clusterGapX, clusterGapY))) continue;
+      // Prefer low Y (pack up), then low X (pack left) — Tetris skyline.
+      const score = trial.y * 100_000 + trial.x;
+      if (score < bestScore) {
+        bestScore = score;
+        best = { x: trial.x, y: trial.y };
+      }
+    }
+    if (!best) {
+      // Fallback: append to the right of the current AABB.
+      let maxX = originX;
+      let maxY = originY;
+      for (const p of placed) {
+        maxX = Math.max(maxX, p.x + p.w + clusterGapX);
+        maxY = Math.max(maxY, p.y);
+      }
+      best = { x: maxX, y: originY };
+    }
+
+    origin[c.id] = best;
+    placed.push({ id: c.id, x: best.x, y: best.y, w, h });
   }
 
-  const origin: Record<string, { x: number; y: number }> = {};
-  let x = originX;
-  for (let li = 0; li < byLayer.length; li++) {
-    const row = byLayer[li];
-    let y = originY;
-    let colW = 0;
-    for (const c of row) {
-      origin[c.id] = { x, y };
-      y += c.height + clusterGapY;
-      colW = Math.max(colW, c.width);
-    }
-    x += colW + clusterGapX;
-  }
   return { origin };
 }
 
@@ -528,7 +588,9 @@ export function computeAutoLayout(
   }
 
   const sizes: Record<string, SizedBox> = {};
-  for (const id of ids) sizes[id] = boxOf(view.layout[id]);
+  for (const id of ids) {
+    sizes[id] = boxOf(view.layout[id], resolveEntityKind(model, id));
+  }
 
   const clusterOf = assignClusters(ids, view.boundaries);
   const boundaryIds = view.boundaries.map((b) => b.id);
@@ -536,17 +598,8 @@ export function computeAutoLayout(
 
   for (const bid of boundaryIds) {
     const members = ids.filter((id) => clusterOf.get(id) === bid);
-    if (!members.length) {
-      clusters.push({
-        id: `boundary:${bid}`,
-        boundaryId: bid,
-        memberIds: [],
-        local: {},
-        width: 320,
-        height: 200,
-      });
-      continue;
-    }
+    // Skip empty shells — they waste board space and confuse membership sync.
+    if (!members.length) continue;
     const placed = layoutClusterMembers(
       members,
       model,
@@ -647,6 +700,7 @@ export function computeAutoLayout(
     opts.originY,
     opts.clusterGapX,
     opts.clusterGapY,
+    view.layout,
   );
 
   const layout: Record<string, LayoutEntry> = {};

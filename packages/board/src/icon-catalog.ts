@@ -108,6 +108,6 @@ export function defaultKindIconId(
     case "trust":
       return "shield";
     case "runtime":
-      return "bot";
+      return "cpu";
   }
 }

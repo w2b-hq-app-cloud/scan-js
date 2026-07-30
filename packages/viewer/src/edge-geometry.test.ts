@@ -4,8 +4,12 @@ import {
   computeLabelStagger,
   edgeControls,
   edgePath,
+  orthogonalWaypoints,
+  pickEdgeSides,
   placeEdgeLabel,
   pointOnCubic,
+  resolveEdgeAnchors,
+  routeOrthogonalEdges,
 } from "./edge-geometry.js";
 
 test("edgePath is a cubic bezier matching control points", () => {
@@ -16,6 +20,75 @@ test("edgePath is a cubic bezier matching control points", () => {
   assert.match(d, /^M 0 0 C /);
   assert.ok(d.includes(`${c1.x} ${c1.y}`));
   assert.ok(d.includes(`${c2.x} ${c2.y}`));
+});
+
+test("orthogonal edgePath uses only axis-aligned L segments", () => {
+  const a = { x: 0, y: 50 };
+  const b = { x: 200, y: 150 };
+  const d = edgePath(a, b, "r", "l", "orthogonal");
+  assert.match(d, /^M /);
+  assert.equal(d.includes(" C "), false);
+  assert.ok(d.includes(" L "));
+  const pts = orthogonalWaypoints(a, b, "r", "l");
+  for (let i = 0; i < pts.length - 1; i++) {
+    const sameX = Math.abs(pts[i].x - pts[i + 1].x) < 0.5;
+    const sameY = Math.abs(pts[i].y - pts[i + 1].y) < 0.5;
+    assert.ok(sameX || sameY, "each step must be horizontal or vertical");
+  }
+});
+
+test("routeOrthogonalEdges inserts hop arcs at crossings", () => {
+  // Horizontal then vertical crossing near (100, 50)
+  const paths = routeOrthogonalEdges([
+    {
+      id: "h",
+      a: { x: 0, y: 50 },
+      b: { x: 200, y: 50 },
+      aSide: "r",
+      bSide: "l",
+    },
+    {
+      id: "v",
+      a: { x: 100, y: 0 },
+      b: { x: 100, y: 120 },
+      aSide: "b",
+      bSide: "t",
+    },
+  ]);
+  const vertical = paths.get("v") ?? "";
+  assert.ok(vertical.includes(" A "), `expected hop arc, got: ${vertical}`);
+});
+
+test("pickEdgeSides attaches to facing edges from travel direction", () => {
+  const right = pickEdgeSides(
+    { x: 0, y: 0, w: 100, h: 80 },
+    { x: 200, y: 10, w: 100, h: 80 },
+  );
+  assert.deepEqual(right, { fromSide: "r", toSide: "l" });
+
+  const below = pickEdgeSides(
+    { x: 0, y: 0, w: 100, h: 80 },
+    { x: 10, y: 160, w: 100, h: 80 },
+  );
+  assert.deepEqual(below, { fromSide: "b", toSide: "t" });
+
+  const left = pickEdgeSides(
+    { x: 200, y: 0, w: 100, h: 80 },
+    { x: 0, y: 10, w: 100, h: 80 },
+  );
+  assert.deepEqual(left, { fromSide: "l", toSide: "r" });
+});
+
+test("resolveEdgeAnchors lands on box edges not centers", () => {
+  const from = { x: 0, y: 0, w: 100, h: 80 };
+  const to = { x: 200, y: 20, w: 100, h: 80 };
+  const { a, b, fromSide, toSide } = resolveEdgeAnchors(from, to);
+  assert.equal(fromSide, "r");
+  assert.equal(toSide, "l");
+  assert.equal(a.x, 100);
+  assert.equal(b.x, 200);
+  assert.ok(a.y >= from.y && a.y <= from.y + from.h);
+  assert.ok(b.y >= to.y && b.y <= to.y + to.h);
 });
 
 test("pointOnCubic interpolates endpoints and bows off the chord", () => {

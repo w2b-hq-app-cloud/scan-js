@@ -1,3 +1,4 @@
+import { resolveBoundaryColor } from "./boundary-colors.js";
 function repoPath(repository) {
     if (!repository)
         return undefined;
@@ -52,6 +53,8 @@ function componentKind(type) {
             return "service";
     }
 }
+/** Canonical on-canvas box size per kind. Layout YAML may carry w/h, but the
+ *  viewer always renders these standards (agents often emit undersized boxes). */
 function defaultSize(kind) {
     switch (kind) {
         case "external":
@@ -148,7 +151,7 @@ function projectGroups(view) {
         y: b.y,
         w: b.w,
         h: b.h,
-        color: b.kind === "runtime" ? "agent" : "svc",
+        color: resolveBoundaryColor(b.color, b.kind ?? "trust"),
     }));
 }
 function projectNodes(model, view) {
@@ -165,8 +168,8 @@ function projectNodes(model, view) {
             icon: ext.icon,
             x: layout.x,
             y: layout.y,
-            w: layout.w ?? size.w,
-            h: layout.h ?? size.h,
+            w: size.w,
+            h: size.h,
             group: memberGroupId(view, ext.id),
             consumes: mapPorts(ext.consumes, "in"),
             exposes: mapPorts(ext.exposes, "out"),
@@ -189,8 +192,8 @@ function projectNodes(model, view) {
                 : kindTechLabel(kind),
             x: layout.x,
             y: layout.y,
-            w: layout.w ?? size.w,
-            h: layout.h ?? size.h,
+            w: size.w,
+            h: size.h,
             group: memberGroupId(view, c.id),
             consumes: mapPorts(c.consumes, "in"),
             exposes: mapPorts(c.exposes, "out"),
@@ -213,8 +216,8 @@ function projectNodes(model, view) {
             tech: kindTechLabel(kind),
             x: layout.x,
             y: layout.y,
-            w: layout.w ?? size.w,
-            h: layout.h ?? size.h,
+            w: size.w,
+            h: size.h,
             group: memberGroupId(view, ch.id),
             consumes: mapPorts(ch.consumes, "in"),
             exposes: mapPorts(ch.exposes, "out"),
@@ -233,8 +236,8 @@ function projectNodes(model, view) {
             tech: kindTechLabel(kind),
             x: layout.x,
             y: layout.y,
-            w: layout.w ?? size.w,
-            h: layout.h ?? size.h,
+            w: size.w,
+            h: size.h,
             group: memberGroupId(view, a.id),
             consumes: mapPorts(a.consumes, "in"),
             exposes: mapPorts(a.exposes, "out"),
@@ -253,8 +256,8 @@ function projectNodes(model, view) {
             tech: kindTechLabel(kind),
             x: layout.x,
             y: layout.y,
-            w: layout.w ?? size.w,
-            h: layout.h ?? size.h,
+            w: size.w,
+            h: size.h,
             group: memberGroupId(view, r.id),
             consumes: mapPorts(r.consumes, "in"),
             exposes: mapPorts(r.exposes, "out"),

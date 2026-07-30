@@ -8,6 +8,7 @@ export {
   sphereModelSchema,
   connectionTypeSchema,
   iconSchema,
+  boundaryColorSchema,
   type ScanModel,
   type SphereModel,
   type SphereView,

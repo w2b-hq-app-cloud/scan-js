@@ -160,7 +160,7 @@ Default labels/contracts often used in fixtures: REST/OpenAPI, gRPC/Proto, DB Ac
 - Suggested default sizes: service/agent/event ~`260x190`, datastore ~`220x160`, external ~`220x150`, repo ~`260x180`.
 - Space nodes ~80-120px apart; left-to-right for request flow; DB/events often below services.
 - `fromSide` / `toSide`: `l` | `r` | `t` | `b` (edge attachment).
-- Boundaries: `kind: trust` | `runtime`; `members` are element ids whose centers sit inside the rect.
+- Boundaries: `kind: trust` | `runtime`; optional `color` (`svc`|`ext`|`data`|`event`|`search`|`agent`|`repo`|`warn`) for stroke/tint; `members` are element ids whose centers sit inside the rect. Prefer **outer shells** (landing zones, clients, SaaS, shared platform) — do not nest boundaries or recreate every inner visual subgroup from a reference image.
 
 ## Authoring tips
 

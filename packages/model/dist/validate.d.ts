@@ -20,7 +20,7 @@ export type ScanValidationResult = {
  * - fromPort / toPort reference expose / consume ports when set
  * - boundary.members reference existing elements
  * - agents[].runtime reference agent_runtimes when set
- * - layout keys reference existing elements (orphan layout → error)
+ * - layout keys reference existing elements (orphan layout -> error)
  */
 export declare function validateScanModel(model: ScanModel): ScanValidationResult;
 /** @deprecated Use validateScanModel */

@@ -17,6 +17,7 @@ import {
   Circle,
   ClipboardCopy,
   Command as CommandIcon,
+  Cpu,
   Download,
   Filter,
   Github,
@@ -38,6 +39,7 @@ import {
   Square,
   Undo2,
   Upload,
+  Waypoints,
   X,
   ZoomIn,
   ZoomOut,
@@ -53,13 +55,15 @@ import {
   ExternalLink,
   Link2,
   Menu,
+  RefreshCw,
+  Loader2,
 } from "lucide-react";
 import {
   commandSuggestions,
-  recentPrompts,
+  recentPrompts as seedRecentPrompts,
   previewChanges,
 } from "./chrome-data";
-import type { SphereNode, SphereEdge, SphereGroup, NodeKind } from "@spherescan/viewer";
+import type { SphereNode, SphereEdge, SphereGroup, NodeKind, BoundaryColor } from "@spherescan/viewer";
 import {
   LABEL_LOD_ZOOM,
   anchorPoint,
@@ -68,6 +72,12 @@ import {
   placeEdgeLabel,
   projectToGraph,
   graphToSvg,
+  BOUNDARY_COLORS,
+  boundaryColorMeta,
+  boundaryFillMix,
+  boundaryStroke,
+  resolveEdgeAnchors,
+  routeOrthogonalEdges,
 } from "@spherescan/viewer";
 import { parseScanYaml } from "@spherescan/model";
 import type { CreateKind } from "@spherescan/modeler";
@@ -90,6 +100,41 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "./ui/tooltip";
+
+const RECENT_PROMPTS_KEY = "sphere.board.recentPrompts";
+const MAX_RECENT_PROMPTS = 8;
+
+function readStoredRecentPrompts(): string[] {
+  if (typeof window === "undefined") return [...seedRecentPrompts];
+  try {
+    const raw = window.localStorage.getItem(RECENT_PROMPTS_KEY);
+    if (!raw) return [...seedRecentPrompts];
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [...seedRecentPrompts];
+    const cleaned = parsed
+      .filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+      .map((item) => item.trim())
+      .slice(0, MAX_RECENT_PROMPTS);
+    return cleaned.length ? cleaned : [...seedRecentPrompts];
+  } catch {
+    return [...seedRecentPrompts];
+  }
+}
+
+function rememberRecentPrompt(previous: string[], message: string): string[] {
+  const trimmed = message.trim();
+  if (!trimmed) return previous;
+  const next = [trimmed, ...previous.filter((item) => item !== trimmed)].slice(
+    0,
+    MAX_RECENT_PROMPTS,
+  );
+  try {
+    window.localStorage.setItem(RECENT_PROMPTS_KEY, JSON.stringify(next));
+  } catch {
+    /* ignore quota / private mode */
+  }
+  return next;
+}
 
 type Point = { x: number; y: number };
 
@@ -321,6 +366,8 @@ export type BoardAiChatResult = {
   yaml?: string | null;
   suggestions?: string[];
   sessionId?: string | null;
+  /** Wall-clock generation time in seconds (BFF or client-measured). */
+  durationSec?: number;
 };
 
 export type BoardAiAttachment = {
@@ -346,7 +393,12 @@ export type BoardAiAdapter = {
     reply?: string;
     yaml: string;
   }>;
+  /** Optional STT: Sphere wires this to mesh faster-whisper. */
+  transcribeAudio?: (input: { blob: Blob; mimeType: string }) => Promise<string>;
 };
+
+const MAX_VOICE_MS = 60_000;
+const MAX_VOICE_BYTES = 10 * 1024 * 1024;
 
 export default function BoardApp({
   shell = "scan",
@@ -387,6 +439,7 @@ export default function BoardApp({
     redo,
     deleteElement,
     duplicateElement,
+    duplicateBoundary,
     createElement,
     connect,
     autoLayout,
@@ -421,6 +474,8 @@ export default function BoardApp({
   const [createKind, setCreateKind] = useState<CreateKind>("service");
   const [boundaryKind, setBoundaryKind] = useState<"trust" | "runtime">("trust");
   const [showGrid, setShowGrid] = useState(true);
+  /** Orthogonal (90°) edges with hop arcs at crossings. */
+  const [orthogonalEdges, setOrthogonalEdges] = useState(true);
   const [view, setView] = useState<"all" | "external" | "contracts" | "agents">("all");
   /** Dim non-neighbors when a node/edge is selected - reading aid for dense boards. */
   const [focusMode, setFocusMode] = useState(true);
@@ -431,18 +486,39 @@ export default function BoardApp({
   const [aiAttachments, setAiAttachments] = useState<BoardAiAttachment[]>([]);
   const [aiBusy, setAiBusy] = useState(false);
   const [aiSessionId, setAiSessionId] = useState<string | null>(null);
+  const [recording, setRecording] = useState(false);
+  const [sttBusy, setSttBusy] = useState(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const voiceChunksRef = useRef<BlobPart[]>([]);
+  const voiceMaxTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const submitAiChatRef = useRef<(override?: string) => Promise<void>>(async () => {});
   const [aiSuggestions, setAiSuggestions] = useState<string[]>(commandSuggestions);
+  const [aiRecentPrompts, setAiRecentPrompts] = useState<string[]>(seedRecentPrompts);
   const [aiMenuOpen, setAiMenuOpen] = useState(false);
   const [pendingAi, setPendingAi] = useState<{
     title: string;
     reply: string;
     yaml: string | null;
     baseYaml: string | null;
+    /** Original user prompt (for regenerate after truncation/stub). */
+    userMessage?: string;
+    attachments?: BoardAiAttachment[];
+    incomplete?: boolean;
+    /** Generation wall time in seconds. */
+    durationSec?: number;
   } | null>(null);
   const [connectFrom, setConnectFrom] = useState<{
     nodeId: string;
     portId?: string;
   } | null>(null);
+  /** World-space cursor while a connect draft is active (rubber-band preview). */
+  const [connectCursor, setConnectCursor] = useState<Point | null>(null);
+  const boardClipboard = useRef<
+    | { kind: "element"; id: string }
+    | { kind: "boundary"; id: string }
+    | null
+  >(null);
   const [yamlDragDepth, setYamlDragDepth] = useState(0);
   const [renameModal, setRenameModal] = useState<{ nodeId: string; value: string } | null>(null);
   const [boundaryRenameModal, setBoundaryRenameModal] = useState<{
@@ -526,6 +602,10 @@ export default function BoardApp({
     }
   }, [downloadYaml, onSaveDocument, modeler]);
 
+  useEffect(() => {
+    setAiRecentPrompts(readStoredRecentPrompts());
+  }, []);
+
   // Keyboard: Cmd+K palette, undo/redo, save, delete
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -540,17 +620,63 @@ export default function BoardApp({
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "d") {
         const tag = (e.target as HTMLElement)?.tagName;
         if (tag === "INPUT" || tag === "TEXTAREA") return;
-        if (!selected) return;
+        if (!selected && !selectedBoundary) return;
         e.preventDefault();
         try {
-          const id = duplicateElement(selected);
-          setSelected(id);
-          setSelectedEdge(null);
-          setSelectedBoundary(null);
-          toast.success("Duplicated");
+          if (selectedBoundary) {
+            const id = duplicateBoundary(selectedBoundary);
+            setSelectedBoundary(id);
+            setSelected(null);
+            setSelectedEdge(null);
+            toast.success("Boundary duplicated");
+          } else if (selected) {
+            const id = duplicateElement(selected);
+            setSelected(id);
+            setSelectedEdge(null);
+            setSelectedBoundary(null);
+            toast.success("Duplicated");
+          }
         } catch (err) {
           const message = err instanceof Error ? err.message : "Duplicate failed";
           toast.error("Could not duplicate", { description: message });
+        }
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "c") {
+        const tag = (e.target as HTMLElement)?.tagName;
+        if (tag === "INPUT" || tag === "TEXTAREA") return;
+        if (selectedBoundary) {
+          e.preventDefault();
+          boardClipboard.current = { kind: "boundary", id: selectedBoundary };
+          toast.message("Boundary copied", { description: "Ctrl/⌘+V to paste" });
+        } else if (selected) {
+          e.preventDefault();
+          boardClipboard.current = { kind: "element", id: selected };
+          toast.message("Copied", { description: "Ctrl/⌘+V to paste" });
+        }
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "v") {
+        const tag = (e.target as HTMLElement)?.tagName;
+        if (tag === "INPUT" || tag === "TEXTAREA") return;
+        const clip = boardClipboard.current;
+        if (!clip) return;
+        e.preventDefault();
+        try {
+          if (clip.kind === "boundary") {
+            const id = duplicateBoundary(clip.id);
+            setSelectedBoundary(id);
+            setSelected(null);
+            setSelectedEdge(null);
+            toast.success("Boundary pasted");
+          } else {
+            const id = duplicateElement(clip.id);
+            setSelected(id);
+            setSelectedBoundary(null);
+            setSelectedEdge(null);
+            toast.success("Pasted");
+          }
+        } catch (err) {
+          const message = err instanceof Error ? err.message : "Paste failed";
+          toast.error("Could not paste", { description: message });
         }
       }
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z" && !e.shiftKey) {
@@ -605,6 +731,7 @@ export default function BoardApp({
         setCtxMenu(null);
         if (tool === "connect") {
           setConnectFrom(null);
+          setConnectCursor(null);
           setTool("select");
           toast.message(connectFrom ? "Connect cancelled" : "Connect mode off");
         } else if (tool === "create" || tool === "boundary") {
@@ -612,6 +739,7 @@ export default function BoardApp({
           toast.message("Place cancelled");
         } else {
           setConnectFrom(null);
+          setConnectCursor(null);
         }
       }
     };
@@ -626,6 +754,7 @@ export default function BoardApp({
     deleteElement,
     deleteBoundary,
     duplicateElement,
+    duplicateBoundary,
     board,
     connectFrom,
     saveYaml,
@@ -636,7 +765,10 @@ export default function BoardApp({
   ]);
 
   useEffect(() => {
-    if (tool !== "connect") setConnectFrom(null);
+    if (tool !== "connect") {
+      setConnectFrom(null);
+      setConnectCursor(null);
+    }
   }, [tool]);
 
   useEffect(() => {
@@ -687,6 +819,8 @@ export default function BoardApp({
 
   const focusIds = useMemo(() => {
     if (!focusMode) return null;
+    // While wiring, keep every component fully visible — focus dimming hides valid targets.
+    if (tool === "connect" || connectFrom) return null;
     const seed = new Set<string>();
     if (selected) seed.add(selected);
     if (selectedEdge) {
@@ -712,24 +846,70 @@ export default function BoardApp({
       }
     }
     return hop;
-  }, [focusMode, selected, selectedEdge, hoverEdge, edges]);
+  }, [focusMode, selected, selectedEdge, hoverEdge, edges, tool, connectFrom]);
 
-  const edgeLabelPositions = useMemo(() => {
-    const boxes = nodes.map((n) => ({ x: n.x, y: n.y, w: n.w, h: n.h }));
-    const rough: Array<{ id: string; x: number; y: number }> = [];
+  const edgeFanById = useMemo(() => {
+    const counts = new Map<string, number>();
     for (const e of edges) {
-      if (!e.label) continue;
+      const key = `${e.from}->${e.to}`;
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    const seen = new Map<string, number>();
+    const out = new Map<string, { index: number; count: number }>();
+    for (const e of edges) {
+      const key = `${e.from}->${e.to}`;
+      const index = seen.get(key) ?? 0;
+      seen.set(key, index + 1);
+      out.set(e.id, { index, count: counts.get(key) ?? 1 });
+    }
+    return out;
+  }, [edges]);
+
+  /** Direction-based edge anchors (shared by curved + orthogonal). */
+  const edgeAnchorsById = useMemo(() => {
+    const out = new Map<
+      string,
+      { a: Point; b: Point; fromSide: "l" | "r" | "t" | "b"; toSide: "l" | "r" | "t" | "b" }
+    >();
+    for (const e of edges) {
       const from = nodeById[e.from];
       const to = nodeById[e.to];
       if (!from || !to) continue;
-      const a = anchorPoint(from, e.fromSide ?? "r");
-      const b = anchorPoint(to, e.toSide ?? "l");
+      const fan = edgeFanById.get(e.id);
+      out.set(
+        e.id,
+        resolveEdgeAnchors(
+          { x: from.x, y: from.y, w: from.w, h: from.h },
+          { x: to.x, y: to.y, w: to.w, h: to.h },
+          fan?.index ?? 0,
+          fan?.count ?? 1,
+        ),
+      );
+    }
+    return out;
+  }, [edges, nodeById, edgeFanById]);
+
+  const edgeLabelPositions = useMemo(() => {
+    const boxes = nodes.map((n) => ({ x: n.x, y: n.y, w: n.w, h: n.h }));
+    const routeMode = orthogonalEdges ? "orthogonal" : "bezier";
+    const rough: Array<{ id: string; x: number; y: number }> = [];
+    for (const e of edges) {
+      if (!e.label) continue;
+      const anchors = edgeAnchorsById.get(e.id);
+      const from = nodeById[e.from];
+      const to = nodeById[e.to];
+      if (!anchors || !from || !to) continue;
       const p = placeEdgeLabel({
-        a,
-        b,
-        aSide: e.fromSide ?? "r",
-        bSide: e.toSide ?? "l",
+        a: anchors.a,
+        b: anchors.b,
+        aSide: anchors.fromSide,
+        bSide: anchors.toSide,
         nodes: boxes,
+        mode: routeMode,
+        fromBox: from,
+        toBox: to,
+        fanIndex: edgeFanById.get(e.id)?.index,
+        fanCount: edgeFanById.get(e.id)?.count,
       });
       rough.push({ id: e.id, x: p.x, y: p.y });
     }
@@ -737,25 +917,49 @@ export default function BoardApp({
     const out = new Map<string, Point>();
     for (const e of edges) {
       if (!e.label) continue;
+      const anchors = edgeAnchorsById.get(e.id);
       const from = nodeById[e.from];
       const to = nodeById[e.to];
-      if (!from || !to) continue;
-      const a = anchorPoint(from, e.fromSide ?? "r");
-      const b = anchorPoint(to, e.toSide ?? "l");
+      if (!anchors || !from || !to) continue;
       out.set(
         e.id,
         placeEdgeLabel({
-          a,
-          b,
-          aSide: e.fromSide ?? "r",
-          bSide: e.toSide ?? "l",
+          a: anchors.a,
+          b: anchors.b,
+          aSide: anchors.fromSide,
+          bSide: anchors.toSide,
           nodes: boxes,
           stagger: stagger.get(e.id) ?? 0,
+          mode: routeMode,
+          fromBox: from,
+          toBox: to,
+          fanIndex: edgeFanById.get(e.id)?.index,
+          fanCount: edgeFanById.get(e.id)?.count,
         }),
       );
     }
     return out;
-  }, [edges, nodes, nodeById]);
+  }, [edges, nodes, nodeById, orthogonalEdges, edgeAnchorsById, edgeFanById]);
+
+  const orthogonalEdgePaths = useMemo(() => {
+    if (!orthogonalEdges) return null;
+    const routed = edges
+      .map((e) => {
+        const from = nodeById[e.from];
+        const to = nodeById[e.to];
+        if (!from || !to) return null;
+        const fan = edgeFanById.get(e.id);
+        return {
+          id: e.id,
+          from: { x: from.x, y: from.y, w: from.w, h: from.h },
+          to: { x: to.x, y: to.y, w: to.w, h: to.h },
+          fanIndex: fan?.index ?? 0,
+          fanCount: fan?.count ?? 1,
+        };
+      })
+      .filter((e): e is NonNullable<typeof e> => Boolean(e));
+    return routeOrthogonalEdges(routed);
+  }, [orthogonalEdges, edges, nodeById, edgeFanById]);
 
   // Filter based on view + optional focus neighborhood
   const dimmed = useCallback(
@@ -792,6 +996,7 @@ export default function BoardApp({
       // Node body: port-less / fallback node->node wire
       if (!connectFrom) {
         setConnectFrom({ nodeId: id });
+        setConnectCursor(clientToWorld(e.clientX, e.clientY));
         setSelected(id);
         setSelectedEdge(null);
       } else if (connectFrom.nodeId !== id) {
@@ -807,6 +1012,8 @@ export default function BoardApp({
           toast.error("Cannot connect", { description: message });
         }
         setConnectFrom(null);
+        setConnectCursor(null);
+        setTool("select");
       }
       return;
     }
@@ -828,6 +1035,7 @@ export default function BoardApp({
       if (role === "expose") {
         setTool("connect");
         setConnectFrom({ nodeId, portId });
+        setConnectCursor(null);
         setSelected(nodeId);
         setSelectedEdge(null);
         setSelectedBoundary(null);
@@ -873,6 +1081,7 @@ export default function BoardApp({
         toast.error("Cannot connect", { description: message });
       }
       setConnectFrom(null);
+      setConnectCursor(null);
       setTool("select");
       return;
     }
@@ -887,6 +1096,7 @@ export default function BoardApp({
       toast.error("Cannot connect", { description: message });
     }
     setConnectFrom(null);
+    setConnectCursor(null);
     setTool("select");
   };
 
@@ -937,6 +1147,9 @@ export default function BoardApp({
         x: e.clientX - rect.left,
         y: e.clientY - rect.top,
       };
+    }
+    if (connectFrom) {
+      setConnectCursor(clientToWorld(e.clientX, e.clientY));
     }
     if (resizingBoundary.current) {
       const r = resizingBoundary.current;
@@ -1042,7 +1255,11 @@ export default function BoardApp({
       setSelectedBoundary(null);
       setSelectedEdge(null);
       setCtxMenu(null);
-      setConnectFrom(null);
+      if (connectFrom || tool === "connect") {
+        setConnectFrom(null);
+        setConnectCursor(null);
+        setTool("select");
+      }
     }
   };
 
@@ -1160,6 +1377,7 @@ export default function BoardApp({
   const runAutoLayout = useCallback(async () => {
     if (aiAdapter?.layout) {
       setAiBusy(true);
+      const startedAt = performance.now();
       try {
         const yaml = modeler.peekYAML();
         const result = await aiAdapter.layout({ yaml });
@@ -1167,11 +1385,13 @@ export default function BoardApp({
           toast.error("Layout agent returned no YAML");
           return;
         }
+        const durationSec = Math.round((performance.now() - startedAt) / 100) / 10;
         setPendingAi({
           title: "Sphere layout proposal",
           reply: result.reply || "Repositioned diagram elements for readability.",
           yaml: result.yaml,
           baseYaml: yaml,
+          durationSec,
         });
         setAiMenuOpen(false);
         setPreview(true);
@@ -1254,9 +1474,13 @@ export default function BoardApp({
     setAiAttachments((prev) => prev.filter((item) => item.name !== name));
   }, []);
 
-  const submitAiChat = useCallback(async () => {
-    const message = prompt.trim();
+  const submitAiChat = useCallback(async (overrideMessage?: string) => {
+    const message = (overrideMessage ?? prompt).trim();
+    // Voice auto-submit passes overrideMessage while sttBusy/recording may still
+    // be true in this closure — only gate those for manual Send.
     if (!message || aiBusy) return;
+    if (overrideMessage === undefined && (sttBusy || recording)) return;
+    setAiRecentPrompts((prev) => rememberRecentPrompt(prev, message));
     if (!aiAdapter?.chat) {
       setPendingAi({
         title: previewChanges.title,
@@ -1268,6 +1492,7 @@ export default function BoardApp({
       return;
     }
     setAiBusy(true);
+    const startedAt = performance.now();
     try {
       const yaml = modeler.peekYAML();
       const selection = selected ? [selected] : undefined;
@@ -1281,13 +1506,31 @@ export default function BoardApp({
       if (result.sessionId) setAiSessionId(result.sessionId);
       // Stick to the latest turn's chips until the next user prompt.
       if (result.suggestions?.length) setAiSuggestions(result.suggestions);
+      const incomplete =
+        !result.yaml &&
+        /truncated|incomplete stub|incomplete SCAN|starting point|Regenerate/i.test(
+          result.reply || "",
+        );
+      const durationSec =
+        typeof result.durationSec === "number" && Number.isFinite(result.durationSec)
+          ? result.durationSec
+          : Math.round((performance.now() - startedAt) / 100) / 10;
       setPendingAi({
-        title: result.yaml ? "Sphere proposes diagram changes" : "Sphere reply",
+        title: result.yaml
+          ? "Sphere proposes diagram changes"
+          : incomplete
+            ? "Incomplete agent response"
+            : "Sphere reply",
         reply: result.reply || "Done.",
         yaml: result.yaml ?? null,
         baseYaml: yaml,
+        userMessage: message,
+        attachments: [...aiAttachments],
+        incomplete,
+        durationSec,
       });
-      setAiAttachments([]);
+      // Keep attachments when incomplete so Regenerate can resend the image.
+      if (!incomplete) setAiAttachments([]);
       setPrompt("");
       setAiMenuOpen(false);
       setPreview(true);
@@ -1303,7 +1546,142 @@ export default function BoardApp({
     } finally {
       setAiBusy(false);
     }
-  }, [aiAdapter, aiAttachments, aiBusy, aiSessionId, modeler, prompt, selected]);
+  }, [aiAdapter, aiAttachments, aiBusy, aiSessionId, modeler, prompt, recording, selected, sttBusy]);
+
+  submitAiChatRef.current = submitAiChat;
+
+  const stopVoiceCapture = useCallback(() => {
+    if (voiceMaxTimerRef.current) {
+      clearTimeout(voiceMaxTimerRef.current);
+      voiceMaxTimerRef.current = null;
+    }
+    const stream = mediaStreamRef.current;
+    mediaStreamRef.current = null;
+    stream?.getTracks().forEach((t) => t.stop());
+    mediaRecorderRef.current = null;
+    setRecording(false);
+  }, []);
+
+  const handleVoiceBlob = useCallback(
+    async (blob: Blob, mimeType: string) => {
+      const transcribe = aiAdapter?.transcribeAudio;
+      if (!transcribe) return;
+      if (blob.size <= 0) {
+        toast.error("Empty recording", { description: "Hold the mic a bit longer and try again." });
+        return;
+      }
+      if (blob.size > MAX_VOICE_BYTES) {
+        toast.error("Recording too large", {
+          description: `Keep clips under ${Math.round(MAX_VOICE_BYTES / (1024 * 1024))} MB.`,
+        });
+        return;
+      }
+      setSttBusy(true);
+      try {
+        const text = await transcribe({ blob, mimeType: mimeType || blob.type || "audio/webm" });
+        const trimmed = text.trim();
+        if (!trimmed) {
+          toast.error("Couldn't hear anything", {
+            description: "Try again closer to the microphone.",
+          });
+          return;
+        }
+        // Show transcript in the input for context, then kick off the agent.
+        setPrompt(trimmed);
+        setSttBusy(false);
+        await submitAiChatRef.current(trimmed);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Transcription failed";
+        toast.error("Voice input failed", {
+          description: msg.slice(0, 200),
+          action: {
+            label: "Copy error",
+            onClick: () => void navigator.clipboard.writeText(msg),
+          },
+        });
+      } finally {
+        setSttBusy(false);
+      }
+    },
+    [aiAdapter],
+  );
+
+  const toggleVoiceInput = useCallback(async () => {
+    if (!aiAdapter?.transcribeAudio || aiBusy || sttBusy) return;
+
+    const active = mediaRecorderRef.current;
+    if (active && active.state !== "inactive") {
+      active.stop();
+      return;
+    }
+
+    if (typeof MediaRecorder === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+      toast.error("Microphone not supported in this browser");
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaStreamRef.current = stream;
+      voiceChunksRef.current = [];
+
+      const preferred = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"];
+      const mimeType = preferred.find((t) => MediaRecorder.isTypeSupported(t)) ?? "";
+      const recorder = mimeType
+        ? new MediaRecorder(stream, { mimeType })
+        : new MediaRecorder(stream);
+      mediaRecorderRef.current = recorder;
+
+      recorder.ondataavailable = (ev) => {
+        if (ev.data.size > 0) voiceChunksRef.current.push(ev.data);
+      };
+      recorder.onerror = () => {
+        stopVoiceCapture();
+        toast.error("Recording failed");
+      };
+      recorder.onstop = () => {
+        const type = recorder.mimeType || mimeType || "audio/webm";
+        const blob = new Blob(voiceChunksRef.current, { type });
+        voiceChunksRef.current = [];
+        stopVoiceCapture();
+        void handleVoiceBlob(blob, type);
+      };
+
+      recorder.start();
+      setRecording(true);
+      voiceMaxTimerRef.current = setTimeout(() => {
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+          mediaRecorderRef.current.stop();
+        }
+      }, MAX_VOICE_MS);
+    } catch (err) {
+      stopVoiceCapture();
+      const msg = err instanceof Error ? err.message : "Microphone permission denied";
+      toast.error("Microphone unavailable", { description: msg.slice(0, 160) });
+    }
+  }, [aiAdapter, aiBusy, handleVoiceBlob, stopVoiceCapture, sttBusy]);
+
+  useEffect(() => {
+    return () => {
+      if (voiceMaxTimerRef.current) clearTimeout(voiceMaxTimerRef.current);
+      const recorder = mediaRecorderRef.current;
+      if (recorder) {
+        recorder.ondataavailable = null;
+        recorder.onerror = null;
+        recorder.onstop = null;
+        if (recorder.state !== "inactive") {
+          try {
+            recorder.stop();
+          } catch {
+            /* ignore */
+          }
+        }
+      }
+      mediaStreamRef.current?.getTracks().forEach((t) => t.stop());
+      mediaRecorderRef.current = null;
+      mediaStreamRef.current = null;
+    };
+  }, []);
 
   const applyPendingAi = useCallback(async () => {
     const yaml = pendingAi?.yaml;
@@ -1314,6 +1692,8 @@ export default function BoardApp({
       return;
     }
     try {
+      // Fail fast with the same checks as the diagram preview.
+      parseScanYaml(yaml);
       await loadYamlText(yaml);
       requestAnimationFrame(() => fitContent());
       setPreview(false);
@@ -1332,6 +1712,95 @@ export default function BoardApp({
       });
     }
   }, [fitContent, loadYamlText, pendingAi]);
+
+  const regenerateAiFix = useCallback(
+    async (validationError: string) => {
+      if (aiBusy) return;
+      if (!aiAdapter?.chat) {
+        toast.error("AI adapter unavailable");
+        return;
+      }
+      const baseYaml = pendingAi?.baseYaml ?? modeler.peekYAML();
+      const brokenYaml = pendingAi?.yaml?.trim() ?? "";
+      const prior = (pendingAi?.userMessage ?? "").trim();
+      const attachments = pendingAi?.attachments?.length
+        ? pendingAi.attachments
+        : aiAttachments;
+      const message = brokenYaml
+        ? [
+            "The SCAN YAML you proposed failed validation and cannot be previewed or applied.",
+            `Validation errors: ${validationError}`,
+            "",
+            "Return a corrected **complete** document. Prefer JSON with `yaml: null` plus a separate ```yaml fence.",
+            "Fix schema issues; preserve intended architecture and ids when possible.",
+            "Every component/external_system/channel/agent/repository needs a string `name`.",
+            "",
+            "Invalid YAML to fix:",
+            "```yaml",
+            brokenYaml.slice(0, 14000),
+            "```",
+          ].join("\n")
+        : [
+            "Your previous response was incomplete or truncated. Return the **full** SCAN diagram now.",
+            prior ? `Original user request:\n${prior}` : "",
+            validationError ? `Context: ${validationError}` : "",
+            "Prefer JSON metadata (`yaml: null`) plus a separate ```yaml fence with the complete document.",
+            "Include all boundaries, components, and main connections from any attached image. No stubs.",
+          ]
+            .filter(Boolean)
+            .join("\n\n");
+
+      setAiBusy(true);
+      const startedAt = performance.now();
+      try {
+        const result = await aiAdapter.chat({
+          message,
+          yaml: baseYaml,
+          sessionId: aiSessionId,
+          attachments,
+        });
+        if (result.sessionId) setAiSessionId(result.sessionId);
+        if (result.suggestions?.length) setAiSuggestions(result.suggestions);
+        const incomplete =
+          !result.yaml &&
+          /truncated|incomplete stub|incomplete SCAN|starting point|Regenerate/i.test(
+            result.reply || "",
+          );
+        const durationSec =
+          typeof result.durationSec === "number" && Number.isFinite(result.durationSec)
+            ? result.durationSec
+            : Math.round((performance.now() - startedAt) / 100) / 10;
+        setPendingAi({
+          title: result.yaml
+            ? "Sphere proposes diagram changes"
+            : incomplete
+              ? "Incomplete agent response"
+              : "Sphere reply",
+          reply: result.reply || "Regenerated.",
+          yaml: result.yaml ?? null,
+          baseYaml,
+          userMessage: prior || pendingAi?.userMessage,
+          attachments,
+          incomplete,
+          durationSec,
+        });
+        if (!incomplete) setAiAttachments([]);
+        setPreview(true);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Agent request failed";
+        toast.error("Regenerate failed", {
+          description: msg.slice(0, 200),
+          action: {
+            label: "Copy error",
+            onClick: () => void navigator.clipboard.writeText(msg),
+          },
+        });
+      } finally {
+        setAiBusy(false);
+      }
+    },
+    [aiAdapter, aiAttachments, aiBusy, aiSessionId, modeler, pendingAi],
+  );
 
   const zoomIn = () => zoomAt(zoomRef.current + 0.15, lastPointerOnCanvas.current);
   const zoomOut = () => zoomAt(zoomRef.current - 0.15, lastPointerOnCanvas.current);
@@ -1438,12 +1907,16 @@ export default function BoardApp({
         <AIBar
           prompt={prompt}
           setPrompt={setPrompt}
-          busy={aiBusy}
+          busy={aiBusy || sttBusy}
+          recording={recording}
+          voiceEnabled={Boolean(aiAdapter?.transcribeAudio)}
           suggestions={aiSuggestions}
+          recent={aiRecentPrompts}
           attachments={aiAttachments}
           menuOpen={aiMenuOpen}
           onMenuOpenChange={setAiMenuOpen}
           onSubmit={() => void submitAiChat()}
+          onToggleVoice={() => void toggleVoiceInput()}
           onAttachFiles={(files) => void attachAiFiles(files)}
           onRemoveAttachment={removeAiAttachment}
         />
@@ -1537,7 +2010,7 @@ export default function BoardApp({
                   width: 10,
                   height: 10,
                   background: "var(--surface, #fff)",
-                  border: `2px solid ${g.color === "svc" ? "var(--svc)" : "var(--agent)"}`,
+                  border: `2px solid ${boundaryStroke(g.color)}`,
                   borderRadius: 2,
                   zIndex: 6,
                   pointerEvents: "auto",
@@ -1572,11 +2045,8 @@ export default function BoardApp({
                     top: g.y,
                     width: g.w,
                     height: g.h,
-                    borderColor: g.color === "svc" ? "var(--svc)" : "var(--agent)",
-                    background:
-                      g.color === "svc"
-                        ? "color-mix(in oklab, var(--svc) 3%, transparent)"
-                        : "color-mix(in oklab, var(--agent) 3%, transparent)",
+                    borderColor: boundaryStroke(g.color),
+                    background: boundaryFillMix(g.color),
                     pointerEvents: tool === "select" ? "auto" : "none",
                     cursor: tool === "select" ? "move" : undefined,
                   }}
@@ -1586,7 +2056,7 @@ export default function BoardApp({
                     <button
                       type="button"
                       className="flex items-center gap-2 rounded-full bg-surface px-3 py-1 text-xs font-semibold hairline hover:ring-2 hover:ring-primary/20"
-                      style={{ color: g.color === "svc" ? "var(--svc)" : "var(--agent)" }}
+                      style={{ color: boundaryStroke(g.color) }}
                       onDoubleClick={(e) => {
                         e.stopPropagation();
                         setBoundaryRenameModal({ id: g.id, value: g.title });
@@ -1601,7 +2071,7 @@ export default function BoardApp({
                     >
                       <ElementIcon
                         icon={g.icon}
-                        Fallback={g.color === "svc" ? Shield : Bot}
+                        Fallback={g.kind === "runtime" ? Cpu : Shield}
                         className="h-3.5 w-3.5"
                       />
                       {g.title}
@@ -1671,8 +2141,11 @@ export default function BoardApp({
                 const from = nodeById[e.from];
                 const to = nodeById[e.to];
                 if (!from || !to) return null;
-                const a = anchorPoint(from, e.fromSide ?? "r");
-                const b = anchorPoint(to, e.toSide ?? "l");
+                const anchors = edgeAnchorsById.get(e.id);
+                const a = anchors?.a ?? anchorPoint(from, e.fromSide ?? "r");
+                const b = anchors?.b ?? anchorPoint(to, e.toSide ?? "l");
+                const fromSide = anchors?.fromSide ?? e.fromSide ?? "r";
+                const toSide = anchors?.toSide ?? e.toSide ?? "l";
                 const s = edgeStyle(e.kind);
                 const active = hoverEdge === e.id || selectedEdge === e.id;
                 const faded = edgeDimmed(e) && !active;
@@ -1682,10 +2155,13 @@ export default function BoardApp({
                     : e.kind === "async" || e.kind === "stream"
                       ? "url(#arrow-event)"
                       : "url(#arrow)";
+                const d =
+                  orthogonalEdgePaths?.get(e.id) ??
+                  edgePath(a, b, fromSide, toSide);
                 return (
                   <g key={e.id} className="pointer-events-auto">
                     <path
-                      d={edgePath(a, b, e.fromSide ?? "r", e.toSide ?? "l")}
+                      d={d}
                       stroke={s.stroke}
                       strokeWidth={active ? s.width + 1.5 : s.width}
                       strokeDasharray={s.dash}
@@ -1705,6 +2181,27 @@ export default function BoardApp({
                   </g>
                 );
               })}
+              {connectFrom &&
+                connectCursor &&
+                (() => {
+                  const from = nodeById[connectFrom.nodeId];
+                  if (!from) return null;
+                  const a = connectFrom.portId
+                    ? anchorPoint(from, "r")
+                    : { x: from.x + from.w / 2, y: from.y + from.h / 2 };
+                  return (
+                    <path
+                      d={`M ${a.x} ${a.y} L ${connectCursor.x} ${connectCursor.y}`}
+                      stroke="var(--primary)"
+                      strokeWidth={2}
+                      strokeDasharray="6 4"
+                      fill="none"
+                      opacity={0.85}
+                      markerEnd="url(#arrow)"
+                      pointerEvents="none"
+                    />
+                  );
+                })()}
             </svg>
 
             {/* EDGE LABELS */}
@@ -1849,6 +2346,14 @@ export default function BoardApp({
                   setSelected(n.id);
                   setSelectedEdge(null);
                 }}
+                onDoubleClick={(e) => {
+                  e.stopPropagation();
+                  if (tool === "connect") return;
+                  setSelected(n.id);
+                  setSelectedEdge(null);
+                  setSelectedBoundary(null);
+                  setRenameModal({ nodeId: n.id, value: n.title });
+                }}
               />
             ))}
           </div>
@@ -1886,7 +2391,7 @@ export default function BoardApp({
             <Square className="h-3.5 w-3.5 text-primary" />
             <span className="font-medium text-foreground">
               Click canvas to place{" "}
-              {boundaryKind === "trust" ? "Trust Boundary" : "Agent Runtime"}
+              {boundaryKind === "trust" ? "Trust Boundary" : "Runtime"}
             </span>
             <span className="text-muted-foreground">Esc to cancel</span>
           </div>
@@ -1899,6 +2404,8 @@ export default function BoardApp({
             setTool={setTool}
             showGrid={showGrid}
             setShowGrid={setShowGrid}
+            orthogonalEdges={orthogonalEdges}
+            setOrthogonalEdges={setOrthogonalEdges}
             onPickCreate={(kind) => {
               setCreateKind(kind);
               setTool("create");
@@ -2364,12 +2871,17 @@ export default function BoardApp({
             yaml={pendingAi?.yaml ?? null}
             baseYaml={pendingAi?.baseYaml ?? null}
             hasYaml={Boolean(pendingAi?.yaml)}
+            incomplete={Boolean(pendingAi?.incomplete)}
+            durationSec={pendingAi?.durationSec}
+            busy={aiBusy}
             onCancel={() => {
+              if (aiBusy) return;
               setPreview(false);
               setPendingAi(null);
               setAiMenuOpen(false);
             }}
             onApply={() => void applyPendingAi()}
+            onRegenerate={(error) => void regenerateAiFix(error)}
           />
         )}
         {isSphere && palette && (
@@ -2621,7 +3133,11 @@ function AIBar({
   setPrompt,
   onSubmit,
   busy = false,
+  recording = false,
+  voiceEnabled = false,
+  onToggleVoice,
   suggestions,
+  recent,
   attachments,
   onAttachFiles,
   onRemoveAttachment,
@@ -2632,7 +3148,11 @@ function AIBar({
   setPrompt: (v: string) => void;
   onSubmit: () => void;
   busy?: boolean;
+  recording?: boolean;
+  voiceEnabled?: boolean;
+  onToggleVoice?: () => void;
   suggestions: string[];
+  recent: string[];
   attachments: BoardAiAttachment[];
   onAttachFiles: (files: FileList | null) => void;
   onRemoveAttachment: (name: string) => void;
@@ -2641,6 +3161,14 @@ function AIBar({
 }) {
   const attachInputRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const inputLocked = busy || recording;
+  const voiceLabel = !voiceEnabled
+    ? "Voice input unavailable"
+    : recording
+      ? "Stop recording"
+      : busy
+        ? "Voice input busy"
+        : "Voice input";
   return (
     <div className="relative z-30 border-b border-border bg-surface/80 backdrop-blur">
       <div className={`mx-auto flex w-full max-w-5xl items-center gap-2 px-4 ${attachments.length ? "pb-10 pt-3" : "py-3"}`}>
@@ -2654,7 +3182,7 @@ function AIBar({
             onFocus={() => onMenuOpenChange(true)}
             onBlur={() => setTimeout(() => onMenuOpenChange(false), 150)}
             onKeyDown={(e) => {
-              if (e.key === "Enter" && prompt.trim() && !busy) {
+              if (e.key === "Enter" && prompt.trim() && !inputLocked) {
                 onMenuOpenChange(false);
                 inputRef.current?.blur();
                 onSubmit();
@@ -2664,11 +3192,19 @@ function AIBar({
                 inputRef.current?.blur();
               }
             }}
-            disabled={busy}
-            placeholder="Ask Sphere to design or modify this architecture..."
+            disabled={inputLocked}
+            placeholder={
+              recording
+                ? "Listening… click the mic to stop"
+                : "Ask Sphere to design or modify this architecture..."
+            }
             className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground disabled:opacity-60"
           />
-          <IconBtn label="Attach reference" onClick={() => attachInputRef.current?.click()}>
+          <IconBtn
+            label="Attach reference"
+            onClick={() => attachInputRef.current?.click()}
+            disabled={inputLocked}
+          >
             <Paperclip className="h-4 w-4" />
           </IconBtn>
           <input
@@ -2682,21 +3218,23 @@ function AIBar({
               e.target.value = "";
             }}
           />
-          <IconBtn label="Voice input">
-            <Mic className="h-4 w-4" />
+          <IconBtn
+            label={voiceLabel}
+            onClick={onToggleVoice}
+            active={recording}
+            danger={recording}
+            disabled={!voiceEnabled || (busy && !recording)}
+          >
+            <Mic className={`h-4 w-4 ${recording ? "text-red-500" : ""}`} />
           </IconBtn>
-          <label className="flex cursor-pointer items-center gap-1.5 rounded-md bg-muted px-2 py-1 text-[10px] font-medium">
-            <input type="checkbox" defaultChecked className="h-3 w-3 accent-primary" />
-            Preview changes
-          </label>
           <button
             onClick={() => {
-              if (!prompt.trim() || busy) return;
+              if (!prompt.trim() || inputLocked) return;
               onMenuOpenChange(false);
               inputRef.current?.blur();
               onSubmit();
             }}
-            disabled={busy || !prompt.trim()}
+            disabled={inputLocked || !prompt.trim()}
             className="ml-1 flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
           >
             <Send className="h-3.5 w-3.5" /> {busy ? "Thinking…" : "Send"}
@@ -2739,16 +3277,20 @@ function AIBar({
                 Recent
               </div>
               <div className="pb-2">
-                {recentPrompts.map((s) => (
-                  <button
-                    key={s}
-                    onMouseDown={() => setPrompt(s)}
-                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-muted-foreground hover:bg-muted"
-                  >
-                    <HistoryIcon className="h-3.5 w-3.5" />
-                    {s}
-                  </button>
-                ))}
+                {recent.length === 0 ? (
+                  <div className="px-3 py-2 text-xs text-muted-foreground">No recent prompts yet</div>
+                ) : (
+                  recent.map((s) => (
+                    <button
+                      key={s}
+                      onMouseDown={() => setPrompt(s)}
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-muted-foreground hover:bg-muted"
+                    >
+                      <HistoryIcon className="h-3.5 w-3.5 shrink-0" />
+                      <span className="truncate">{s}</span>
+                    </button>
+                  ))
+                )}
               </div>
             </div>
           )}
@@ -3060,6 +3602,7 @@ function NodeCard({
   onContextMenu,
   onPortPointerDown,
   onClick,
+  onDoubleClick,
 }: {
   node: SphereNode;
   selected: boolean;
@@ -3076,6 +3619,7 @@ function NodeCard({
     role: "expose" | "consume",
   ) => void;
   onClick: (e: React.MouseEvent) => void;
+  onDoubleClick?: (e: React.MouseEvent) => void;
 }) {
   const meta = kindMeta[node.kind];
   const isDb = node.kind === "database";
@@ -3091,6 +3635,7 @@ function NodeCard({
       onPointerDown={onPointerDown}
       onContextMenu={onContextMenu}
       onClick={onClick}
+      onDoubleClick={onDoubleClick}
     >
       {isDb && (
         <DbCylinder
@@ -3314,6 +3859,7 @@ function Inspector({
       tag?: string | null;
       kind?: "trust" | "runtime";
       icon?: string | null;
+      color?: BoundaryColor | null;
     },
   ) => void;
   onUpdateElementIcon: (id: string, icon: string | null) => void;
@@ -3397,6 +3943,7 @@ function BoundaryInspector({
       tag?: string | null;
       kind?: "trust" | "runtime";
       icon?: string | null;
+      color?: BoundaryColor | null;
     },
   ) => void;
   onDelete: (id: string) => void;
@@ -3423,9 +3970,9 @@ function BoundaryInspector({
     (tag.trim() || undefined) !== (group.tag || undefined) ||
     kind !== (group.kind ?? "trust");
 
-  const Fallback = kind === "runtime" ? Bot : Shield;
-  const soft = kind === "runtime" ? "bg-agent-soft" : "bg-svc-soft";
-  const color = kind === "runtime" ? "text-agent" : "text-svc";
+  const Fallback = kind === "runtime" ? Cpu : Shield;
+  const softClass = kind === "runtime" ? "bg-muted" : "bg-svc-soft";
+  const colorClass = kind === "runtime" ? "text-muted-foreground" : "text-svc";
 
   return (
     <div className="flex-1 overflow-auto">
@@ -3435,12 +3982,12 @@ function BoundaryInspector({
             type="button"
             title="Change icon"
             onClick={() => setIconOpen(true)}
-            className={`grid h-10 w-10 place-items-center rounded-lg ring-offset-2 transition hover:ring-2 hover:ring-primary/30 ${soft}`}
+            className={`grid h-10 w-10 place-items-center rounded-lg ring-offset-2 transition hover:ring-2 hover:ring-primary/30 ${softClass}`}
           >
             <ElementIcon
               icon={group.icon}
               Fallback={Fallback}
-              className={`h-5 w-5 ${color}`}
+              className={`h-5 w-5 ${colorClass}`}
             />
           </button>
           <div className="min-w-0 flex-1">
@@ -3487,6 +4034,34 @@ function BoundaryInspector({
               </button>
             ))}
           </div>
+        </Section>
+
+        <Section title="Color">
+          <div className="flex flex-wrap gap-2">
+            {BOUNDARY_COLORS.map((token) => {
+              const meta = boundaryColorMeta[token];
+              const selected = group.color === token;
+              return (
+                <button
+                  key={token}
+                  type="button"
+                  title={meta.label}
+                  aria-label={meta.label}
+                  aria-pressed={selected}
+                  onClick={() => onUpdate(group.id, { color: token })}
+                  className={`h-7 w-7 rounded-full transition ${
+                    selected
+                      ? "ring-2 ring-foreground ring-offset-2 ring-offset-background"
+                      : "hover:scale-110"
+                  }`}
+                  style={{ backgroundColor: meta.hex }}
+                />
+              );
+            })}
+          </div>
+          <p className="mt-1.5 text-[10px] text-muted-foreground">
+            {boundaryColorMeta[group.color].label}
+          </p>
         </Section>
 
         <Section title="Tag">
@@ -3558,8 +4133,8 @@ function BoundaryInspector({
         title="Boundary icon"
         currentIcon={group.icon}
         fallbackIcon={Fallback}
-        softClass={soft}
-        colorClass={color}
+        softClass={softClass}
+        colorClass={colorClass}
         onSave={(icon) => onUpdate(group.id, { icon })}
       />
     </div>
@@ -4086,6 +4661,8 @@ function ToolRail({
   setTool,
   showGrid,
   setShowGrid,
+  orthogonalEdges,
+  setOrthogonalEdges,
   onPickCreate,
   onPickBoundary,
 }: {
@@ -4093,6 +4670,8 @@ function ToolRail({
   setTool: (t: "select" | "pan" | "connect" | "create" | "boundary") => void;
   showGrid: boolean;
   setShowGrid: (b: boolean) => void;
+  orthogonalEdges: boolean;
+  setOrthogonalEdges: (b: boolean) => void;
   onPickCreate: (kind: CreateKind) => void;
   onPickBoundary: (kind: "trust" | "runtime") => void;
 }) {
@@ -4131,6 +4710,14 @@ function ToolRail({
         active={showGrid}
       >
         <Grid3x3 className="h-4 w-4" />
+      </IconBtn>
+      <IconBtn
+        label={orthogonalEdges ? "Curved arrows" : "Straight 90° arrows"}
+        tooltipSide="right"
+        onClick={() => setOrthogonalEdges(!orthogonalEdges)}
+        active={orthogonalEdges}
+      >
+        <Waypoints className="h-4 w-4" />
       </IconBtn>
     </div>
   );
@@ -4196,7 +4783,7 @@ function PopoverBoundary({
   const [open, setOpen] = useState(false);
   const items: { kind: "trust" | "runtime"; label: string; hint: string; Icon: typeof Shield }[] = [
     { kind: "trust", label: "Trust Boundary", hint: "Security / ownership box", Icon: Shield },
-    { kind: "runtime", label: "Agent Runtime", hint: "Runtime / execution box", Icon: Bot },
+    { kind: "runtime", label: "Runtime", hint: "Execution / deploy box for any services", Icon: Cpu },
   ];
   return (
     <div className="relative">
@@ -4225,11 +4812,11 @@ function PopoverBoundary({
             >
               <div
                 className={`grid h-6 w-6 place-items-center rounded ${
-                  it.kind === "runtime" ? "bg-agent-soft" : "bg-svc-soft"
+                  it.kind === "runtime" ? "bg-muted" : "bg-svc-soft"
                 }`}
               >
                 <it.Icon
-                  className={`h-3.5 w-3.5 ${it.kind === "runtime" ? "text-agent" : "text-svc"}`}
+                  className={`h-3.5 w-3.5 ${it.kind === "runtime" ? "text-muted-foreground" : "text-svc"}`}
                 />
               </div>
               <div className="min-w-0">
@@ -4249,6 +4836,7 @@ function IconBtn({
   label,
   onClick,
   active,
+  danger,
   variant,
   disabled,
   tooltipSide = "top",
@@ -4258,6 +4846,7 @@ function IconBtn({
   label: string;
   onClick?: () => void;
   active?: boolean;
+  danger?: boolean;
   variant?: "ghost";
   disabled?: boolean;
   tooltipSide?: "top" | "right" | "bottom" | "left";
@@ -4270,7 +4859,11 @@ function IconBtn({
       aria-label={label}
       disabled={disabled}
       className={`grid h-8 w-8 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-40 disabled:pointer-events-none ${
-        active ? "bg-primary/10 text-primary" : ""
+        active
+          ? danger
+            ? "bg-red-500/10 text-red-500"
+            : "bg-primary/10 text-primary"
+          : ""
       } ${variant === "ghost" ? "hover:bg-surface" : ""}`}
     >
       {children}
@@ -4676,8 +5269,15 @@ function formatYamlPreviewError(err: unknown): string {
   return err instanceof Error ? err.message : "Invalid SCAN YAML";
 }
 
-function ScanYamlDiagramPreview({ yaml }: { yaml: string }) {
+function ScanYamlDiagramPreview({
+  yaml,
+  error,
+}: {
+  yaml: string;
+  error: string | null;
+}) {
   const preview = useMemo(() => {
+    if (error) return { ok: false as const, error };
     try {
       const model = parseScanYaml(yaml);
       const graph = projectToGraph(model);
@@ -4688,7 +5288,7 @@ function ScanYamlDiagramPreview({ yaml }: { yaml: string }) {
     } catch (err) {
       return { ok: false as const, error: formatYamlPreviewError(err) };
     }
-  }, [yaml]);
+  }, [yaml, error]);
 
   return (
     <div className="mt-4 overflow-hidden rounded-lg border border-border bg-canvas">
@@ -4704,12 +5304,31 @@ function ScanYamlDiagramPreview({ yaml }: { yaml: string }) {
           dangerouslySetInnerHTML={{ __html: preview.svg }}
         />
       ) : (
-        <div className="px-3 py-3 text-[11px] text-muted-foreground">
-          Preview unavailable: {preview.error}
+        <div className="space-y-2 px-3 py-3">
+          <div className="flex items-start gap-2 text-[11px] text-destructive">
+            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <span>Preview unavailable: {preview.error}</span>
+          </div>
+          <p className="text-[10px] text-muted-foreground">
+            Use Regenerate to send this error back to Sphere AI for a corrected YAML.
+          </p>
         </div>
       )}
     </div>
   );
+}
+
+function validatePreviewYaml(yaml: string): string | null {
+  try {
+    const model = parseScanYaml(yaml);
+    const graph = projectToGraph(model);
+    if (!graph.nodes.length && !graph.groups.length) {
+      return "No diagram elements to preview yet.";
+    }
+    return null;
+  } catch (err) {
+    return formatYamlPreviewError(err);
+  }
 }
 
 type DiffLine = { kind: "context" | "add" | "remove"; text: string };
@@ -4791,6 +5410,7 @@ function YamlPreviewBlock({
   const hasDiff = Boolean(baseYaml?.trim()) && (added > 0 || removed > 0);
   const isTruncated = !expanded && diffLines.length > TRUNCATE_LINES;
   const visible = isTruncated ? diffLines.slice(0, TRUNCATE_LINES) : diffLines;
+  const lineDigits = Math.max(2, String(diffLines.length).length);
 
   const copyYaml = () => {
     void navigator.clipboard.writeText(yaml).then(() => {
@@ -4825,6 +5445,7 @@ function YamlPreviewBlock({
       </div>
       <pre className="max-h-[320px] overflow-auto px-3 py-2 font-mono text-[11px] leading-relaxed">
         {visible.map((line, idx) => {
+          const lineNo = idx + 1;
           const prefix = line.kind === "add" ? "+" : line.kind === "remove" ? "-" : " ";
           const cls =
             line.kind === "add"
@@ -4833,9 +5454,18 @@ function YamlPreviewBlock({
                 ? "bg-destructive/10 text-destructive"
                 : "text-foreground";
           return (
-            <div key={`${idx}-${line.kind}-${line.text}`} className={`whitespace-pre-wrap px-1 ${cls}`}>
-              {prefix}
-              {line.text}
+            <div key={`${idx}-${line.kind}-${line.text}`} className={`flex whitespace-pre-wrap px-1 ${cls}`}>
+              <span
+                className="select-none pr-2 text-muted-foreground/80"
+                style={{ minWidth: `${lineDigits}ch`, textAlign: "right" }}
+                aria-hidden="true"
+              >
+                {lineNo}
+              </span>
+              <span>
+                {prefix}
+                {line.text}
+              </span>
             </div>
           );
         })}
@@ -4863,17 +5493,36 @@ function PreviewDrawer({
   yaml,
   baseYaml,
   hasYaml,
+  incomplete = false,
+  durationSec,
+  busy = false,
   onCancel,
   onApply,
+  onRegenerate,
 }: {
   title: string;
   reply: string;
   yaml: string | null;
   baseYaml: string | null;
   hasYaml: boolean;
+  incomplete?: boolean;
+  durationSec?: number;
+  busy?: boolean;
   onCancel: () => void;
   onApply: () => void;
+  onRegenerate: (validationError: string) => void;
 }) {
+  const previewError = useMemo(
+    () => (hasYaml && yaml ? validatePreviewYaml(yaml) : null),
+    [hasYaml, yaml],
+  );
+  const canApply = hasYaml && !previewError && !busy;
+  const showRegenerate = Boolean(previewError || incomplete);
+  const durationLabel =
+    typeof durationSec === "number" && Number.isFinite(durationSec)
+      ? `Generated in ${durationSec < 10 ? durationSec.toFixed(1) : Math.round(durationSec)}s`
+      : null;
+
   return (
     <div className="absolute inset-0 z-40 flex items-center justify-center bg-foreground/10 backdrop-blur-sm">
       <div className="w-[680px] overflow-hidden rounded-2xl border border-border bg-surface node-shadow-lg">
@@ -4884,12 +5533,20 @@ function PreviewDrawer({
           <div className="flex-1">
             <div className="text-sm font-semibold">{title}</div>
             <div className="text-[11px] text-muted-foreground">
-              {hasYaml
-                ? "Preview before applying to the architecture board"
-                : "Reply only — no diagram changes proposed"}
+              {incomplete && !hasYaml
+                ? "Incomplete or truncated response — regenerate for the full diagram"
+                : hasYaml
+                  ? previewError
+                    ? "YAML has validation issues — regenerate to fix"
+                    : "Preview before applying to the architecture board"
+                  : "Reply only — no diagram changes proposed"}
             </div>
           </div>
-          <button onClick={onCancel} className="rounded-md p-1 hover:bg-muted">
+          <button
+            onClick={onCancel}
+            disabled={busy}
+            className="rounded-md p-1 hover:bg-muted disabled:opacity-40"
+          >
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -4897,17 +5554,22 @@ function PreviewDrawer({
           <div className="whitespace-pre-wrap rounded-lg border border-border bg-muted/40 px-3 py-3 text-sm leading-relaxed text-foreground">
             {reply || "No message."}
           </div>
+          {durationLabel ? (
+            <div className="mt-1.5 text-[11px] text-muted-foreground">{durationLabel}</div>
+          ) : null}
           {hasYaml && yaml ? (
             <>
-              <ScanYamlDiagramPreview yaml={yaml} />
+              <ScanYamlDiagramPreview yaml={yaml} error={previewError} />
               <YamlPreviewBlock yaml={yaml} baseYaml={baseYaml} />
             </>
           ) : (
             <div className="mt-4 rounded-lg bg-muted p-3 text-[11px] text-muted-foreground">
-              No YAML was returned. Ask Sphere to add or change architecture elements to get an applyable proposal.
+              {incomplete
+                ? "No complete YAML was returned. Use Regenerate to retry with the same prompt and attachments."
+                : "No YAML was returned. Ask Sphere to add or change architecture elements to get an applyable proposal."}
             </div>
           )}
-          {hasYaml && (
+          {hasYaml && !previewError && (
             <div className="mt-3 rounded-lg bg-ok-soft/40 border border-ok/30 p-3 text-[11px] text-muted-foreground">
               Applying will replace the current board document with the agent YAML (undo with Ctrl+Z after load via a new history root).
             </div>
@@ -4915,18 +5577,46 @@ function PreviewDrawer({
         </div>
         <div className="flex items-center justify-between border-t border-border px-5 py-3">
           <span className="text-[11px] text-muted-foreground">
-            {hasYaml ? "SCAN YAML ready" : "Chat only"}
+            {busy
+              ? "Regenerating…"
+              : previewError
+                ? "Validation failed"
+                : incomplete
+                  ? "Incomplete response"
+                  : hasYaml
+                    ? "SCAN YAML ready"
+                    : "Chat only"}
           </span>
           <div className="flex items-center gap-2">
             <button
               onClick={onCancel}
-              className="rounded-lg border border-border bg-surface px-3 py-1.5 text-xs font-medium hover:bg-muted"
+              disabled={busy}
+              className="rounded-lg border border-border bg-surface px-3 py-1.5 text-xs font-medium hover:bg-muted disabled:opacity-40"
             >
               Cancel
             </button>
+            {showRegenerate && (
+              <button
+                onClick={() =>
+                  onRegenerate(
+                    previewError ??
+                      "Previous response was truncated or incomplete — return the full SCAN document.",
+                  )
+                }
+                disabled={busy}
+                className="flex items-center gap-1.5 rounded-lg border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/15 disabled:opacity-40"
+              >
+                {busy ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-3.5 w-3.5" />
+                )}
+                {busy ? "Fixing…" : "Regenerate"}
+              </button>
+            )}
             <button
               onClick={onApply}
-              disabled={!hasYaml}
+              disabled={!canApply}
               className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:opacity-90 disabled:opacity-40"
             >
               <Check className="h-3.5 w-3.5" /> Apply changes
@@ -4948,7 +5638,12 @@ function CommandPalette({
   onCreateComponent: (kind: CreateKind) => void;
 }) {
   const [q, setQ] = useState("");
-  const componentItems: Array<{ icon: typeof Leaf; label: string; meta: string; kind: CreateKind }> = [
+  type PaletteIcon = React.ComponentType<{ className?: string }>;
+  type PaletteItem =
+    | { icon: PaletteIcon; label: string; meta: string; kind: CreateKind }
+    | { icon: PaletteIcon; label: string; meta?: undefined; kind?: undefined };
+
+  const componentItems: PaletteItem[] = [
     { icon: Leaf, label: "Service", meta: "Spring Boot / API", kind: "service" },
     { icon: DbIcon, label: "Datastore", meta: "PostgreSQL / MySQL", kind: "datastore" },
     { icon: Radio, label: "Event / Stream", meta: "Kafka / Queue / Topic", kind: "event-stream" },
@@ -4957,7 +5652,7 @@ function CommandPalette({
     { icon: Github, label: "Repository", meta: "Code / Contracts", kind: "repository" },
     { icon: ExternalLink, label: "External System", meta: "3rd party dependency", kind: "external-system" },
   ];
-  const groups = [
+  const groups: Array<{ title: string; items: PaletteItem[] }> = [
     {
       title: "Components",
       items: componentItems,
@@ -4987,7 +5682,7 @@ function CommandPalette({
       ...group,
       items: group.items.filter((item) => {
         if (!query) return true;
-        const meta = "meta" in item && item.meta ? item.meta : "";
+        const meta = item.meta ?? "";
         return `${group.title} ${item.label} ${meta}`.toLowerCase().includes(query);
       }),
     }))
@@ -5019,7 +5714,7 @@ function CommandPalette({
                 <button
                   key={it.label}
                   onClick={() => {
-                    if ("kind" in it) {
+                    if (it.kind) {
                       onCreateComponent(it.kind);
                       return;
                     }
@@ -5031,9 +5726,9 @@ function CommandPalette({
                     <it.icon className="h-3.5 w-3.5" />
                   </div>
                   <span className="flex-1">{it.label}</span>
-                  {"meta" in it && it.meta && (
+                  {it.meta ? (
                     <span className="text-[10px] text-muted-foreground">{it.meta}</span>
-                  )}
+                  ) : null}
                 </button>
               ))}
             </div>

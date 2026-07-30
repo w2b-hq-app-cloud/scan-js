@@ -288,6 +288,30 @@ export class Modeling {
         this.replace(next, prev, `Duplicate ${id}`);
         return newId;
     }
+    /**
+     * Clone a trust/runtime boundary with a new id and offset rect.
+     * Membership is re-derived from element centers inside the new box.
+     */
+    duplicateBoundary(id, offset = { x: 40, y: 40 }) {
+        const prev = cloneModel(this.getModel());
+        const next = cloneModel(prev);
+        const view = ensureView(next, this.viewId);
+        const source = view.boundaries.find((b) => b.id === id);
+        if (!source)
+            throw new Error(`Boundary not found: ${id}`);
+        const newId = createId(source.kind === "runtime" ? "runtime" : "trust");
+        view.boundaries.push({
+            ...structuredClone(source),
+            id: newId,
+            label: duplicateName(source.label),
+            members: [],
+            x: source.x + offset.x,
+            y: source.y + offset.y,
+        });
+        syncBoundaryMembership(view);
+        this.replace(next, prev, `Duplicate boundary ${id}`);
+        return newId;
+    }
     deleteConnection(connectionId) {
         const prev = cloneModel(this.getModel());
         const next = cloneModel(prev);
@@ -423,7 +447,7 @@ export class Modeling {
         const box = clampRect(rect);
         view.boundaries.push({
             id,
-            label: label ?? (kind === "runtime" ? "Agent Runtime" : "Trust Boundary"),
+            label: label ?? (kind === "runtime" ? "Runtime" : "Trust Boundary"),
             tag: kind === "trust" ? "Trust Boundary" : undefined,
             kind,
             members: [],
@@ -481,6 +505,12 @@ export class Modeling {
                 delete boundary.icon;
             else
                 boundary.icon = icon;
+        }
+        if ("color" in patch) {
+            if (!patch.color)
+                delete boundary.color;
+            else
+                boundary.color = patch.color;
         }
         this.replace(next, prev, `Update boundary ${id}`);
     }
@@ -612,6 +642,9 @@ export class Modeling {
             boundary.h = box.h;
             boundary.members = [...box.members];
         }
+        // Drop empty shells left out of the pack (or emptied by exclusive assignment).
+        const packedIds = new Set(planned.boundaries.map((b) => b.id));
+        view.boundaries = view.boundaries.filter((b) => packedIds.has(b.id));
         for (const side of planned.connectionSides) {
             const conn = next.connections.find((c) => c.id === side.id);
             if (!conn)
@@ -648,7 +681,7 @@ export class Modeling {
             toPort: options?.toPort,
         };
         next.connections.push(connection);
-        this.replace(next, prev, `Connect ${fromId} â†’ ${toId}`);
+        this.replace(next, prev, `Connect ${fromId} -> ${toId}`);
         return id;
     }
     addPort(elementId, role, port) {

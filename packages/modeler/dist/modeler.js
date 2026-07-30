@@ -3,7 +3,7 @@ import { projectToGraph, graphToSvg, svgToPngBlob, ScanViewer, } from "@spheresc
 import { CommandStack } from "./command-stack.js";
 import { Modeling } from "./modeling.js";
 /**
- * SCAN modeler â€” owns the canonical model, command stack, and projection.
+ * SCAN modeler - owns the canonical model, command stack, and projection.
  * Optional container enables embeddable snapshot rendering via ScanViewer.
  */
 export class ScanModeler {
