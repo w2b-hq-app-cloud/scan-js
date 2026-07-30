@@ -366,6 +366,8 @@ export type BoardAiChatResult = {
   yaml?: string | null;
   suggestions?: string[];
   sessionId?: string | null;
+  /** Wall-clock generation time in seconds (BFF or client-measured). */
+  durationSec?: number;
 };
 
 export type BoardAiAttachment = {
@@ -391,7 +393,12 @@ export type BoardAiAdapter = {
     reply?: string;
     yaml: string;
   }>;
+  /** Optional STT: Sphere wires this to mesh faster-whisper. */
+  transcribeAudio?: (input: { blob: Blob; mimeType: string }) => Promise<string>;
 };
+
+const MAX_VOICE_MS = 60_000;
+const MAX_VOICE_BYTES = 10 * 1024 * 1024;
 
 export default function BoardApp({
   shell = "scan",
@@ -479,6 +486,13 @@ export default function BoardApp({
   const [aiAttachments, setAiAttachments] = useState<BoardAiAttachment[]>([]);
   const [aiBusy, setAiBusy] = useState(false);
   const [aiSessionId, setAiSessionId] = useState<string | null>(null);
+  const [recording, setRecording] = useState(false);
+  const [sttBusy, setSttBusy] = useState(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const voiceChunksRef = useRef<BlobPart[]>([]);
+  const voiceMaxTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const submitAiChatRef = useRef<(override?: string) => Promise<void>>(async () => {});
   const [aiSuggestions, setAiSuggestions] = useState<string[]>(commandSuggestions);
   const [aiRecentPrompts, setAiRecentPrompts] = useState<string[]>(seedRecentPrompts);
   const [aiMenuOpen, setAiMenuOpen] = useState(false);
@@ -491,6 +505,8 @@ export default function BoardApp({
     userMessage?: string;
     attachments?: BoardAiAttachment[];
     incomplete?: boolean;
+    /** Generation wall time in seconds. */
+    durationSec?: number;
   } | null>(null);
   const [connectFrom, setConnectFrom] = useState<{
     nodeId: string;
@@ -1361,6 +1377,7 @@ export default function BoardApp({
   const runAutoLayout = useCallback(async () => {
     if (aiAdapter?.layout) {
       setAiBusy(true);
+      const startedAt = performance.now();
       try {
         const yaml = modeler.peekYAML();
         const result = await aiAdapter.layout({ yaml });
@@ -1368,11 +1385,13 @@ export default function BoardApp({
           toast.error("Layout agent returned no YAML");
           return;
         }
+        const durationSec = Math.round((performance.now() - startedAt) / 100) / 10;
         setPendingAi({
           title: "Sphere layout proposal",
           reply: result.reply || "Repositioned diagram elements for readability.",
           yaml: result.yaml,
           baseYaml: yaml,
+          durationSec,
         });
         setAiMenuOpen(false);
         setPreview(true);
@@ -1455,9 +1474,12 @@ export default function BoardApp({
     setAiAttachments((prev) => prev.filter((item) => item.name !== name));
   }, []);
 
-  const submitAiChat = useCallback(async () => {
-    const message = prompt.trim();
+  const submitAiChat = useCallback(async (overrideMessage?: string) => {
+    const message = (overrideMessage ?? prompt).trim();
+    // Voice auto-submit passes overrideMessage while sttBusy/recording may still
+    // be true in this closure — only gate those for manual Send.
     if (!message || aiBusy) return;
+    if (overrideMessage === undefined && (sttBusy || recording)) return;
     setAiRecentPrompts((prev) => rememberRecentPrompt(prev, message));
     if (!aiAdapter?.chat) {
       setPendingAi({
@@ -1470,6 +1492,7 @@ export default function BoardApp({
       return;
     }
     setAiBusy(true);
+    const startedAt = performance.now();
     try {
       const yaml = modeler.peekYAML();
       const selection = selected ? [selected] : undefined;
@@ -1488,6 +1511,10 @@ export default function BoardApp({
         /truncated|incomplete stub|incomplete SCAN|starting point|Regenerate/i.test(
           result.reply || "",
         );
+      const durationSec =
+        typeof result.durationSec === "number" && Number.isFinite(result.durationSec)
+          ? result.durationSec
+          : Math.round((performance.now() - startedAt) / 100) / 10;
       setPendingAi({
         title: result.yaml
           ? "Sphere proposes diagram changes"
@@ -1500,6 +1527,7 @@ export default function BoardApp({
         userMessage: message,
         attachments: [...aiAttachments],
         incomplete,
+        durationSec,
       });
       // Keep attachments when incomplete so Regenerate can resend the image.
       if (!incomplete) setAiAttachments([]);
@@ -1518,7 +1546,142 @@ export default function BoardApp({
     } finally {
       setAiBusy(false);
     }
-  }, [aiAdapter, aiAttachments, aiBusy, aiSessionId, modeler, prompt, selected]);
+  }, [aiAdapter, aiAttachments, aiBusy, aiSessionId, modeler, prompt, recording, selected, sttBusy]);
+
+  submitAiChatRef.current = submitAiChat;
+
+  const stopVoiceCapture = useCallback(() => {
+    if (voiceMaxTimerRef.current) {
+      clearTimeout(voiceMaxTimerRef.current);
+      voiceMaxTimerRef.current = null;
+    }
+    const stream = mediaStreamRef.current;
+    mediaStreamRef.current = null;
+    stream?.getTracks().forEach((t) => t.stop());
+    mediaRecorderRef.current = null;
+    setRecording(false);
+  }, []);
+
+  const handleVoiceBlob = useCallback(
+    async (blob: Blob, mimeType: string) => {
+      const transcribe = aiAdapter?.transcribeAudio;
+      if (!transcribe) return;
+      if (blob.size <= 0) {
+        toast.error("Empty recording", { description: "Hold the mic a bit longer and try again." });
+        return;
+      }
+      if (blob.size > MAX_VOICE_BYTES) {
+        toast.error("Recording too large", {
+          description: `Keep clips under ${Math.round(MAX_VOICE_BYTES / (1024 * 1024))} MB.`,
+        });
+        return;
+      }
+      setSttBusy(true);
+      try {
+        const text = await transcribe({ blob, mimeType: mimeType || blob.type || "audio/webm" });
+        const trimmed = text.trim();
+        if (!trimmed) {
+          toast.error("Couldn't hear anything", {
+            description: "Try again closer to the microphone.",
+          });
+          return;
+        }
+        // Show transcript in the input for context, then kick off the agent.
+        setPrompt(trimmed);
+        setSttBusy(false);
+        await submitAiChatRef.current(trimmed);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Transcription failed";
+        toast.error("Voice input failed", {
+          description: msg.slice(0, 200),
+          action: {
+            label: "Copy error",
+            onClick: () => void navigator.clipboard.writeText(msg),
+          },
+        });
+      } finally {
+        setSttBusy(false);
+      }
+    },
+    [aiAdapter],
+  );
+
+  const toggleVoiceInput = useCallback(async () => {
+    if (!aiAdapter?.transcribeAudio || aiBusy || sttBusy) return;
+
+    const active = mediaRecorderRef.current;
+    if (active && active.state !== "inactive") {
+      active.stop();
+      return;
+    }
+
+    if (typeof MediaRecorder === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+      toast.error("Microphone not supported in this browser");
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaStreamRef.current = stream;
+      voiceChunksRef.current = [];
+
+      const preferred = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"];
+      const mimeType = preferred.find((t) => MediaRecorder.isTypeSupported(t)) ?? "";
+      const recorder = mimeType
+        ? new MediaRecorder(stream, { mimeType })
+        : new MediaRecorder(stream);
+      mediaRecorderRef.current = recorder;
+
+      recorder.ondataavailable = (ev) => {
+        if (ev.data.size > 0) voiceChunksRef.current.push(ev.data);
+      };
+      recorder.onerror = () => {
+        stopVoiceCapture();
+        toast.error("Recording failed");
+      };
+      recorder.onstop = () => {
+        const type = recorder.mimeType || mimeType || "audio/webm";
+        const blob = new Blob(voiceChunksRef.current, { type });
+        voiceChunksRef.current = [];
+        stopVoiceCapture();
+        void handleVoiceBlob(blob, type);
+      };
+
+      recorder.start();
+      setRecording(true);
+      voiceMaxTimerRef.current = setTimeout(() => {
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+          mediaRecorderRef.current.stop();
+        }
+      }, MAX_VOICE_MS);
+    } catch (err) {
+      stopVoiceCapture();
+      const msg = err instanceof Error ? err.message : "Microphone permission denied";
+      toast.error("Microphone unavailable", { description: msg.slice(0, 160) });
+    }
+  }, [aiAdapter, aiBusy, handleVoiceBlob, stopVoiceCapture, sttBusy]);
+
+  useEffect(() => {
+    return () => {
+      if (voiceMaxTimerRef.current) clearTimeout(voiceMaxTimerRef.current);
+      const recorder = mediaRecorderRef.current;
+      if (recorder) {
+        recorder.ondataavailable = null;
+        recorder.onerror = null;
+        recorder.onstop = null;
+        if (recorder.state !== "inactive") {
+          try {
+            recorder.stop();
+          } catch {
+            /* ignore */
+          }
+        }
+      }
+      mediaStreamRef.current?.getTracks().forEach((t) => t.stop());
+      mediaRecorderRef.current = null;
+      mediaStreamRef.current = null;
+    };
+  }, []);
 
   const applyPendingAi = useCallback(async () => {
     const yaml = pendingAi?.yaml;
@@ -1588,6 +1751,7 @@ export default function BoardApp({
             .join("\n\n");
 
       setAiBusy(true);
+      const startedAt = performance.now();
       try {
         const result = await aiAdapter.chat({
           message,
@@ -1602,6 +1766,10 @@ export default function BoardApp({
           /truncated|incomplete stub|incomplete SCAN|starting point|Regenerate/i.test(
             result.reply || "",
           );
+        const durationSec =
+          typeof result.durationSec === "number" && Number.isFinite(result.durationSec)
+            ? result.durationSec
+            : Math.round((performance.now() - startedAt) / 100) / 10;
         setPendingAi({
           title: result.yaml
             ? "Sphere proposes diagram changes"
@@ -1614,6 +1782,7 @@ export default function BoardApp({
           userMessage: prior || pendingAi?.userMessage,
           attachments,
           incomplete,
+          durationSec,
         });
         if (!incomplete) setAiAttachments([]);
         setPreview(true);
@@ -1738,13 +1907,16 @@ export default function BoardApp({
         <AIBar
           prompt={prompt}
           setPrompt={setPrompt}
-          busy={aiBusy}
+          busy={aiBusy || sttBusy}
+          recording={recording}
+          voiceEnabled={Boolean(aiAdapter?.transcribeAudio)}
           suggestions={aiSuggestions}
           recent={aiRecentPrompts}
           attachments={aiAttachments}
           menuOpen={aiMenuOpen}
           onMenuOpenChange={setAiMenuOpen}
           onSubmit={() => void submitAiChat()}
+          onToggleVoice={() => void toggleVoiceInput()}
           onAttachFiles={(files) => void attachAiFiles(files)}
           onRemoveAttachment={removeAiAttachment}
         />
@@ -2700,6 +2872,7 @@ export default function BoardApp({
             baseYaml={pendingAi?.baseYaml ?? null}
             hasYaml={Boolean(pendingAi?.yaml)}
             incomplete={Boolean(pendingAi?.incomplete)}
+            durationSec={pendingAi?.durationSec}
             busy={aiBusy}
             onCancel={() => {
               if (aiBusy) return;
@@ -2960,6 +3133,9 @@ function AIBar({
   setPrompt,
   onSubmit,
   busy = false,
+  recording = false,
+  voiceEnabled = false,
+  onToggleVoice,
   suggestions,
   recent,
   attachments,
@@ -2972,6 +3148,9 @@ function AIBar({
   setPrompt: (v: string) => void;
   onSubmit: () => void;
   busy?: boolean;
+  recording?: boolean;
+  voiceEnabled?: boolean;
+  onToggleVoice?: () => void;
   suggestions: string[];
   recent: string[];
   attachments: BoardAiAttachment[];
@@ -2982,6 +3161,14 @@ function AIBar({
 }) {
   const attachInputRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const inputLocked = busy || recording;
+  const voiceLabel = !voiceEnabled
+    ? "Voice input unavailable"
+    : recording
+      ? "Stop recording"
+      : busy
+        ? "Voice input busy"
+        : "Voice input";
   return (
     <div className="relative z-30 border-b border-border bg-surface/80 backdrop-blur">
       <div className={`mx-auto flex w-full max-w-5xl items-center gap-2 px-4 ${attachments.length ? "pb-10 pt-3" : "py-3"}`}>
@@ -2995,7 +3182,7 @@ function AIBar({
             onFocus={() => onMenuOpenChange(true)}
             onBlur={() => setTimeout(() => onMenuOpenChange(false), 150)}
             onKeyDown={(e) => {
-              if (e.key === "Enter" && prompt.trim() && !busy) {
+              if (e.key === "Enter" && prompt.trim() && !inputLocked) {
                 onMenuOpenChange(false);
                 inputRef.current?.blur();
                 onSubmit();
@@ -3005,11 +3192,19 @@ function AIBar({
                 inputRef.current?.blur();
               }
             }}
-            disabled={busy}
-            placeholder="Ask Sphere to design or modify this architecture..."
+            disabled={inputLocked}
+            placeholder={
+              recording
+                ? "Listening… click the mic to stop"
+                : "Ask Sphere to design or modify this architecture..."
+            }
             className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground disabled:opacity-60"
           />
-          <IconBtn label="Attach reference" onClick={() => attachInputRef.current?.click()}>
+          <IconBtn
+            label="Attach reference"
+            onClick={() => attachInputRef.current?.click()}
+            disabled={inputLocked}
+          >
             <Paperclip className="h-4 w-4" />
           </IconBtn>
           <input
@@ -3023,17 +3218,23 @@ function AIBar({
               e.target.value = "";
             }}
           />
-          <IconBtn label="Voice input">
-            <Mic className="h-4 w-4" />
+          <IconBtn
+            label={voiceLabel}
+            onClick={onToggleVoice}
+            active={recording}
+            danger={recording}
+            disabled={!voiceEnabled || (busy && !recording)}
+          >
+            <Mic className={`h-4 w-4 ${recording ? "text-red-500" : ""}`} />
           </IconBtn>
           <button
             onClick={() => {
-              if (!prompt.trim() || busy) return;
+              if (!prompt.trim() || inputLocked) return;
               onMenuOpenChange(false);
               inputRef.current?.blur();
               onSubmit();
             }}
-            disabled={busy || !prompt.trim()}
+            disabled={inputLocked || !prompt.trim()}
             className="ml-1 flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
           >
             <Send className="h-3.5 w-3.5" /> {busy ? "Thinking…" : "Send"}
@@ -4635,6 +4836,7 @@ function IconBtn({
   label,
   onClick,
   active,
+  danger,
   variant,
   disabled,
   tooltipSide = "top",
@@ -4644,6 +4846,7 @@ function IconBtn({
   label: string;
   onClick?: () => void;
   active?: boolean;
+  danger?: boolean;
   variant?: "ghost";
   disabled?: boolean;
   tooltipSide?: "top" | "right" | "bottom" | "left";
@@ -4656,7 +4859,11 @@ function IconBtn({
       aria-label={label}
       disabled={disabled}
       className={`grid h-8 w-8 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-40 disabled:pointer-events-none ${
-        active ? "bg-primary/10 text-primary" : ""
+        active
+          ? danger
+            ? "bg-red-500/10 text-red-500"
+            : "bg-primary/10 text-primary"
+          : ""
       } ${variant === "ghost" ? "hover:bg-surface" : ""}`}
     >
       {children}
@@ -5287,6 +5494,7 @@ function PreviewDrawer({
   baseYaml,
   hasYaml,
   incomplete = false,
+  durationSec,
   busy = false,
   onCancel,
   onApply,
@@ -5298,6 +5506,7 @@ function PreviewDrawer({
   baseYaml: string | null;
   hasYaml: boolean;
   incomplete?: boolean;
+  durationSec?: number;
   busy?: boolean;
   onCancel: () => void;
   onApply: () => void;
@@ -5309,6 +5518,10 @@ function PreviewDrawer({
   );
   const canApply = hasYaml && !previewError && !busy;
   const showRegenerate = Boolean(previewError || incomplete);
+  const durationLabel =
+    typeof durationSec === "number" && Number.isFinite(durationSec)
+      ? `Generated in ${durationSec < 10 ? durationSec.toFixed(1) : Math.round(durationSec)}s`
+      : null;
 
   return (
     <div className="absolute inset-0 z-40 flex items-center justify-center bg-foreground/10 backdrop-blur-sm">
@@ -5341,6 +5554,9 @@ function PreviewDrawer({
           <div className="whitespace-pre-wrap rounded-lg border border-border bg-muted/40 px-3 py-3 text-sm leading-relaxed text-foreground">
             {reply || "No message."}
           </div>
+          {durationLabel ? (
+            <div className="mt-1.5 text-[11px] text-muted-foreground">{durationLabel}</div>
+          ) : null}
           {hasYaml && yaml ? (
             <>
               <ScanYamlDiagramPreview yaml={yaml} error={previewError} />

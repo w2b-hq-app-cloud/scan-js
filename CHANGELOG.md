@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `@spherescan/board`: agent preview dialogue shows generation duration in seconds.
+- `@spherescan/board`: optional `BoardAiAdapter.transcribeAudio` + AIBar Mic (MediaRecorder → STT → auto-submit). Sphere wires local Whisper; SCAN whiteboard stays mic-off without the adapter.
+
 ### Changed
 
 - `@spherescan/board`: double-click a component opens the rename modal; Cmd/Ctrl+D and Cmd/Ctrl+C/V work for boundaries as well as elements.
