@@ -29,6 +29,7 @@ import {
   Mic,
   MousePointer2,
   Paperclip,
+  PenLine,
   Plus,
   Pointer,
   Redo2,
@@ -138,8 +139,29 @@ function rememberRecentPrompt(previous: string[], message: string): string[] {
 
 type Point = { x: number; y: number };
 
+/** Canvas interaction mode for the left tool rail. */
+type BoardTool = "select" | "pan" | "connect" | "create" | "boundary" | "fast";
+
+/** World-px drag below this is treated as a click → place a component. */
+const FAST_CLICK_SLOP = 10;
+/** Minimum drag size to create a boundary instead of a component. */
+const FAST_BOUNDARY_MIN_W = 120;
+const FAST_BOUNDARY_MIN_H = 80;
+
 function openExternal(url: string) {
   window.open(url, "_blank", "noopener,noreferrer");
+}
+
+function snap4(n: number): number {
+  return Math.round(n / 4) * 4;
+}
+
+function normalizeDraftRect(d: { x0: number; y0: number; x1: number; y1: number }) {
+  const x = Math.min(d.x0, d.x1);
+  const y = Math.min(d.y0, d.y1);
+  const w = Math.abs(d.x1 - d.x0);
+  const h = Math.abs(d.y1 - d.y0);
+  return { x, y, w, h };
 }
 
 const createKindHints: Record<
@@ -470,9 +492,15 @@ export default function BoardApp({
   const [selectedEdge, setSelectedEdge] = useState<string | null>(null);
   const [zoom, setZoom] = useState(0.85);
   const [pan, setPan] = useState<Point>({ x: 40, y: 20 });
-  const [tool, setTool] = useState<"select" | "pan" | "connect" | "create" | "boundary">("select");
+  const [tool, setTool] = useState<BoardTool>("select");
   const [createKind, setCreateKind] = useState<CreateKind>("service");
   const [boundaryKind, setBoundaryKind] = useState<"trust" | "runtime">("trust");
+  const [fastDraft, setFastDraft] = useState<{
+    x0: number;
+    y0: number;
+    x1: number;
+    y1: number;
+  } | null>(null);
   const [showGrid, setShowGrid] = useState(true);
   /** Orthogonal (90°) edges with hop arcs at crossings. */
   const [orthogonalEdges, setOrthogonalEdges] = useState(true);
@@ -734,6 +762,18 @@ export default function BoardApp({
           setConnectCursor(null);
           setTool("select");
           toast.message(connectFrom ? "Connect cancelled" : "Connect mode off");
+        } else if (tool === "fast") {
+          if (fastDraft) {
+            setFastDraft(null);
+            toast.message("Draw cancelled");
+          } else if (connectFrom) {
+            setConnectFrom(null);
+            setConnectCursor(null);
+            toast.message("Connect cancelled");
+          } else {
+            setTool("select");
+            toast.message("Fast design off");
+          }
         } else if (tool === "create" || tool === "boundary") {
           setTool("select");
           toast.message("Place cancelled");
@@ -759,15 +799,19 @@ export default function BoardApp({
     connectFrom,
     saveYaml,
     tool,
+    fastDraft,
     groups,
     nodes,
     isSphere,
   ]);
 
   useEffect(() => {
-    if (tool !== "connect") {
+    if (tool !== "connect" && tool !== "fast") {
       setConnectFrom(null);
       setConnectCursor(null);
+    }
+    if (tool !== "fast") {
+      setFastDraft(null);
     }
   }, [tool]);
 
@@ -820,7 +864,7 @@ export default function BoardApp({
   const focusIds = useMemo(() => {
     if (!focusMode) return null;
     // While wiring, keep every component fully visible — focus dimming hides valid targets.
-    if (tool === "connect" || connectFrom) return null;
+    if (tool === "connect" || tool === "fast" || connectFrom) return null;
     const seed = new Set<string>();
     if (selected) seed.add(selected);
     if (selectedEdge) {
@@ -991,7 +1035,7 @@ export default function BoardApp({
   };
 
   const startDrag = (e: React.PointerEvent, id: string) => {
-    if (tool === "connect") {
+    if (tool === "connect" || tool === "fast") {
       e.stopPropagation();
       // Node body: port-less / fallback node->node wire
       if (!connectFrom) {
@@ -999,6 +1043,7 @@ export default function BoardApp({
         setConnectCursor(clientToWorld(e.clientX, e.clientY));
         setSelected(id);
         setSelectedEdge(null);
+        setSelectedBoundary(null);
       } else if (connectFrom.nodeId !== id) {
         try {
           connect(connectFrom.nodeId, id, {
@@ -1013,7 +1058,7 @@ export default function BoardApp({
         }
         setConnectFrom(null);
         setConnectCursor(null);
-        setTool("select");
+        if (tool === "connect") setTool("select");
       }
       return;
     }
@@ -1033,7 +1078,7 @@ export default function BoardApp({
     // Ports are always interactive: start/finish wiring without requiring the Connect tool first.
     if (!connectFrom) {
       if (role === "expose") {
-        setTool("connect");
+        if (tool !== "fast") setTool("connect");
         setConnectFrom({ nodeId, portId });
         setConnectCursor(null);
         setSelected(nodeId);
@@ -1082,7 +1127,7 @@ export default function BoardApp({
       }
       setConnectFrom(null);
       setConnectCursor(null);
-      setTool("select");
+      if (tool !== "fast") setTool("select");
       return;
     }
     try {
@@ -1097,7 +1142,7 @@ export default function BoardApp({
     }
     setConnectFrom(null);
     setConnectCursor(null);
-    setTool("select");
+    if (tool !== "fast") setTool("select");
   };
 
   const startBoundaryResize = (
@@ -1148,6 +1193,11 @@ export default function BoardApp({
         y: e.clientY - rect.top,
       };
     }
+    if (fastDraft) {
+      const w = clientToWorld(e.clientX, e.clientY);
+      setFastDraft((d) => (d ? { ...d, x1: w.x, y1: w.y } : d));
+      return;
+    }
     if (connectFrom) {
       setConnectCursor(clientToWorld(e.clientX, e.clientY));
     }
@@ -1192,7 +1242,59 @@ export default function BoardApp({
     }
   };
 
-  const onPointerUp = () => {
+  const commitFastDraft = useCallback(
+    (draft: { x0: number; y0: number; x1: number; y1: number }) => {
+      const { x, y, w, h } = normalizeDraftRect(draft);
+      if (w < FAST_CLICK_SLOP && h < FAST_CLICK_SLOP) {
+        const id = createElement(createKind, snap4(draft.x0), snap4(draft.y0));
+        setSelected(id);
+        setSelectedEdge(null);
+        setSelectedBoundary(null);
+        toast.success(`${createKindHints[createKind].label} added`, {
+          description: "Click another component to connect · drag a box for a boundary",
+        });
+        return;
+      }
+      if (w >= FAST_BOUNDARY_MIN_W && h >= FAST_BOUNDARY_MIN_H) {
+        try {
+          const id = createBoundary(boundaryKind, {
+            x: snap4(x),
+            y: snap4(y),
+            w: snap4(w),
+            h: snap4(h),
+          });
+          setSelectedBoundary(id);
+          setSelected(null);
+          setSelectedEdge(null);
+          toast.success(
+            boundaryKind === "trust" ? "Trust boundary added" : "Runtime boundary added",
+            { description: "Drag another box or click components to connect" },
+          );
+        } catch (err) {
+          const message = err instanceof Error ? err.message : "Could not create boundary";
+          toast.error("Boundary failed", { description: message });
+        }
+        return;
+      }
+      // Medium drag: still place a component at the start point.
+      const id = createElement(createKind, snap4(draft.x0), snap4(draft.y0));
+      setSelected(id);
+      setSelectedEdge(null);
+      setSelectedBoundary(null);
+      toast.success(`${createKindHints[createKind].label} added`, {
+        description: `Drag at least ${FAST_BOUNDARY_MIN_W}×${FAST_BOUNDARY_MIN_H} for a boundary`,
+      });
+    },
+    [boundaryKind, createBoundary, createElement, createKind],
+  );
+
+  const onPointerUp = (e: React.PointerEvent) => {
+    if (fastDraft) {
+      const w = clientToWorld(e.clientX, e.clientY);
+      const draft = { ...fastDraft, x1: w.x, y1: w.y };
+      setFastDraft(null);
+      commitFastDraft(draft);
+    }
     if (resizingBoundary.current) {
       endBoundaryResize();
       resizingBoundary.current = null;
@@ -1209,9 +1311,25 @@ export default function BoardApp({
   };
 
   const onCanvasPointerDown = (e: React.PointerEvent) => {
+    if (tool === "fast" && e.button === 0) {
+      // Empty-canvas sketch: click → component, drag box → boundary.
+      // Node clicks are handled in startDrag / ports and stopPropagation.
+      const w = clientToWorld(e.clientX, e.clientY);
+      setSelected(null);
+      setSelectedBoundary(null);
+      setSelectedEdge(null);
+      setCtxMenu(null);
+      if (connectFrom) {
+        setConnectFrom(null);
+        setConnectCursor(null);
+      }
+      setFastDraft({ x0: w.x, y0: w.y, x1: w.x, y1: w.y });
+      (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
+      return;
+    }
     if (tool === "create" && e.button === 0) {
       const w = clientToWorld(e.clientX, e.clientY);
-      const id = createElement(createKind, Math.round(w.x / 4) * 4, Math.round(w.y / 4) * 4);
+      const id = createElement(createKind, snap4(w.x), snap4(w.y));
       setSelected(id);
       setSelectedEdge(null);
       setSelectedBoundary(null);
@@ -1225,8 +1343,8 @@ export default function BoardApp({
       const w = clientToWorld(e.clientX, e.clientY);
       const bw = 480;
       const bh = 320;
-      const x = Math.round((w.x - bw / 2) / 4) * 4;
-      const y = Math.round((w.y - bh / 2) / 4) * 4;
+      const x = snap4(w.x - bw / 2);
+      const y = snap4(w.y - bh / 2);
       try {
         const id = createBoundary(boundaryKind, { x, y, w: bw, h: bh });
         setSelectedBoundary(id);
@@ -1940,8 +2058,8 @@ export default function BoardApp({
           className={`absolute inset-0 ${showGrid ? "dot-grid" : "bg-canvas"} ${
             tool === "pan"
               ? "cursor-grab"
-              : tool === "connect"
-                ? "cursor-pointer"
+              : tool === "connect" || tool === "fast"
+                ? "cursor-crosshair"
                 : "cursor-default"
           }`}
           onPointerDown={onCanvasPointerDown}
@@ -2342,13 +2460,13 @@ export default function BoardApp({
                 }}
                 onClick={(e) => {
                   e.stopPropagation();
-                  if (tool === "connect") return;
+                  if (tool === "connect" || tool === "fast") return;
                   setSelected(n.id);
                   setSelectedEdge(null);
                 }}
                 onDoubleClick={(e) => {
                   e.stopPropagation();
-                  if (tool === "connect") return;
+                  if (tool === "connect" || tool === "fast") return;
                   setSelected(n.id);
                   setSelectedEdge(null);
                   setSelectedBoundary(null);
@@ -2356,20 +2474,56 @@ export default function BoardApp({
                 }}
               />
             ))}
+            {/* Fast design rubber-band preview */}
+            {fastDraft && (() => {
+              const r = normalizeDraftRect(fastDraft);
+              const isBoundary =
+                r.w >= FAST_BOUNDARY_MIN_W && r.h >= FAST_BOUNDARY_MIN_H;
+              return (
+                <div
+                  className={`pointer-events-none absolute rounded-2xl border-2 border-dashed ${
+                    isBoundary
+                      ? "border-primary bg-primary/5"
+                      : "border-muted-foreground/50 bg-muted/20"
+                  }`}
+                  style={{
+                    left: r.x,
+                    top: r.y,
+                    width: Math.max(r.w, 2),
+                    height: Math.max(r.h, 2),
+                    zIndex: 40,
+                  }}
+                />
+              );
+            })()}
           </div>
         </div>
 
-        {(tool === "connect" || connectFrom) && (
+        {(tool === "connect" || tool === "fast" || connectFrom) && (
           <div className="pointer-events-none absolute bottom-20 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 rounded-xl border border-border bg-surface/95 px-4 py-2 text-xs shadow-lg backdrop-blur">
-            <Pointer className="h-3.5 w-3.5 text-primary" />
-            <span className="font-medium text-foreground">
-              {connectFrom
-                ? `Source: ${nodeById[connectFrom.nodeId]?.title ?? connectFrom.nodeId}${
-                    connectFrom.portId ? ` · ${connectFrom.portId}` : ""
-                  } - click a consume port (or node)`
-                : "Click an expose port (or node) to start"}
-            </span>
-            <span className="text-muted-foreground">Esc to cancel</span>
+            {tool === "fast" && !connectFrom ? (
+              <>
+                <PenLine className="h-3.5 w-3.5 text-primary" />
+                <span className="font-medium text-foreground">
+                  Fast design: click → {createKindHints[createKind].label}, drag box →{" "}
+                  {boundaryKind === "trust" ? "Trust boundary" : "Runtime"}, click
+                  components to connect
+                </span>
+                <span className="text-muted-foreground">Esc to exit</span>
+              </>
+            ) : (
+              <>
+                <Pointer className="h-3.5 w-3.5 text-primary" />
+                <span className="font-medium text-foreground">
+                  {connectFrom
+                    ? `Source: ${nodeById[connectFrom.nodeId]?.title ?? connectFrom.nodeId}${
+                        connectFrom.portId ? ` · ${connectFrom.portId}` : ""
+                      } - click a consume port (or node)`
+                    : "Click an expose port (or node) to start"}
+                </span>
+                <span className="text-muted-foreground">Esc to cancel</span>
+              </>
+            )}
           </div>
         )}
 
@@ -2408,10 +2562,22 @@ export default function BoardApp({
             setOrthogonalEdges={setOrthogonalEdges}
             onPickCreate={(kind) => {
               setCreateKind(kind);
+              if (tool === "fast") {
+                toast.message(`Fast design places ${createKindHints[kind].label}`);
+                return;
+              }
               setTool("create");
             }}
             onPickBoundary={(kind) => {
               setBoundaryKind(kind);
+              if (tool === "fast") {
+                toast.message(
+                  kind === "trust"
+                    ? "Fast design boxes create Trust boundaries"
+                    : "Fast design boxes create Runtime boundaries",
+                );
+                return;
+              }
               setTool("boundary");
             }}
           />
@@ -4666,8 +4832,8 @@ function ToolRail({
   onPickCreate,
   onPickBoundary,
 }: {
-  tool: "select" | "pan" | "connect" | "create" | "boundary";
-  setTool: (t: "select" | "pan" | "connect" | "create" | "boundary") => void;
+  tool: BoardTool;
+  setTool: (t: BoardTool) => void;
   showGrid: boolean;
   setShowGrid: (b: boolean) => void;
   orthogonalEdges: boolean;
@@ -4700,6 +4866,14 @@ function ToolRail({
           </IconBtn>
         );
       })}
+      <IconBtn
+        label="Fast design"
+        tooltipSide="right"
+        onClick={() => setTool(tool === "fast" ? "select" : "fast")}
+        active={tool === "fast"}
+      >
+        <PenLine className="h-4 w-4" />
+      </IconBtn>
       <div className="my-1 h-px w-6 bg-border" />
       <PopoverAdd active={tool === "create"} onPick={onPickCreate} />
       <PopoverBoundary active={tool === "boundary"} onPick={onPickBoundary} />

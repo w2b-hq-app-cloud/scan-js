@@ -31,7 +31,7 @@ Notation deep-dive: [`docs/spec/scan-0.1.md`](spec/scan-0.1.md). This manual is 
 +----+---------------------------------------------------------------+-----+
 ```
 
-Mode banners (Connect / place component / place boundary) appear centered above the zoom controls when active.
+Mode banners (Connect / Fast design / place component / place boundary) appear centered above the zoom controls when active.
 
 ---
 
@@ -104,9 +104,22 @@ Overlay at the **top-left** of the canvas. Hover for tooltips.
 | **Select** | Pointer | Select, drag nodes, drag boundaries (moves members), resize boundaries, open inspector |
 | **Pan** | Hand | Drag the canvas (`grab` cursor) |
 | **Connect** | Arrow (finger when active) | Wire nodes / ports; see [Connections](#5-connections-expose--consume) |
+| **Fast design** | Pen | Toggle sketch mode: click empty canvas → component, drag a box → boundary, click two components → connect. Stays on until toggled off or **Esc**. |
 | **Add component** | **+** | Opens the component kind menu |
 | **Add boundary** | Square | Opens trust / runtime boundary menu |
 | **Toggle grid** | Grid | Turns the dot grid on/off (default on) |
+
+### Fast design
+
+Toggle **Fast design** on the rail (pen icon). While active:
+
+1. **Click** empty canvas → places the current Add-component kind (default **Service**).  
+2. **Drag a box** (at least ~120×80) → creates a **Trust** or **Runtime** boundary (whichever is selected in Add boundary).  
+3. **Click** a component, then another → creates a connection (same rules as Connect).  
+4. While Fast design is on, **Add component** / **Add boundary** menus only change *what* you place next; they do not leave the mode.  
+5. **Esc** cancels an in-progress wire or draw first; press again (or toggle the tool) to exit the mode.
+
+Mode banner at the bottom explains the gestures. Normal Select / Pan / Connect stay available as separate tools so Fast design does not overlap them.
 
 ### Add component
 
@@ -404,7 +417,7 @@ A demo warning toast may appear near the bottom center (e.g. missing async contr
 | **Ctrl/Cmd+ D** | Duplicate selected component |
 | **F2** | Rename selected component or boundary |
 | **Delete** / **Backspace** | Delete selection (component confirms; edge/boundary immediate) |
-| **Esc** | Cancel Connect / place modes; clear in-progress wire; close context menu |
+| **Esc** | Cancel Connect / Fast design wire or draw; exit Fast design / place modes; clear in-progress wire; close context menu |
 
 Shortcuts are ignored while typing in inputs.
 
