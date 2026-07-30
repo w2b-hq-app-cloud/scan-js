@@ -9,6 +9,8 @@ export type EdgeRouteMode = "bezier" | "orthogonal";
 export const LABEL_LOD_ZOOM = 0.7;
 
 const ORTHO_STUB = 28;
+/** Pixel gap between parallel orthogonal mid-lanes (vertical/horizontal trunks). */
+export const ORTHO_LANE_GAP = 20;
 const HOP_RADIUS = 7;
 const EPS = 0.5;
 
@@ -82,11 +84,22 @@ export function pickEdgeSides(
 /** @deprecated Use pickEdgeSides — same behavior for curved and orthogonal. */
 export const pickOrthogonalSides = pickEdgeSides;
 
-/** Spread multiple wires that share a face along that edge (0.28…0.72). */
+/** Spread multiple wires that share a face along that edge (0.2…0.8). */
 export function fanAlongSide(index: number, count: number): number {
   if (count <= 1) return 0.5;
   const i = Math.max(0, Math.min(count - 1, index));
-  return 0.28 + (0.44 * i) / (count - 1);
+  return 0.2 + (0.6 * i) / (count - 1);
+}
+
+/** Centered lane offset so parallel orthogonal trunks do not share the same mid X/Y. */
+export function orthoLaneOffset(
+  index: number,
+  count: number,
+  gap = ORTHO_LANE_GAP,
+): number {
+  if (count <= 1) return 0;
+  const i = Math.max(0, Math.min(count - 1, index));
+  return (i - (count - 1) / 2) * gap;
 }
 
 /**
@@ -139,9 +152,10 @@ export function edgePath(
   aSide: string,
   bSide?: string,
   mode: EdgeRouteMode = "bezier",
+  lane = 0,
 ): string {
   if (mode === "orthogonal") {
-    return polylineToPath(orthogonalWaypoints(a, b, aSide, bSide ?? "l"));
+    return polylineToPath(orthogonalWaypoints(a, b, aSide, bSide ?? "l", ORTHO_STUB, lane));
   }
   const { c1, c2 } = edgeControls(a, b, aSide);
   return `M ${a.x} ${a.y} C ${c1.x} ${c1.y}, ${c2.x} ${c2.y}, ${b.x} ${b.y}`;
@@ -185,6 +199,8 @@ export function orthogonalWaypoints(
   aSide: string,
   bSide: string = "l",
   stub = ORTHO_STUB,
+  /** Shift mid corridor so parallel wires stay readable (pixels). */
+  lane = 0,
 ): Point[] {
   const fromSide = asSide(aSide);
   const toSide = asSide(bSide);
@@ -195,6 +211,17 @@ export function orthogonalWaypoints(
 
   const points: Point[] = [a, a1];
   if (almostEq(a1.x, b1.x) || almostEq(a1.y, b1.y)) {
+    // Already collinear stubs — nudge the shared run perpendicular to the span.
+    if (Math.abs(lane) > EPS) {
+      if (almostEq(a1.x, b1.x)) {
+        const x = a1.x + lane;
+        points.push({ x, y: a1.y }, { x, y: b1.y }, b1, b);
+        return dedupePoints(points);
+      }
+      const y = a1.y + lane;
+      points.push({ x: a1.x, y }, { x: b1.x, y }, b1, b);
+      return dedupePoints(points);
+    }
     points.push(b1, b);
     return dedupePoints(points);
   }
@@ -203,15 +230,26 @@ export function orthogonalWaypoints(
   const bHoriz = toSide === "l" || toSide === "r";
 
   if (aHoriz && bHoriz) {
-    const midX = (a1.x + b1.x) / 2;
+    const midX = (a1.x + b1.x) / 2 + lane;
     points.push({ x: midX, y: a1.y }, { x: midX, y: b1.y }, b1, b);
   } else if (!aHoriz && !bHoriz) {
-    const midY = (a1.y + b1.y) / 2;
+    const midY = (a1.y + b1.y) / 2 + lane;
     points.push({ x: a1.x, y: midY }, { x: b1.x, y: midY }, b1, b);
   } else if (aHoriz) {
-    points.push({ x: b1.x, y: a1.y }, b1, b);
+    // L-bend: offset the elbow so stacked L routes do not coincide.
+    const elbow = { x: b1.x + lane, y: a1.y };
+    if (Math.abs(lane) > EPS) {
+      points.push(elbow, { x: b1.x + lane, y: b1.y }, b1, b);
+    } else {
+      points.push(elbow, b1, b);
+    }
   } else {
-    points.push({ x: a1.x, y: b1.y }, b1, b);
+    const elbow = { x: a1.x, y: b1.y + lane };
+    if (Math.abs(lane) > EPS) {
+      points.push(elbow, { x: b1.x, y: b1.y + lane }, b1, b);
+    } else {
+      points.push(elbow, b1, b);
+    }
   }
   return dedupePoints(points);
 }
@@ -354,6 +392,93 @@ export type RoutedEdgeInput = {
   fanCount?: number;
 };
 
+type ResolvedRoute = {
+  id: string;
+  a: Point;
+  b: Point;
+  aSide: string;
+  bSide: string;
+};
+
+function resolveRoutedEdge(e: RoutedEdgeInput): ResolvedRoute {
+  if (e.from && e.to) {
+    const resolved = resolveEdgeAnchors(
+      e.from,
+      e.to,
+      e.fanIndex ?? 0,
+      e.fanCount ?? 1,
+    );
+    return {
+      id: e.id,
+      a: resolved.a,
+      b: resolved.b,
+      aSide: resolved.fromSide,
+      bSide: resolved.toSide,
+    };
+  }
+  return {
+    id: e.id,
+    a: e.a ?? { x: 0, y: 0 },
+    b: e.b ?? { x: 0, y: 0 },
+    aSide: e.aSide ?? "r",
+    bSide: e.bSide ?? "l",
+  };
+}
+
+/** Bucket parallel orthogonal routes that would share the same mid trunk / elbow. */
+function corridorMeta(r: ResolvedRoute): { key: string; sort: number } {
+  const fromSide = asSide(r.aSide);
+  const toSide = asSide(r.bSide);
+  const na = sideNormal(fromSide);
+  const nb = sideNormal(toSide);
+  const a1 = { x: r.a.x + na.x * ORTHO_STUB, y: r.a.y + na.y * ORTHO_STUB };
+  const b1 = { x: r.b.x + nb.x * ORTHO_STUB, y: r.b.y + nb.y * ORTHO_STUB };
+  const aHoriz = fromSide === "l" || fromSide === "r";
+  const bHoriz = toSide === "l" || toSide === "r";
+
+  if (aHoriz && bHoriz) {
+    const mid = Math.round((a1.x + b1.x) / 2 / ORTHO_LANE_GAP);
+    return { key: `hh:${mid}`, sort: (a1.y + b1.y) / 2 };
+  }
+  if (!aHoriz && !bHoriz) {
+    const mid = Math.round((a1.y + b1.y) / 2 / ORTHO_LANE_GAP);
+    return { key: `vv:${mid}`, sort: (a1.x + b1.x) / 2 };
+  }
+  if (aHoriz) {
+    return {
+      key: `lh:${Math.round(b1.x / ORTHO_LANE_GAP)}`,
+      sort: a1.y,
+    };
+  }
+  return {
+    key: `lv:${Math.round(a1.x / ORTHO_LANE_GAP)}`,
+    sort: a1.x,
+  };
+}
+
+/**
+ * Assign mid-corridor lane offsets so parallel orthogonal wires stay spaced.
+ * Same gap is used by `routeOrthogonalEdges` and label placement.
+ */
+export function assignOrthogonalLanes(edges: RoutedEdgeInput[]): Map<string, number> {
+  const resolved = edges.map(resolveRoutedEdge);
+  const groups = new Map<string, Array<{ id: string; sort: number }>>();
+  for (const r of resolved) {
+    const meta = corridorMeta(r);
+    const list = groups.get(meta.key) ?? [];
+    list.push({ id: r.id, sort: meta.sort });
+    groups.set(meta.key, list);
+  }
+  const lanes = new Map<string, number>();
+  for (const members of groups.values()) {
+    members.sort((a, b) => a.sort - b.sort || a.id.localeCompare(b.id));
+    members.forEach((m, i) => {
+      lanes.set(m.id, orthoLaneOffset(i, members.length));
+    });
+  }
+  return lanes;
+}
+
 /**
  * Route all edges orthogonally and add hop arcs where later edges cross earlier ones.
  * Returns a map of edge id → SVG path `d`.
@@ -364,29 +489,11 @@ export function routeOrthogonalEdges(
 ): Map<string, string> {
   const out = new Map<string, string>();
   const earlier: Seg[] = [];
+  const lanes = assignOrthogonalLanes(edges);
   for (const e of edges) {
-    let a: Point;
-    let b: Point;
-    let aSide: string;
-    let bSide: string;
-    if (e.from && e.to) {
-      const resolved = resolveEdgeAnchors(
-        e.from,
-        e.to,
-        e.fanIndex ?? 0,
-        e.fanCount ?? 1,
-      );
-      a = resolved.a;
-      b = resolved.b;
-      aSide = resolved.fromSide;
-      bSide = resolved.toSide;
-    } else {
-      a = e.a ?? { x: 0, y: 0 };
-      b = e.b ?? { x: 0, y: 0 };
-      aSide = e.aSide ?? "r";
-      bSide = e.bSide ?? "l";
-    }
-    const pts = orthogonalWaypoints(a, b, aSide, bSide);
+    const r = resolveRoutedEdge(e);
+    const lane = lanes.get(e.id) ?? 0;
+    const pts = orthogonalWaypoints(r.a, r.b, r.aSide, r.bSide, ORTHO_STUB, lane);
     out.set(e.id, orthogonalPathWithHops(pts, earlier, hopRadius));
     earlier.push(...pointsToSegments(pts));
   }
@@ -500,6 +607,8 @@ export type PlaceEdgeLabelOpts = {
   toBox?: Box;
   fanIndex?: number;
   fanCount?: number;
+  /** Orthogonal mid-corridor lane (from assignOrthogonalLanes). */
+  laneOffset?: number;
 };
 
 /**
@@ -530,7 +639,10 @@ export function placeEdgeLabel(opts: PlaceEdgeLabelOpts): Point {
 
   const sample = (t: number): { p: Point; tan: Point } => {
     if (mode === "orthogonal") {
-      const pts = orthogonalWaypoints(a, b, aSide, bSide);
+      const lane =
+        opts.laneOffset ??
+        orthoLaneOffset(opts.fanIndex ?? 0, opts.fanCount ?? 1);
+      const pts = orthogonalWaypoints(a, b, aSide, bSide, ORTHO_STUB, lane);
       return { p: pointOnPolyline(pts, t), tan: tangentOnPolyline(pts, t) };
     }
     const { c1, c2 } = edgeControls(a, b, aSide);
@@ -572,7 +684,8 @@ export function placeEdgeLabel(opts: PlaceEdgeLabelOpts): Point {
     const { tan: rawTan } = sample(0.5);
     const tan = normalize(rawTan);
     const normal = { x: -tan.y, y: tan.x };
-    const amount = opts.stagger * 16;
+    // ~half a typical chip height per stagger step so stacked labels clear.
+    const amount = opts.stagger * 22;
     best = {
       x: best.x + normal.x * amount,
       y: best.y + normal.y * amount,
@@ -584,11 +697,12 @@ export function placeEdgeLabel(opts: PlaceEdgeLabelOpts): Point {
 
 /**
  * Assign stagger indices for labels whose midpoints are nearly coincident.
+ * Prefer `resolveLabelOverlaps` for real chip sizes — this remains for light nudges.
  * Returns a map of edgeId -> stagger offset (-2...2).
  */
 export function computeLabelStagger(
   placements: Array<{ id: string; x: number; y: number }>,
-  threshold = 28,
+  threshold = 56,
 ): Map<string, number> {
   const stagger = new Map<string, number>();
   const used = new Set<string>();
@@ -616,4 +730,94 @@ export function computeLabelStagger(
     });
   }
   return stagger;
+}
+
+export type LabelPlacement = {
+  id: string;
+  x: number;
+  y: number;
+  /** Chip width (centered on x). */
+  w?: number;
+  /** Chip height (centered on y). */
+  h?: number;
+};
+
+function centeredOverlap(
+  a: { x: number; y: number; w: number; h: number },
+  b: { x: number; y: number; w: number; h: number },
+  gap: number,
+): { ox: number; oy: number } | null {
+  const dx = Math.abs(a.x - b.x);
+  const dy = Math.abs(a.y - b.y);
+  const needX = (a.w + b.w) / 2 + gap;
+  const needY = (a.h + b.h) / 2 + gap;
+  if (dx >= needX || dy >= needY) return null;
+  return { ox: needX - dx, oy: needY - dy };
+}
+
+/** Rough chip size for edge labels (icon + text + optional contract line). */
+export function estimateEdgeLabelSize(
+  label: string,
+  contract?: string | null,
+): { w: number; h: number } {
+  const textW = Math.ceil(Math.max(1, label.length) * 10 * 0.56) + 36;
+  const contractW = contract
+    ? Math.ceil(Math.max(1, contract.length) * 9 * 0.56) + 36
+    : 0;
+  return {
+    w: Math.min(220, Math.max(80, textW, contractW)),
+    h: contract ? 42 : 30,
+  };
+}
+
+/**
+ * Push overlapping edge-label chips apart until they no longer collide.
+ * Prefers stacking along the axis of greater penetration (usually Y for
+ * parallel vertical wires).
+ */
+export function resolveLabelOverlaps(
+  placements: LabelPlacement[],
+  opts: { gap?: number; defaultW?: number; defaultH?: number; passes?: number } = {},
+): Map<string, Point> {
+  const gap = opts.gap ?? 10;
+  const defaultW = opts.defaultW ?? 120;
+  const defaultH = opts.defaultH ?? 36;
+  const passes = opts.passes ?? 16;
+
+  const items = placements.map((p) => ({
+    id: p.id,
+    x: p.x,
+    y: p.y,
+    w: p.w ?? defaultW,
+    h: p.h ?? defaultH,
+  }));
+  items.sort((a, b) => a.y - b.y || a.x - b.x || a.id.localeCompare(b.id));
+
+  for (let pass = 0; pass < passes; pass++) {
+    let moved = false;
+    for (let i = 0; i < items.length; i++) {
+      for (let j = i + 1; j < items.length; j++) {
+        const a = items[i];
+        const b = items[j];
+        const hit = centeredOverlap(a, b, gap);
+        if (!hit) continue;
+        // Separate along the cheaper axis (less travel), bias to vertical stacks
+        // for near-coincident centers (typical parallel edges).
+        const separateY = hit.oy <= hit.ox || Math.abs(a.x - b.x) < 24;
+        if (separateY) {
+          const push = hit.oy / 2;
+          a.y -= push;
+          b.y += push;
+        } else {
+          const push = hit.ox / 2;
+          a.x -= push;
+          b.x += push;
+        }
+        moved = true;
+      }
+    }
+    if (!moved) break;
+  }
+
+  return new Map(items.map((i) => [i.id, { x: i.x, y: i.y }]));
 }

@@ -9,6 +9,7 @@ import {
   placeEdgeLabel,
   pointOnCubic,
   resolveEdgeAnchors,
+  resolveLabelOverlaps,
   routeOrthogonalEdges,
 } from "./edge-geometry.js";
 
@@ -57,6 +58,49 @@ test("routeOrthogonalEdges inserts hop arcs at crossings", () => {
   ]);
   const vertical = paths.get("v") ?? "";
   assert.ok(vertical.includes(" A "), `expected hop arc, got: ${vertical}`);
+});
+
+test("parallel orthogonal same-pair edges use distinct mid lanes", () => {
+  const from = { x: 0, y: 0, w: 100, h: 200 };
+  const to = { x: 300, y: 0, w: 100, h: 200 };
+  const paths = routeOrthogonalEdges([
+    { id: "e0", from, to, fanIndex: 0, fanCount: 2 },
+    { id: "e1", from, to, fanIndex: 1, fanCount: 2 },
+  ]);
+  const d0 = paths.get("e0") ?? "";
+  const d1 = paths.get("e1") ?? "";
+  assert.notEqual(d0, d1, "parallel edges should not share the same path");
+
+  const pts = (d: string) =>
+    [...d.matchAll(/[ML]\s*([\d.]+)\s+([\d.]+)/g)].map((m) => ({
+      x: Number(m[1]),
+      y: Number(m[2]),
+    }));
+  const midRunCoord = (d: string): { axis: "x" | "y"; value: number } | null => {
+    const p = pts(d);
+    let best: { axis: "x" | "y"; value: number; len: number } | null = null;
+    for (let i = 0; i < p.length - 1; i++) {
+      const dx = Math.abs(p[i].x - p[i + 1].x);
+      const dy = Math.abs(p[i].y - p[i + 1].y);
+      if (dx > 40 && dy < 0.5) {
+        const len = dx;
+        if (!best || len > best.len) best = { axis: "y", value: p[i].y, len };
+      } else if (dy > 40 && dx < 0.5) {
+        const len = dy;
+        if (!best || len > best.len) best = { axis: "x", value: p[i].x, len };
+      }
+    }
+    return best ? { axis: best.axis, value: best.value } : null;
+  };
+
+  const m0 = midRunCoord(d0);
+  const m1 = midRunCoord(d1);
+  assert.ok(m0 && m1, `expected mid runs, got ${d0} / ${d1}`);
+  assert.equal(m0.axis, m1.axis);
+  assert.ok(
+    Math.abs(m0.value - m1.value) >= 16,
+    `expected lane gap on ${m0.axis}, got ${m0.value} vs ${m1.value}`,
+  );
 });
 
 test("pickEdgeSides attaches to facing edges from travel direction", () => {
@@ -136,4 +180,32 @@ test("computeLabelStagger spreads coincident labels", () => {
   ]);
   assert.equal(map.get("e3"), 0);
   assert.notEqual(map.get("e1"), map.get("e2"));
+});
+
+test("resolveLabelOverlaps stacks overlapping chips with a gap", () => {
+  const out = resolveLabelOverlaps(
+    [
+      { id: "a", x: 100, y: 100, w: 100, h: 40 },
+      { id: "b", x: 102, y: 101, w: 100, h: 40 },
+      { id: "c", x: 101, y: 100, w: 90, h: 40 },
+    ],
+    { gap: 10 },
+  );
+  const pa = out.get("a")!;
+  const pb = out.get("b")!;
+  const pc = out.get("c")!;
+  const pairs = [
+    [pa, pb],
+    [pa, pc],
+    [pb, pc],
+  ] as const;
+  for (const [p, q] of pairs) {
+    const dy = Math.abs(p.y - q.y);
+    const dx = Math.abs(p.x - q.x);
+    // Either stacked with ≥50px vertical center gap (40+10) or horizontally cleared.
+    assert.ok(
+      dy >= 49 || dx >= 95,
+      `labels still overlap: (${p.x},${p.y}) vs (${q.x},${q.y})`,
+    );
+  }
 });

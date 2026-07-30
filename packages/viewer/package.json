@@ -1,6 +1,6 @@
 {
   "name": "@spherescan/viewer",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "SCAN viewer - embeddable System & Component Architecture Notation renderer",
   "type": "module",
   "license": "Apache-2.0",
@@ -12,14 +12,18 @@
       "import": "./dist/index.js"
     }
   },
-  "files": ["dist", "LICENSE", "NOTICE"],
+  "files": [
+    "dist",
+    "LICENSE",
+    "NOTICE"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "npm run build && node --test dist/**/*.test.js"
   },
   "dependencies": {
-    "@spherescan/model": "0.1.0"
+    "@spherescan/model": "0.2.0"
   },
   "devDependencies": {
     "@types/node": "^22.16.5",

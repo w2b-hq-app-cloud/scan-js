@@ -39,10 +39,14 @@ export declare class ScanModeler {
     /** Serialize without clearing the dirty flag (for save-as / picker cancel). */
     peekYAML(): string;
     isDirty(): boolean;
-    saveSVG(): Promise<{
+    saveSVG(opts?: {
+        mode?: "bezier" | "orthogonal";
+    }): Promise<{
         svg: string;
     }>;
-    savePNG(scale?: number): Promise<{
+    savePNG(scale?: number, opts?: {
+        mode?: "bezier" | "orthogonal";
+    }): Promise<{
         blob: Blob;
     }>;
     undo(): void;
