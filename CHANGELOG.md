@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `@spherescan/viewer` / `@spherescan/board` / `@spherescan/modeler`: SVG/PNG export (and CLI) use **orthogonal** edges by default to match the live board; pass `{ mode: "bezier" }` when curved arrows are selected.
+
+## [0.2.0] - 2026-07-30
+
 ### Added
 
 - `@spherescan/board`: agent preview dialogue shows generation duration in seconds.

@@ -1,5 +1,5 @@
 import { edgeVisual, kindVisuals, renderLucideIcon, warnVisual, } from "./kind-icons.js";
-import { computeLabelStagger, edgePath, placeEdgeLabel, resolveEdgeAnchors, } from "./edge-geometry.js";
+import { computeLabelStagger, edgePath, placeEdgeLabel, resolveEdgeAnchors, routeOrthogonalEdges, } from "./edge-geometry.js";
 import { boundaryExportFill, boundaryExportStroke } from "./boundary-colors.js";
 function edgeFanIndex(edges, edgeId) {
     const target = edges.find((e) => e.id === edgeId);
@@ -156,8 +156,8 @@ function renderNode(n) {
         footerSvg +
         `</g>`);
 }
-/** Build an SVG snapshot of the board graph matching the live whiteboard cards. */
-export function graphToSvg(graph) {
+export function graphToSvg(graph, options = {}) {
+    const mode = options.mode ?? "orthogonal";
     const b = diagramBounds(graph);
     const groupRects = graph.groups
         .map((g) => {
@@ -174,6 +174,24 @@ export function graphToSvg(graph) {
         w: n.w,
         h: n.h,
     }));
+    const orthogonalPaths = mode === "orthogonal"
+        ? routeOrthogonalEdges(graph.edges.flatMap((e) => {
+            const from = graph.nodes.find((n) => n.id === e.from);
+            const to = graph.nodes.find((n) => n.id === e.to);
+            if (!from || !to)
+                return [];
+            const fan = edgeFanIndex(graph.edges, e.id);
+            return [
+                {
+                    id: e.id,
+                    from,
+                    to,
+                    fanIndex: fan.index,
+                    fanCount: fan.count,
+                },
+            ];
+        }))
+        : null;
     const labeled = graph.edges
         .filter((e) => e.label)
         .map((e) => {
@@ -193,6 +211,7 @@ export function graphToSvg(graph) {
             toBox: to,
             fanIndex: fan.index,
             fanCount: fan.count,
+            mode,
         });
         return {
             id: e.id,
@@ -225,7 +244,8 @@ export function graphToSvg(graph) {
             : e.kind === "async" || e.kind === "stream"
                 ? "url(#arrow-event)"
                 : "url(#arrow)";
-        const d = edgePath(anchors.a, anchors.b, anchors.fromSide, anchors.toSide);
+        const d = orthogonalPaths?.get(e.id) ??
+            edgePath(anchors.a, anchors.b, anchors.fromSide, anchors.toSide, mode);
         let labelSvg = "";
         if (e.label) {
             const mid = placeEdgeLabel({
@@ -239,6 +259,7 @@ export function graphToSvg(graph) {
                 toBox: to,
                 fanIndex: fan.index,
                 fanCount: fan.count,
+                mode,
             });
             const ev = edgeVisual(e.kind);
             const contractLine = e.contract ? 12 : 0;

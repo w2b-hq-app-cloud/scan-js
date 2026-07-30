@@ -20,10 +20,14 @@ export declare class ScanViewer {
     getModel(): SphereModel | null;
     getGraph(): BoardGraph | null;
     saveYAML(): string;
-    saveSVG(): Promise<{
+    saveSVG(opts?: {
+        mode?: "bezier" | "orthogonal";
+    }): Promise<{
         svg: string;
     }>;
-    savePNG(scale?: number): Promise<{
+    savePNG(scale?: number, opts?: {
+        mode?: "bezier" | "orthogonal";
+    }): Promise<{
         blob: Blob;
     }>;
     fitViewport(): void;

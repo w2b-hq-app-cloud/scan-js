@@ -11,7 +11,7 @@ export type {
   SphereNode,
 } from "./board-types.js";
 export { projectToGraph } from "./projectToGraph.js";
-export { diagramBounds, graphToSvg, svgToPngBlob } from "./export.js";
+export { diagramBounds, graphToSvg, svgToPngBlob, type GraphToSvgOptions } from "./export.js";
 export { kindVisuals, renderLucideIcon } from "./kind-icons.js";
 export {
   BOUNDARY_COLORS,

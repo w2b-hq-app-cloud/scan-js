@@ -34,3 +34,14 @@ test("graphToSvg draws cylinder shell for database nodes", () => {
     assert.match(svg, /data-kind="database"/);
     assert.match(svg, /<ellipse /);
 });
+test("graphToSvg defaults to orthogonal edge paths (no cubic Bezier)", () => {
+    const graph = projectToGraph(parseSphereYaml(fixture));
+    const ortho = graphToSvg(graph);
+    const curved = graphToSvg(graph, { mode: "bezier" });
+    const edgeD = (svg) => [...svg.matchAll(/<path d="([^"]+)"[^>]*marker-end=/g)].map((m) => m[1]);
+    for (const d of edgeD(ortho)) {
+        assert.match(d, /L/, `expected L segment in ${d}`);
+        assert.equal(/[Cc]/.test(d), false, `orthogonal path should not use cubic C: ${d}`);
+    }
+    assert.ok(edgeD(curved).some((d) => /[Cc]/.test(d)), "bezier mode should use cubic C");
+});

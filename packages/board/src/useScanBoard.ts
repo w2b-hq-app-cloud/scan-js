@@ -444,18 +444,18 @@ export function useScanBoard(options: UseScanBoardOptions | string = {}) {
     [modeler],
   );
 
-  const exportSvg = useCallback(async () => {
+  const exportSvg = useCallback(async (opts?: { mode?: "bezier" | "orthogonal" }) => {
     const base = diagramFileBase();
     const filename = `${base}.svg`;
-    const { svg } = await modeler.saveSVG();
+    const { svg } = await modeler.saveSVG(opts);
     downloadText(filename, svg, "image/svg+xml");
     return { filename };
   }, [modeler, diagramFileBase]);
 
-  const exportPng = useCallback(async () => {
+  const exportPng = useCallback(async (opts?: { mode?: "bezier" | "orthogonal" }) => {
     const base = diagramFileBase();
     const filename = `${base}.png`;
-    const { blob } = await modeler.savePNG(2);
+    const { blob } = await modeler.savePNG(2, opts);
     await downloadBlob(filename, blob);
     return { filename };
   }, [modeler, diagramFileBase]);

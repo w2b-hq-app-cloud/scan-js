@@ -1,15 +1,17 @@
 {
   "name": "@spherescan/board",
-  "version": "0.1.0",
-  "private": true,
-  "description": "SCAN interactive React board - shared canvas for the reference whiteboard (private until 0.2)",
+  "version": "0.2.0",
+  "description": "SCAN interactive React board \u2014 shared canvas for the reference whiteboard and host apps",
   "type": "module",
   "license": "Apache-2.0",
   "exports": {
     ".": "./src/index.ts",
     "./BoardApp": "./src/BoardApp.tsx"
   },
-  "files": ["src"],
+  "files": [
+    "src",
+    "NOTICE"
+  ],
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
@@ -20,10 +22,10 @@
     "tailwind-merge": "^3.5.0"
   },
   "peerDependencies": {
-    "@spherescan/model": "0.1.0",
-    "@spherescan/modeler": "0.1.0",
-    "@spherescan/rules": "0.1.0",
-    "@spherescan/viewer": "0.1.0",
+    "@spherescan/model": "0.2.0",
+    "@spherescan/modeler": "0.2.0",
+    "@spherescan/rules": "0.2.0",
+    "@spherescan/viewer": "0.2.0",
     "lucide-react": "^0.575.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
@@ -39,5 +41,12 @@
     "type": "git",
     "url": "git+https://github.com/w2b-hq-app-cloud/scan-js.git",
     "directory": "packages/board"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "homepage": "https://github.com/w2b-hq-app-cloud/scan-js#readme",
+  "bugs": {
+    "url": "https://github.com/w2b-hq-app-cloud/scan-js/issues"
   }
 }

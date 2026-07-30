@@ -10,6 +10,8 @@ import {
   edgePath,
   placeEdgeLabel,
   resolveEdgeAnchors,
+  routeOrthogonalEdges,
+  type EdgeRouteMode,
 } from "./edge-geometry.js";
 import { boundaryExportFill, boundaryExportStroke } from "./boundary-colors.js";
 
@@ -205,7 +207,13 @@ function renderNode(n: SphereNode): string {
 }
 
 /** Build an SVG snapshot of the board graph matching the live whiteboard cards. */
-export function graphToSvg(graph: BoardGraph): string {
+export type GraphToSvgOptions = {
+  /** Match board arrow mode. Defaults to orthogonal (straight 90°) like the live board. */
+  mode?: EdgeRouteMode;
+};
+
+export function graphToSvg(graph: BoardGraph, options: GraphToSvgOptions = {}): string {
+  const mode: EdgeRouteMode = options.mode ?? "orthogonal";
   const b = diagramBounds(graph);
 
   const groupRects = graph.groups
@@ -227,6 +235,27 @@ export function graphToSvg(graph: BoardGraph): string {
     h: n.h,
   }));
 
+  const orthogonalPaths =
+    mode === "orthogonal"
+      ? routeOrthogonalEdges(
+          graph.edges.flatMap((e) => {
+            const from = graph.nodes.find((n) => n.id === e.from);
+            const to = graph.nodes.find((n) => n.id === e.to);
+            if (!from || !to) return [];
+            const fan = edgeFanIndex(graph.edges, e.id);
+            return [
+              {
+                id: e.id,
+                from,
+                to,
+                fanIndex: fan.index,
+                fanCount: fan.count,
+              },
+            ];
+          }),
+        )
+      : null;
+
   const labeled = graph.edges
     .filter((e) => e.label)
     .map((e) => {
@@ -245,6 +274,7 @@ export function graphToSvg(graph: BoardGraph): string {
         toBox: to,
         fanIndex: fan.index,
         fanCount: fan.count,
+        mode,
       });
       return {
         id: e.id,
@@ -293,7 +323,9 @@ export function graphToSvg(graph: BoardGraph): string {
           : e.kind === "async" || e.kind === "stream"
             ? "url(#arrow-event)"
             : "url(#arrow)";
-      const d = edgePath(anchors.a, anchors.b, anchors.fromSide, anchors.toSide);
+      const d =
+        orthogonalPaths?.get(e.id) ??
+        edgePath(anchors.a, anchors.b, anchors.fromSide, anchors.toSide, mode);
       let labelSvg = "";
       if (e.label) {
         const mid = placeEdgeLabel({
@@ -307,6 +339,7 @@ export function graphToSvg(graph: BoardGraph): string {
           toBox: to,
           fanIndex: fan.index,
           fanCount: fan.count,
+          mode,
         });
         const ev = edgeVisual(e.kind);
         const contractLine = e.contract ? 12 : 0;

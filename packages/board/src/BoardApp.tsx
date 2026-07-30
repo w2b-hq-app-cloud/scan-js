@@ -1873,7 +1873,8 @@ export default function BoardApp({
         onDownloadYaml={() => void saveYaml()}
         onImportYaml={() => fileInputRef.current?.click()}
         onExportSvg={() => {
-          void exportSvg()
+          const mode = orthogonalEdges ? "orthogonal" : "bezier";
+          void exportSvg({ mode })
             .then((r) => toast.success("Exported SVG", { description: r.filename }))
             .catch((err) =>
               toast.error("SVG export failed", {
@@ -1882,7 +1883,8 @@ export default function BoardApp({
             );
         }}
         onExportPng={() => {
-          void exportPng()
+          const mode = orthogonalEdges ? "orthogonal" : "bezier";
+          void exportPng({ mode })
             .then((r) => toast.success("Exported PNG", { description: r.filename }))
             .catch((err) =>
               toast.error("PNG export failed", {
