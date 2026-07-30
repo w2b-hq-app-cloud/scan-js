@@ -7,8 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `@spherescan/board`: **Fast design** mode (pen tool on the rail) — click places a component, drag a box creates a boundary, click-to-click connects; Esc cancels wire/draw then exits the mode.
+- `@spherescan/board`: connect-target highlight while Fast design (or Connect) wiring is active.
+
 ### Changed
 
+- `@spherescan/board`: scope-only split of `BoardApp.tsx` into `chrome/`, `tools/`, `nodes/`, `inspector/`, `preview/`, plus shared helpers (`board-types`, `board-geometry`, `board-style`, `board-files`). Public `index.ts` exports unchanged.
 - `@spherescan/viewer` / `@spherescan/board`: edge labels use AABB deconfliction so chips stack with a gap instead of overlapping.
 - `@spherescan/viewer` / `@spherescan/board`: orthogonal edges get mid-corridor **lane gaps** so parallel straight wires (and labels) no longer stack on top of each other.
 - `@spherescan/viewer` / `@spherescan/board` / `@spherescan/modeler`: SVG/PNG export (and CLI) use **orthogonal** edges by default to match the live board; pass `{ mode: "bezier" }` when curved arrows are selected.
