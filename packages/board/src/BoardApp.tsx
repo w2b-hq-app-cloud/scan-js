@@ -67,7 +67,6 @@ import type { SphereNode, SphereEdge, SphereGroup, NodeKind, BoundaryColor } fro
 import {
   LABEL_LOD_ZOOM,
   anchorPoint,
-  computeLabelStagger,
   edgePath,
   placeEdgeLabel,
   projectToGraph,
@@ -78,6 +77,9 @@ import {
   boundaryStroke,
   resolveEdgeAnchors,
   routeOrthogonalEdges,
+  assignOrthogonalLanes,
+  resolveLabelOverlaps,
+  estimateEdgeLabelSize,
 } from "@spherescan/viewer";
 import { parseScanYaml } from "@spherescan/model";
 import type { CreateKind } from "@spherescan/modeler";
@@ -892,13 +894,30 @@ export default function BoardApp({
   const edgeLabelPositions = useMemo(() => {
     const boxes = nodes.map((n) => ({ x: n.x, y: n.y, w: n.w, h: n.h }));
     const routeMode = orthogonalEdges ? "orthogonal" : "bezier";
-    const rough: Array<{ id: string; x: number; y: number }> = [];
+    const routed = edges
+      .map((e) => {
+        const from = nodeById[e.from];
+        const to = nodeById[e.to];
+        if (!from || !to) return null;
+        const fan = edgeFanById.get(e.id);
+        return {
+          id: e.id,
+          from: { x: from.x, y: from.y, w: from.w, h: from.h },
+          to: { x: to.x, y: to.y, w: to.w, h: to.h },
+          fanIndex: fan?.index ?? 0,
+          fanCount: fan?.count ?? 1,
+        };
+      })
+      .filter((e): e is NonNullable<typeof e> => Boolean(e));
+    const lanes = orthogonalEdges ? assignOrthogonalLanes(routed) : new Map<string, number>();
+    const rough: Array<{ id: string; x: number; y: number; w: number; h: number }> = [];
     for (const e of edges) {
       if (!e.label) continue;
       const anchors = edgeAnchorsById.get(e.id);
       const from = nodeById[e.from];
       const to = nodeById[e.to];
       if (!anchors || !from || !to) continue;
+      const size = estimateEdgeLabelSize(e.label, e.contract);
       const p = placeEdgeLabel({
         a: anchors.a,
         b: anchors.b,
@@ -910,35 +929,14 @@ export default function BoardApp({
         toBox: to,
         fanIndex: edgeFanById.get(e.id)?.index,
         fanCount: edgeFanById.get(e.id)?.count,
+        laneOffset: lanes.get(e.id),
+        labelW: size.w,
+        labelH: size.h,
       });
-      rough.push({ id: e.id, x: p.x, y: p.y });
+      rough.push({ id: e.id, x: p.x, y: p.y, w: size.w, h: size.h });
     }
-    const stagger = computeLabelStagger(rough);
-    const out = new Map<string, Point>();
-    for (const e of edges) {
-      if (!e.label) continue;
-      const anchors = edgeAnchorsById.get(e.id);
-      const from = nodeById[e.from];
-      const to = nodeById[e.to];
-      if (!anchors || !from || !to) continue;
-      out.set(
-        e.id,
-        placeEdgeLabel({
-          a: anchors.a,
-          b: anchors.b,
-          aSide: anchors.fromSide,
-          bSide: anchors.toSide,
-          nodes: boxes,
-          stagger: stagger.get(e.id) ?? 0,
-          mode: routeMode,
-          fromBox: from,
-          toBox: to,
-          fanIndex: edgeFanById.get(e.id)?.index,
-          fanCount: edgeFanById.get(e.id)?.count,
-        }),
-      );
-    }
-    return out;
+    // AABB deconfliction so chips (Stream/AsyncAPI, etc.) never sit on top of each other.
+    return resolveLabelOverlaps(rough, { gap: 10 });
   }, [edges, nodes, nodeById, orthogonalEdges, edgeAnchorsById, edgeFanById]);
 
   const orthogonalEdgePaths = useMemo(() => {
