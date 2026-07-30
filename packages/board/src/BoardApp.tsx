@@ -2446,7 +2446,9 @@ export default function BoardApp({
                 connectSourcePortId={
                   connectFrom?.nodeId === n.id ? connectFrom.portId : undefined
                 }
-                connectMode={tool === "connect" || Boolean(connectFrom)}
+                connectMode={
+                  tool === "connect" || tool === "fast" || Boolean(connectFrom)
+                }
                 dim={dimmed(n)}
                 highlight={
                   view === "contracts" && n.status === "warn"
