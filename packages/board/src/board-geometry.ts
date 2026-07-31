@@ -5,9 +5,43 @@ import type { ResizeHandle } from "./board-types";
 
 /** World-px drag below this is treated as a click → place a component. */
 export const FAST_CLICK_SLOP = 10;
-/** Minimum drag size to create a boundary instead of a component. */
-export const FAST_BOUNDARY_MIN_W = 120;
-export const FAST_BOUNDARY_MIN_H = 80;
+
+/**
+ * Minimum drag size for a trust/runtime boundary.
+ * Must be larger than a default service card (260×190) so a “node-sized” drag
+ * does not accidentally become a boundary.
+ */
+export const FAST_BOUNDARY_MIN_W = 300;
+export const FAST_BOUNDARY_MIN_H = 220;
+
+/** Thin rubber-band (either orientation) → datastore. */
+/** Short side at or below this still counts as thin (forgiving). */
+export const FAST_THIN_MAX_SHORT = 140;
+/** Long side must clear this so a click isn’t a datastore. */
+export const FAST_THIN_MIN_LONG = 36;
+/** Long/short ratio at or above this counts as thin. */
+export const FAST_THIN_ASPECT = 1.35;
+
+export type FastDraftKind = "click" | "datastore" | "boundary" | "component";
+
+/** Classify a Fast design rubber-band by size/aspect. */
+export function classifyFastDraft(w: number, h: number): FastDraftKind {
+  if (w < FAST_CLICK_SLOP && h < FAST_CLICK_SLOP) return "click";
+
+  const long = Math.max(w, h);
+  const short = Math.min(w, h);
+  // Any elongated slab (horizontal or vertical) → datastore.
+  if (
+    short <= FAST_THIN_MAX_SHORT &&
+    long >= FAST_THIN_MIN_LONG &&
+    long / Math.max(short, 1) >= FAST_THIN_ASPECT
+  ) {
+    return "datastore";
+  }
+
+  if (w >= FAST_BOUNDARY_MIN_W && h >= FAST_BOUNDARY_MIN_H) return "boundary";
+  return "component";
+}
 
 export function snap4(n: number): number {
   return Math.round(n / 4) * 4;

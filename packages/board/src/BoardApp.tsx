@@ -64,6 +64,8 @@ import {
   FAST_CLICK_SLOP,
   FAST_BOUNDARY_MIN_W,
   FAST_BOUNDARY_MIN_H,
+  FAST_THIN_MAX_SHORT,
+  classifyFastDraft,
   snap4,
   normalizeDraftRect,
   applyBoundaryResize,
@@ -81,6 +83,7 @@ import { readStoredRecentPrompts, rememberRecentPrompt } from "./recent-prompts"
 import { IconBtn } from "./ui/IconBtn";
 import { EdgeIcon } from "./icons/EdgeIcon";
 import { ToolRail } from "./tools/ToolRail";
+import { FastDesignLegend } from "./tools/FastDesignLegend";
 import { NodeCard } from "./nodes/NodeCard";
 import { Inspector } from "./inspector/Inspector";
 import { TopBar } from "./chrome/TopBar";
@@ -923,45 +926,55 @@ export default function BoardApp({
   const commitFastDraft = useCallback(
     (draft: { x0: number; y0: number; x1: number; y1: number }) => {
       const { x, y, w, h } = normalizeDraftRect(draft);
-      if (w < FAST_CLICK_SLOP && h < FAST_CLICK_SLOP) {
-        const id = createElement(createKind, snap4(draft.x0), snap4(draft.y0));
+      const kind = classifyFastDraft(w, h);
+
+      if (kind === "click" || kind === "component") {
+        const id = createElement(
+          createKind,
+          kind === "click" ? snap4(draft.x0) : snap4(x),
+          kind === "click" ? snap4(draft.y0) : snap4(y),
+        );
         setSelected(id);
         setSelectedEdge(null);
         setSelectedBoundary(null);
         toast.success(`${createKindHints[createKind].label} added`, {
-          description: "Click another component to connect · drag a box for a boundary",
+          description:
+            kind === "click"
+              ? "Click another component to connect · thin box → Datastore · large box → boundary"
+              : `Thin (short ≤${FAST_THIN_MAX_SHORT}px) → Datastore · ≥${FAST_BOUNDARY_MIN_W}×${FAST_BOUNDARY_MIN_H} → boundary`,
         });
         return;
       }
-      if (w >= FAST_BOUNDARY_MIN_W && h >= FAST_BOUNDARY_MIN_H) {
-        try {
-          const id = createBoundary(boundaryKind, {
-            x: snap4(x),
-            y: snap4(y),
-            w: snap4(w),
-            h: snap4(h),
-          });
-          setSelectedBoundary(id);
-          setSelected(null);
-          setSelectedEdge(null);
-          toast.success(
-            boundaryKind === "trust" ? "Trust boundary added" : "Runtime boundary added",
-            { description: "Drag another box or click components to connect" },
-          );
-        } catch (err) {
-          const message = err instanceof Error ? err.message : "Could not create boundary";
-          toast.error("Boundary failed", { description: message });
-        }
+
+      if (kind === "datastore") {
+        const id = createElement("datastore", snap4(x), snap4(y));
+        setSelected(id);
+        setSelectedEdge(null);
+        setSelectedBoundary(null);
+        toast.success("Datastore added", {
+          description: "Thin box gesture · click components to connect",
+        });
         return;
       }
-      // Medium drag: still place a component at the start point.
-      const id = createElement(createKind, snap4(draft.x0), snap4(draft.y0));
-      setSelected(id);
-      setSelectedEdge(null);
-      setSelectedBoundary(null);
-      toast.success(`${createKindHints[createKind].label} added`, {
-        description: `Drag at least ${FAST_BOUNDARY_MIN_W}×${FAST_BOUNDARY_MIN_H} for a boundary`,
-      });
+
+      try {
+        const id = createBoundary(boundaryKind, {
+          x: snap4(x),
+          y: snap4(y),
+          w: snap4(w),
+          h: snap4(h),
+        });
+        setSelectedBoundary(id);
+        setSelected(null);
+        setSelectedEdge(null);
+        toast.success(
+          boundaryKind === "trust" ? "Trust boundary added" : "Runtime boundary added",
+          { description: "Drag another box or click components to connect" },
+        );
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Could not create boundary";
+        toast.error("Boundary failed", { description: message });
+      }
     },
     [boundaryKind, createBoundary, createElement, createKind],
   );
@@ -2159,15 +2172,24 @@ export default function BoardApp({
             {/* Fast design rubber-band preview */}
             {fastDraft && (() => {
               const r = normalizeDraftRect(fastDraft);
-              const isBoundary =
-                r.w >= FAST_BOUNDARY_MIN_W && r.h >= FAST_BOUNDARY_MIN_H;
+              const draftKind = classifyFastDraft(r.w, r.h);
+              const ring =
+                draftKind === "boundary"
+                  ? "border-primary bg-primary/5"
+                  : draftKind === "datastore"
+                    ? "border-data bg-data-soft/60"
+                    : "border-muted-foreground/50 bg-muted/20";
+              const label =
+                draftKind === "boundary"
+                  ? boundaryKind === "trust"
+                    ? "Trust boundary"
+                    : "Runtime"
+                  : draftKind === "datastore"
+                    ? "Datastore"
+                    : null;
               return (
                 <div
-                  className={`pointer-events-none absolute rounded-2xl border-2 border-dashed ${
-                    isBoundary
-                      ? "border-primary bg-primary/5"
-                      : "border-muted-foreground/50 bg-muted/20"
-                  }`}
+                  className={`pointer-events-none absolute rounded-2xl border-2 border-dashed ${ring}`}
                   style={{
                     left: r.x,
                     top: r.y,
@@ -2175,7 +2197,13 @@ export default function BoardApp({
                     height: Math.max(r.h, 2),
                     zIndex: 40,
                   }}
-                />
+                >
+                  {label && (
+                    <span className="absolute left-2 top-1.5 rounded-md bg-surface/90 px-1.5 py-0.5 text-[10px] font-semibold text-foreground hairline">
+                      {label}
+                    </span>
+                  )}
+                </div>
               );
             })()}
           </div>
@@ -2187,9 +2215,7 @@ export default function BoardApp({
               <>
                 <PenLine className="h-3.5 w-3.5 text-primary" />
                 <span className="font-medium text-foreground">
-                  Fast design: click → {createKindHints[createKind].label}, drag box →{" "}
-                  {boundaryKind === "trust" ? "Trust boundary" : "Runtime"}, click
-                  components to connect
+                  Fast design on — see legend (left)
                 </span>
                 <span className="text-muted-foreground">Esc to exit</span>
               </>
@@ -2263,6 +2289,12 @@ export default function BoardApp({
               setTool("boundary");
             }}
           />
+          {tool === "fast" && (
+            <FastDesignLegend
+              createLabel={createKindHints[createKind].label}
+              boundaryLabel={boundaryKind === "trust" ? "Trust boundary" : "Runtime"}
+            />
+          )}
         </div>
 
         {/* ZOOM CONTROLS */}

@@ -104,22 +104,23 @@ Overlay at the **top-left** of the canvas. Hover for tooltips.
 | **Select** | Pointer | Select, drag nodes, drag boundaries (moves members), resize boundaries, open inspector |
 | **Pan** | Hand | Drag the canvas (`grab` cursor) |
 | **Connect** | Arrow (finger when active) | Wire nodes / ports; see [Connections](#5-connections-expose--consume) |
-| **Fast design** | Pen | Toggle sketch mode: click empty canvas → component, drag a box → boundary, click two components → connect. Stays on until toggled off or **Esc**. |
+| **Fast design** | Pen | Toggle sketch mode: click → component, thin box → datastore, large box → boundary, click two components → connect. Legend shows while active. Stays on until toggled off or **Esc**. |
 | **Add component** | **+** | Opens the component kind menu |
 | **Add boundary** | Square | Opens trust / runtime boundary menu |
 | **Toggle grid** | Grid | Turns the dot grid on/off (default on) |
 
 ### Fast design
 
-Toggle **Fast design** on the rail (pen icon). While active:
+Toggle **Fast design** on the rail (pen icon). While active, a **legend** appears beside the rail:
 
 1. **Click** empty canvas → places the current Add-component kind (default **Service**).  
-2. **Drag a box** (at least ~120×80) → creates a **Trust** or **Runtime** boundary (whichever is selected in Add boundary).  
-3. **Click** a component, then another → creates a connection (same rules as Connect).  
-4. While Fast design is on, **Add component** / **Add boundary** menus only change *what* you place next; they do not leave the mode.  
-5. **Esc** cancels an in-progress wire or draw first; press again (or toggle the tool) to exit the mode.
+2. **Drag a thin box** (short side roughly ≤140px, elongated either horizontally or vertically) → places a **Datastore**.  
+3. **Drag a large box** (at least ~300×220 — bigger than a default service card) → creates a **Trust** or **Runtime** boundary (whichever is selected in Add boundary). Smaller non-thin drags still place a component.  
+4. **Click** a component, then another → creates a connection (same rules as Connect).  
+5. While Fast design is on, **Add component** / **Add boundary** menus only change *what* click / large-box create; they do not leave the mode.  
+6. **Esc** cancels an in-progress wire or draw first; press again (or toggle the tool) to exit the mode.
 
-Mode banner at the bottom explains the gestures. Normal Select / Pan / Connect stay available as separate tools so Fast design does not overlap them.
+The rubber-band preview tint changes for datastore vs boundary. Normal Select / Pan / Connect stay available as separate tools so Fast design does not overlap them.
 
 ### Add component
 
