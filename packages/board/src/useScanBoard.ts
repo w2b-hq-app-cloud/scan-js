@@ -9,7 +9,7 @@ import {
   serializeSphereYaml,
   type SphereModel,
 } from "@spherescan/model";
-import orderPlatformYaml from "./samples/order-platform.yaml?raw";
+import orderPlatformYaml from "./samples/order-platform";
 
 export type UseScanBoardOptions = {
   /** Initial document YAML. Defaults to the Order Platform sample. */

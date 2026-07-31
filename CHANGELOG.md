@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `@spherescan/board`: load the Order Platform sample as a TS string module (no `*.yaml?raw`) so Vite/Rolldown works through Windows `node_modules` junctions.
+
 ### Added
 
 - `@spherescan/board`: **Fast design** mode (pen tool on the rail) — click places a component, drag a box creates a boundary, click-to-click connects; Esc cancels wire/draw then exits the mode.
