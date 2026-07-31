@@ -83,11 +83,26 @@ export type BoardAiAdapter = {
   suggest?: (input: {
     message?: string;
     yaml: string;
+    selection?: string[];
   }) => Promise<string[]>;
   layout?: (input: { yaml: string }) => Promise<{
     reply?: string;
     yaml: string;
   }>;
+  /**
+   * Optional Enterprise Architect pass (Sphere). Returns ephemeral warnings —
+   * does not rewrite board YAML.
+   */
+  architect?: (input: { yaml: string }) => Promise<{
+    warnings: { elementId: string; message: string }[];
+  }>;
   /** Optional STT: Sphere wires this to mesh faster-whisper. */
   transcribeAudio?: (input: { blob: Blob; mimeType: string }) => Promise<string>;
+};
+
+/** Architecture warning shown in ValidationToast / node badges. */
+export type ArchitectureWarning = {
+  id: string;
+  title: string;
+  message: string;
 };

@@ -132,7 +132,7 @@ export function useScanBoard(options: UseScanBoardOptions | string = {}) {
   const [historyStep, setHistoryStep] = useState(0);
   const [historyTotal, setHistoryTotal] = useState(0);
 
-  const dragOrigin = useRef<{ id: string; x: number; y: number } | null>(null);
+  const dragOrigin = useRef<Array<{ id: string; x: number; y: number }> | null>(null);
   const boundaryResizeOrigin = useRef<{
     id: string;
     x: number;
@@ -189,22 +189,33 @@ export function useScanBoard(options: UseScanBoardOptions | string = {}) {
     [modeler],
   );
 
-  const beginDrag = useCallback((id: string) => {
-    const n = modeler.getGraph()?.nodes.find((x) => x.id === id);
-    if (!n) return;
-    dragOrigin.current = { id, x: n.x, y: n.y };
+  const beginDrag = useCallback((ids: string | string[]) => {
+    const list = Array.isArray(ids) ? ids : [ids];
+    const graph = modeler.getGraph();
+    const origins: Array<{ id: string; x: number; y: number }> = [];
+    for (const id of list) {
+      const n = graph?.nodes.find((x) => x.id === id);
+      if (n) origins.push({ id, x: n.x, y: n.y });
+    }
+    dragOrigin.current = origins.length ? origins : null;
   }, [modeler]);
 
   const endDrag = useCallback(() => {
-    const origin = dragOrigin.current;
+    const origins = dragOrigin.current;
     dragOrigin.current = null;
-    if (!origin) return;
-    const n = modeler.getGraph()?.nodes.find((x) => x.id === origin.id);
-    if (!n) return;
-    const { x: finalX, y: finalY } = n;
-    if (finalX === origin.x && finalY === origin.y) return;
-    modeler.modeling.previewMove(origin.id, origin.x, origin.y);
-    modeler.modeling.moveElement(origin.id, finalX, finalY);
+    if (!origins?.length) return;
+    const graph = modeler.getGraph();
+    const updates = origins.map((o) => {
+      const n = graph?.nodes.find((x) => x.id === o.id);
+      return {
+        id: o.id,
+        x: n?.x ?? o.x,
+        y: n?.y ?? o.y,
+        ox: o.x,
+        oy: o.y,
+      };
+    });
+    modeler.modeling.commitElementMoves(updates);
   }, [modeler]);
 
   const beginBoundaryResize = useCallback(
@@ -251,33 +262,49 @@ export function useScanBoard(options: UseScanBoardOptions | string = {}) {
     });
   }, [modeler]);
 
-  const boundaryMoveOrigin = useRef<{ id: string; x: number; y: number } | null>(null);
+  const boundaryMoveOrigin = useRef<Array<{ id: string; x: number; y: number }> | null>(
+    null,
+  );
 
   const beginBoundaryMove = useCallback(
-    (id: string) => {
-      const g = modeler.getGraph()?.groups.find((x) => x.id === id);
-      if (!g) return;
-      boundaryMoveOrigin.current = { id, x: g.x, y: g.y };
+    (ids: string | string[]) => {
+      const list = Array.isArray(ids) ? ids : [ids];
+      const graph = modeler.getGraph();
+      const origins: Array<{ id: string; x: number; y: number }> = [];
+      for (const id of list) {
+        const g = graph?.groups.find((x) => x.id === id);
+        if (g) origins.push({ id, x: g.x, y: g.y });
+      }
+      boundaryMoveOrigin.current = origins.length ? origins : null;
     },
     [modeler],
   );
 
   const previewBoundaryMove = useCallback(
-    (id: string, x: number, y: number) => {
-      modeler.modeling.previewMoveBoundary(id, x, y);
+    (moves: Array<{ id: string; x: number; y: number }>) => {
+      for (const m of moves) {
+        modeler.modeling.previewMoveBoundary(m.id, m.x, m.y);
+      }
     },
     [modeler],
   );
 
   const endBoundaryMove = useCallback(() => {
-    const origin = boundaryMoveOrigin.current;
+    const origins = boundaryMoveOrigin.current;
     boundaryMoveOrigin.current = null;
-    if (!origin) return;
-    const g = modeler.getGraph()?.groups.find((x) => x.id === origin.id);
-    if (!g) return;
-    if (g.x === origin.x && g.y === origin.y) return;
-    modeler.modeling.previewMoveBoundary(origin.id, origin.x, origin.y);
-    modeler.modeling.moveBoundary(origin.id, g.x, g.y);
+    if (!origins?.length) return;
+    const graph = modeler.getGraph();
+    const updates = origins.map((o) => {
+      const g = graph?.groups.find((x) => x.id === o.id);
+      return {
+        id: o.id,
+        x: g?.x ?? o.x,
+        y: g?.y ?? o.y,
+        ox: o.x,
+        oy: o.y,
+      };
+    });
+    modeler.modeling.commitBoundaryMoves(updates);
   }, [modeler]);
 
   const undo = useCallback(() => modeler.undo(), [modeler]);

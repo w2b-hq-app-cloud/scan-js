@@ -59,6 +59,7 @@ import type {
   ResizeHandle,
   BoardAppProps,
   BoardAiAttachment,
+  ArchitectureWarning,
 } from "./board-types";
 import {
   FAST_CLICK_SLOP,
@@ -85,6 +86,11 @@ import { EdgeIcon } from "./icons/EdgeIcon";
 import { ToolRail } from "./tools/ToolRail";
 import { FastDesignLegend } from "./tools/FastDesignLegend";
 import { NodeCard } from "./nodes/NodeCard";
+import { SelectionCheck } from "./nodes/SelectionCheck";
+import {
+  NodeAskSphere,
+  DEFAULT_ASK_SPHERE_CHIPS,
+} from "./nodes/NodeAskSphere";
 import { Inspector } from "./inspector/Inspector";
 import { TopBar } from "./chrome/TopBar";
 import { AIBar } from "./chrome/AIBar";
@@ -105,6 +111,7 @@ export type {
   BoardAiChatResult,
   BoardAiAttachment,
   BoardAiAdapter,
+  ArchitectureWarning,
 } from "./board-types";
 
 export default function BoardApp({
@@ -173,6 +180,10 @@ export default function BoardApp({
 
   const [selected, setSelected] = useState<string | null>(null);
   const [selectedBoundary, setSelectedBoundary] = useState<string | null>(null);
+  /** Additional node ids when Ctrl/Cmd+click multi-selecting (primary is `selected`). */
+  const [selectedExtras, setSelectedExtras] = useState<string[]>([]);
+  /** Additional boundary ids for multi-select (primary is `selectedBoundary`). */
+  const [selectedBoundaryExtras, setSelectedBoundaryExtras] = useState<string[]>([]);
   const [hoverEdge, setHoverEdge] = useState<string | null>(null);
   const [selectedEdge, setSelectedEdge] = useState<string | null>(null);
   const [zoom, setZoom] = useState(0.85);
@@ -207,6 +218,15 @@ export default function BoardApp({
   const voiceMaxTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const submitAiChatRef = useRef<(override?: string) => Promise<void>>(async () => {});
   const [aiSuggestions, setAiSuggestions] = useState<string[]>(commandSuggestions);
+  const [architectWarnings, setArchitectWarnings] = useState<
+    { elementId: string; message: string }[]
+  >([]);
+  const [architectBusy, setArchitectBusy] = useState(false);
+  const [nodeAskChips, setNodeAskChips] = useState<string[]>([]);
+  const [nodeAskLoading, setNodeAskLoading] = useState(false);
+  const [nodeAskForId, setNodeAskForId] = useState<string | null>(null);
+  const nodeAskGenRef = useRef(0);
+  const architectGenRef = useRef(0);
   const [aiRecentPrompts, setAiRecentPrompts] = useState<string[]>(seedRecentPrompts);
   const [aiMenuOpen, setAiMenuOpen] = useState(false);
   const [pendingAi, setPendingAi] = useState<{
@@ -277,14 +297,26 @@ export default function BoardApp({
     },
     [importYamlFile],
   );
-  const dragging = useRef<{ id: string; ox: number; oy: number } | null>(null);
+  const dragging = useRef<{
+    id: string;
+    ids: string[];
+    ox: number;
+    oy: number;
+    starts: Record<string, { x: number; y: number }>;
+  } | null>(null);
   const resizingBoundary = useRef<{
     id: string;
     handle: ResizeHandle;
     start: { x: number; y: number; w: number; h: number };
     origin: Point;
   } | null>(null);
-  const movingBoundary = useRef<{ id: string; ox: number; oy: number } | null>(null);
+  const movingBoundary = useRef<{
+    id: string;
+    ids: string[];
+    ox: number;
+    oy: number;
+    starts: Record<string, { x: number; y: number }>;
+  } | null>(null);
   const panning = useRef<{ sx: number; sy: number; px: number; py: number } | null>(null);
 
   const saveYaml = useCallback(async () => {
@@ -406,16 +438,42 @@ export default function BoardApp({
       if (e.key === "Delete" || e.key === "Backspace") {
         const tag = (e.target as HTMLElement)?.tagName;
         if (tag === "INPUT" || tag === "TEXTAREA") return;
-        if (selected) {
+        const nodeIds = [
+          ...new Set([
+            ...(selected ? [selected] : []),
+            ...selectedExtras,
+          ]),
+        ];
+        const boundaryIds = [
+          ...new Set([
+            ...(selectedBoundary ? [selectedBoundary] : []),
+            ...selectedBoundaryExtras,
+          ]),
+        ];
+        if (nodeIds.length) {
           e.preventDefault();
-          deleteElement(selected);
+          for (const id of nodeIds) {
+            try {
+              deleteElement(id);
+            } catch {
+              /* continue */
+            }
+          }
           setSelected(null);
-        } else if (selectedBoundary) {
+          setSelectedExtras([]);
+        } else if (boundaryIds.length) {
           e.preventDefault();
           try {
-            deleteBoundary(selectedBoundary);
+            for (const id of boundaryIds) {
+              deleteBoundary(id);
+            }
             setSelectedBoundary(null);
-            toast.success("Boundary deleted");
+            setSelectedBoundaryExtras([]);
+            toast.success(
+              boundaryIds.length === 1
+                ? "Boundary deleted"
+                : `${boundaryIds.length} boundaries deleted`,
+            );
           } catch (err) {
             const message = err instanceof Error ? err.message : "Delete failed";
             toast.error("Could not delete boundary", { description: message });
@@ -474,8 +532,10 @@ export default function BoardApp({
     undo,
     redo,
     selected,
+    selectedExtras,
     selectedEdge,
     selectedBoundary,
+    selectedBoundaryExtras,
     deleteElement,
     deleteBoundary,
     duplicateElement,
@@ -512,6 +572,29 @@ export default function BoardApp({
     onDocumentChange(modeler.peekYAML());
   }, [historyStep, model, dirty, onDocumentChange, modeler]);
 
+  // Enterprise Architect: debounced analyze-only pass after board changes.
+  useEffect(() => {
+    if (!aiAdapter?.architect || !model || !ready) return;
+    setArchitectBusy(true);
+    const gen = ++architectGenRef.current;
+    const handle = window.setTimeout(() => {
+      const yaml = modeler.peekYAML();
+      void aiAdapter
+        .architect!({ yaml })
+        .then((res) => {
+          if (gen !== architectGenRef.current) return;
+          setArchitectWarnings(Array.isArray(res.warnings) ? res.warnings : []);
+        })
+        .catch(() => {
+          /* keep prior warnings on failure */
+        })
+        .finally(() => {
+          if (gen === architectGenRef.current) setArchitectBusy(false);
+        });
+    }, 1000);
+    return () => window.clearTimeout(handle);
+  }, [historyStep, model, ready, aiAdapter, modeler]);
+
   const loadedYamlRef = useRef<string | null>(null);
   useEffect(() => {
     if (!ready || !initialYaml) return;
@@ -544,14 +627,88 @@ export default function BoardApp({
     return () => ro.disconnect();
   }, []);
 
-  const nodeById = useMemo(() => Object.fromEntries(nodes.map((n) => [n.id, n])), [nodes]);
+  const displayNodes = useMemo(() => {
+    const msgById = new Map(
+      architectWarnings.map((w) => [w.elementId, w.message] as const),
+    );
+    // Sphere: architect owns warn badges — don't show baked YAML status until live results.
+    if (aiAdapter?.architect) {
+      return nodes.map((n) => {
+        const msg = msgById.get(n.id);
+        if (msg) {
+          return { ...n, status: "warn" as const, warn: msg };
+        }
+        if (n.status === "warn" || n.warn) {
+          return { ...n, status: undefined, warn: undefined };
+        }
+        return n;
+      });
+    }
+    if (msgById.size === 0) return nodes;
+    return nodes.map((n) => {
+      const msg = msgById.get(n.id);
+      if (!msg) return n;
+      return {
+        ...n,
+        status: "warn" as const,
+        warn: n.warn?.trim() ? n.warn : msg,
+      };
+    });
+  }, [nodes, architectWarnings, aiAdapter?.architect]);
+
+  const nodeById = useMemo(
+    () => Object.fromEntries(displayNodes.map((n) => [n.id, n])),
+    [displayNodes],
+  );
+
+  const architectureWarnings = useMemo((): ArchitectureWarning[] => {
+    // With Enterprise Architect, toast waits for live analysis — ignore baked YAML mocks.
+    if (aiAdapter?.architect) {
+      const byId = new Map<string, ArchitectureWarning>();
+      for (const w of architectWarnings) {
+        const n = nodeById[w.elementId] ?? nodes.find((x) => x.id === w.elementId);
+        if (!n) continue;
+        byId.set(w.elementId, {
+          id: w.elementId,
+          title: n.title,
+          message: w.message,
+        });
+      }
+      return [...byId.values()];
+    }
+    const byId = new Map<string, ArchitectureWarning>();
+    for (const n of displayNodes) {
+      if (n.status === "warn" || n.warn) {
+        byId.set(n.id, {
+          id: n.id,
+          title: n.title,
+          message: n.warn ?? "Validation warning",
+        });
+      }
+    }
+    return [...byId.values()];
+  }, [aiAdapter?.architect, architectWarnings, displayNodes, nodeById, nodes]);
+
+  const selectedNodeIds = useMemo(() => {
+    const ids = new Set(selectedExtras);
+    if (selected) ids.add(selected);
+    return [...ids];
+  }, [selected, selectedExtras]);
+
+  const selectedBoundaryIds = useMemo(() => {
+    const ids = new Set(selectedBoundaryExtras);
+    if (selectedBoundary) ids.add(selectedBoundary);
+    return [...ids];
+  }, [selectedBoundary, selectedBoundaryExtras]);
+
+  const selectionCount = selectedNodeIds.length + selectedBoundaryIds.length;
 
   const focusIds = useMemo(() => {
     if (!focusMode) return null;
     // While wiring, keep every component fully visible — focus dimming hides valid targets.
     if (tool === "connect" || tool === "fast" || connectFrom) return null;
     const seed = new Set<string>();
-    if (selected) seed.add(selected);
+    for (const id of selectedNodeIds) seed.add(id);
     if (selectedEdge) {
       const e = edges.find((x) => x.id === selectedEdge);
       if (e) {
@@ -575,7 +732,7 @@ export default function BoardApp({
       }
     }
     return hop;
-  }, [focusMode, selected, selectedEdge, hoverEdge, edges, tool, connectFrom]);
+  }, [focusMode, selectedNodeIds, selectedEdge, hoverEdge, edges, tool, connectFrom]);
 
   const edgeFanById = useMemo(() => {
     const counts = new Map<string, number>();
@@ -723,6 +880,8 @@ export default function BoardApp({
         setConnectFrom({ nodeId: id });
         setConnectCursor(clientToWorld(e.clientX, e.clientY));
         setSelected(id);
+        setSelectedExtras([]);
+        setSelectedBoundaryExtras([]);
         setSelectedEdge(null);
         setSelectedBoundary(null);
       } else if (connectFrom.nodeId !== id) {
@@ -745,13 +904,54 @@ export default function BoardApp({
     }
     if (tool !== "select") return;
     e.stopPropagation();
-    setSelected(id);
-    setSelectedBoundary(null);
-    setSelectedEdge(null);
+
+    const additive = e.ctrlKey || e.metaKey;
+    if (additive) {
+      e.preventDefault();
+      setSelectedEdge(null);
+      setSelectedBoundary(null);
+      setSelectedBoundaryExtras([]);
+      const current = new Set(selectedExtras);
+      if (selected) current.add(selected);
+      if (current.has(id)) current.delete(id);
+      else current.add(id);
+      const next = [...current];
+      setSelected(next.length ? next[next.length - 1]! : null);
+      setSelectedExtras(next.length > 1 ? next.slice(0, -1) : []);
+      return;
+    }
+
+    const alreadyMulti =
+      selectedNodeIds.includes(id) && selectedNodeIds.length > 1;
+    if (!alreadyMulti) {
+      setSelected(id);
+      setSelectedExtras([]);
+      setSelectedBoundaryExtras([]);
+      setSelectedBoundary(null);
+      setSelectedEdge(null);
+    } else {
+      setSelectedBoundary(null);
+      setSelectedBoundaryExtras([]);
+      setSelectedEdge(null);
+    }
+
+    const moveIds = alreadyMulti ? selectedNodeIds : [id];
     const n = nodeById[id];
+    if (!n) return;
     const w = clientToWorld(e.clientX, e.clientY);
-    dragging.current = { id, ox: w.x - n.x, oy: w.y - n.y };
-    beginDrag(id);
+    const starts: Record<string, { x: number; y: number }> = {};
+    for (const moveId of moveIds) {
+      const node = nodeById[moveId];
+      if (node) starts[moveId] = { x: node.x, y: node.y };
+    }
+    dragging.current = {
+      id,
+      ids: moveIds,
+      ox: w.x - n.x,
+      oy: w.y - n.y,
+      starts,
+    };
+    beginDrag(moveIds);
     (e.target as Element).setPointerCapture(e.pointerId);
   };
 
@@ -856,12 +1056,52 @@ export default function BoardApp({
     e.stopPropagation();
     const g = groups.find((x) => x.id === id);
     if (!g) return;
-    setSelectedBoundary(id);
-    setSelected(null);
-    setSelectedEdge(null);
+
+    const additive = e.ctrlKey || e.metaKey;
+    if (additive) {
+      e.preventDefault();
+      setSelectedEdge(null);
+      setSelected(null);
+      setSelectedExtras([]);
+      const current = new Set(selectedBoundaryExtras);
+      if (selectedBoundary) current.add(selectedBoundary);
+      if (current.has(id)) current.delete(id);
+      else current.add(id);
+      const next = [...current];
+      setSelectedBoundary(next.length ? next[next.length - 1]! : null);
+      setSelectedBoundaryExtras(next.length > 1 ? next.slice(0, -1) : []);
+      return;
+    }
+
+    const alreadyMulti =
+      selectedBoundaryIds.includes(id) && selectedBoundaryIds.length > 1;
+    if (!alreadyMulti) {
+      setSelectedBoundary(id);
+      setSelectedBoundaryExtras([]);
+      setSelected(null);
+      setSelectedExtras([]);
+      setSelectedEdge(null);
+    } else {
+      setSelected(null);
+      setSelectedExtras([]);
+      setSelectedEdge(null);
+    }
+
+    const moveIds = alreadyMulti ? selectedBoundaryIds : [id];
     const w = clientToWorld(e.clientX, e.clientY);
-    movingBoundary.current = { id, ox: w.x - g.x, oy: w.y - g.y };
-    beginBoundaryMove(id);
+    const starts: Record<string, { x: number; y: number }> = {};
+    for (const moveId of moveIds) {
+      const group = groups.find((x) => x.id === moveId);
+      if (group) starts[moveId] = { x: group.x, y: group.y };
+    }
+    movingBoundary.current = {
+      id,
+      ids: moveIds,
+      ox: w.x - g.x,
+      oy: w.y - g.y,
+      starts,
+    };
+    beginBoundaryMove(moveIds);
     (e.currentTarget as Element).setPointerCapture(e.pointerId);
   };
 
@@ -893,26 +1133,35 @@ export default function BoardApp({
     if (movingBoundary.current) {
       const m = movingBoundary.current;
       const w = clientToWorld(e.clientX, e.clientY);
+      const anchorStart = m.starts[m.id];
+      if (!anchorStart) return;
+      const nx = Math.round((w.x - m.ox) / 4) * 4;
+      const ny = Math.round((w.y - m.oy) / 4) * 4;
+      const dx = nx - anchorStart.x;
+      const dy = ny - anchorStart.y;
       previewBoundaryMove(
-        m.id,
-        Math.round((w.x - m.ox) / 4) * 4,
-        Math.round((w.y - m.oy) / 4) * 4,
+        m.ids.map((bid) => {
+          const s = m.starts[bid] ?? anchorStart;
+          return { id: bid, x: s.x + dx, y: s.y + dy };
+        }),
       );
       return;
     }
     if (dragging.current) {
       const d = dragging.current;
       const w = clientToWorld(e.clientX, e.clientY);
+      const anchorStart = d.starts[d.id];
+      if (!anchorStart) return;
+      const nx = Math.round((w.x - d.ox) / 4) * 4;
+      const ny = Math.round((w.y - d.oy) / 4) * 4;
+      const dx = nx - anchorStart.x;
+      const dy = ny - anchorStart.y;
       setNodesPreview((prev) =>
-        prev.map((n) =>
-          n.id === d.id
-            ? {
-                ...n,
-                x: Math.round((w.x - d.ox) / 4) * 4,
-                y: Math.round((w.y - d.oy) / 4) * 4,
-              }
-            : n,
-        ),
+        prev.map((n) => {
+          const s = d.starts[n.id];
+          if (!s) return n;
+          return { ...n, x: s.x + dx, y: s.y + dy };
+        }),
       );
     }
     if (panning.current) {
@@ -1007,7 +1256,9 @@ export default function BoardApp({
       // Node clicks are handled in startDrag / ports and stopPropagation.
       const w = clientToWorld(e.clientX, e.clientY);
       setSelected(null);
+      setSelectedExtras([]);
       setSelectedBoundary(null);
+      setSelectedBoundaryExtras([]);
       setSelectedEdge(null);
       setCtxMenu(null);
       if (connectFrom) {
@@ -1061,7 +1312,9 @@ export default function BoardApp({
       };
     } else {
       setSelected(null);
+      setSelectedExtras([]);
       setSelectedBoundary(null);
+      setSelectedBoundaryExtras([]);
       setSelectedEdge(null);
       setCtxMenu(null);
       if (connectFrom || tool === "connect") {
@@ -1358,6 +1611,53 @@ export default function BoardApp({
   }, [aiAdapter, aiAttachments, aiBusy, aiSessionId, modeler, prompt, recording, selected, sttBusy]);
 
   submitAiChatRef.current = submitAiChat;
+
+  const askSphereAbout = useCallback((message: string) => {
+    setPrompt(message);
+    void submitAiChatRef.current(message);
+  }, []);
+
+  // Clear stale chips when selection changes (do not auto-fetch).
+  useEffect(() => {
+    setNodeAskChips([]);
+    setNodeAskLoading(false);
+    setNodeAskForId(null);
+    nodeAskGenRef.current += 1;
+  }, [selected]);
+
+  const loadNodeAskSuggestions = useCallback(() => {
+    if (!isSphere || !selected || !model) return;
+    const title = nodeById[selected]?.title ?? selected;
+    const gen = ++nodeAskGenRef.current;
+    setNodeAskLoading(true);
+    setNodeAskForId(selected);
+    setNodeAskChips([]);
+
+    const finish = (chips: string[]) => {
+      if (gen !== nodeAskGenRef.current) return;
+      setNodeAskChips(chips);
+      setNodeAskLoading(false);
+    };
+
+    if (!aiAdapter?.suggest) {
+      finish([...DEFAULT_ASK_SPHERE_CHIPS]);
+      return;
+    }
+
+    const yaml = modeler.peekYAML();
+    void aiAdapter
+      .suggest({
+        message: `Suggest next diagram actions for component "${title}" (id: ${selected})`,
+        yaml,
+        selection: [selected],
+      })
+      .then((chips) => {
+        finish(chips?.length ? chips.slice(0, 6) : [...DEFAULT_ASK_SPHERE_CHIPS]);
+      })
+      .catch(() => {
+        finish([...DEFAULT_ASK_SPHERE_CHIPS]);
+      });
+  }, [isSphere, selected, model, nodeById, aiAdapter, modeler]);
 
   const stopVoiceCapture = useCallback(() => {
     if (voiceMaxTimerRef.current) {
@@ -1740,7 +2040,7 @@ export default function BoardApp({
         onAutoLayout={() => void runAutoLayout()}
         focusMode={focusMode}
         onToggleFocusMode={() => setFocusMode((v) => !v)}
-        nodes={nodes}
+        nodes={displayNodes}
         groups={groups}
       />
 
@@ -1804,7 +2104,7 @@ export default function BoardApp({
           >
             {/* GROUPS */}
             {groups.map((g) => {
-              const selectedGroup = selectedBoundary === g.id;
+              const selectedGroup = selectedBoundaryIds.includes(g.id);
               const handles: ResizeHandle[] = [
                 "nw",
                 "n",
@@ -1863,6 +2163,7 @@ export default function BoardApp({
                   }}
                   onPointerDown={(e) => startBoundaryMove(e, g.id)}
                 >
+                  {selectedGroup && <SelectionCheck />}
                   <div className="absolute -top-3 left-4 flex items-center gap-2">
                     <button
                       type="button"
@@ -1875,8 +2176,23 @@ export default function BoardApp({
                       onPointerDown={(e) => e.stopPropagation()}
                       onClick={(e) => {
                         e.stopPropagation();
+                        if (e.ctrlKey || e.metaKey) {
+                          setSelectedEdge(null);
+                          setSelected(null);
+                          setSelectedExtras([]);
+                          const current = new Set(selectedBoundaryExtras);
+                          if (selectedBoundary) current.add(selectedBoundary);
+                          if (current.has(g.id)) current.delete(g.id);
+                          else current.add(g.id);
+                          const next = [...current];
+                          setSelectedBoundary(next.length ? next[next.length - 1]! : null);
+                          setSelectedBoundaryExtras(next.length > 1 ? next.slice(0, -1) : []);
+                          return;
+                        }
                         setSelectedBoundary(g.id);
+                        setSelectedBoundaryExtras([]);
                         setSelected(null);
+                        setSelectedExtras([]);
                         setSelectedEdge(null);
                       }}
                     >
@@ -2130,11 +2446,11 @@ export default function BoardApp({
               })()}
 
             {/* NODES */}
-            {nodes.map((n) => (
+            {displayNodes.map((n) => (
               <NodeCard
                 key={n.id}
                 node={n}
-                selected={selected === n.id}
+                selected={selectedNodeIds.includes(n.id)}
                 connectSource={connectFrom?.nodeId === n.id}
                 connectSourcePortId={
                   connectFrom?.nodeId === n.id ? connectFrom.portId : undefined
@@ -2156,19 +2472,47 @@ export default function BoardApp({
                 onClick={(e) => {
                   e.stopPropagation();
                   if (tool === "connect" || tool === "fast") return;
+                  if (e.ctrlKey || e.metaKey) return;
+                  if (selectedNodeIds.includes(n.id) && selectedNodeIds.length > 1) return;
                   setSelected(n.id);
+                  setSelectedExtras([]);
+                  setSelectedBoundary(null);
+                  setSelectedBoundaryExtras([]);
                   setSelectedEdge(null);
                 }}
                 onDoubleClick={(e) => {
                   e.stopPropagation();
                   if (tool === "connect" || tool === "fast") return;
                   setSelected(n.id);
+                  setSelectedExtras([]);
                   setSelectedEdge(null);
                   setSelectedBoundary(null);
+                  setSelectedBoundaryExtras([]);
                   setRenameModal({ nodeId: n.id, value: n.title });
                 }}
               />
             ))}
+            {isSphere &&
+              aiAdapter?.chat &&
+              selected &&
+              selNode &&
+              tool === "select" &&
+              selectedNodeIds.length === 1 && (
+                <NodeAskSphere
+                  x={selNode.x}
+                  y={selNode.y}
+                  w={selNode.w}
+                  chips={nodeAskForId === selected ? nodeAskChips : []}
+                  loading={nodeAskLoading && nodeAskForId === selected}
+                  chatBusy={aiBusy}
+                  onRequestSuggestions={loadNodeAskSuggestions}
+                  onPick={(chip) =>
+                    askSphereAbout(
+                      `For component "${selNode.title}" (id: ${selNode.id}): ${chip}`,
+                    )
+                  }
+                />
+              )}
             {/* Fast design rubber-band preview */}
             {fastDraft && (() => {
               const r = normalizeDraftRect(fastDraft);
@@ -2321,6 +2665,17 @@ export default function BoardApp({
           <IconBtn label="Locate selection">
             <Locate className="h-4 w-4" />
           </IconBtn>
+          {selectionCount > 1 && (
+            <>
+              <div className="mx-1 h-5 w-px bg-border" />
+              <span
+                className="px-2 text-[11px] font-medium tabular-nums text-muted-foreground"
+                title="Ctrl/Cmd+click to add or remove from selection"
+              >
+                {selectionCount} selected
+              </span>
+            </>
+          )}
         </div>
 
         {/* MINIMAP + LEGEND */}
@@ -2358,7 +2713,24 @@ export default function BoardApp({
         </div>
 
         {/* VALIDATION TOAST */}
-        <ValidationToast productAi={isSphere} />
+        <ValidationToast
+          warnings={architectureWarnings}
+          productAi={isSphere}
+          validating={aiBusy || architectBusy}
+          onSelect={(w) => {
+            setSelected(w.id);
+            setSelectedEdge(null);
+            setSelectedBoundary(null);
+          }}
+          onAskFix={(w) => {
+            setSelected(w.id);
+            setSelectedEdge(null);
+            setSelectedBoundary(null);
+            askSphereAbout(
+              `Fix architecture warning on "${w.title}" (id: ${w.id}): ${w.message}`,
+            );
+          }}
+        />
 
         {/* INSPECTOR */}
         {(selNode || selEdge || selBoundary) && (
@@ -2367,8 +2739,12 @@ export default function BoardApp({
             node={selNode ?? null}
             edge={selEdge ?? null}
             group={selBoundary}
-            nodes={nodes}
+            nodes={displayNodes}
             edges={edges}
+            onAskSphere={isSphere ? askSphereAbout : undefined}
+            askChips={nodeAskForId === selected ? nodeAskChips : []}
+            askLoading={nodeAskLoading && nodeAskForId === selected}
+            onRequestAskSuggestions={isSphere ? loadNodeAskSuggestions : undefined}
             onClose={() => {
               setSelected(null);
               setSelectedEdge(null);

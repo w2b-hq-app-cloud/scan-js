@@ -158,15 +158,31 @@ const viewSchema = z.object({
     boundaries: z.array(boundarySchema).default([]),
     layout: z.record(layoutEntrySchema),
 });
+/** YAML/JSON agents often emit `key: null` for cleared optionals; Zod `.optional()` rejects null. */
+function stripNulls(value) {
+    if (Array.isArray(value))
+        return value.map(stripNulls);
+    if (value && typeof value === "object") {
+        const out = {};
+        for (const [k, v] of Object.entries(value)) {
+            if (v === null)
+                continue;
+            out[k] = stripNulls(v);
+        }
+        return out;
+    }
+    return value;
+}
 export const scanModelSchema = z.preprocess((raw) => {
-    if (raw && typeof raw === "object" && !Array.isArray(raw)) {
-        const obj = { ...raw };
+    const cleaned = stripNulls(raw);
+    if (cleaned && typeof cleaned === "object" && !Array.isArray(cleaned)) {
+        const obj = { ...cleaned };
         if (obj.scan == null && obj.sphere != null) {
             obj.scan = obj.sphere;
         }
         return obj;
     }
-    return raw;
+    return cleaned;
 }, z.object({
     scan: z.union([z.string(), z.number()]),
     sphere: z.union([z.string(), z.number()]).optional(),

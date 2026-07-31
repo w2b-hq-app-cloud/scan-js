@@ -10,6 +10,7 @@ import { openExternal, kindColorVar } from "../board-style";
 import { SoftScrollArea } from "./SoftScrollArea";
 import { NodePortsColumns } from "./NodePortsColumns";
 import { DbCylinder } from "./DbCylinder";
+import { SelectionCheck } from "./SelectionCheck";
 
 export function NodeCard({
   node,
@@ -57,6 +58,7 @@ export function NodeCard({
       onClick={onClick}
       onDoubleClick={onDoubleClick}
     >
+      {selected && <SelectionCheck />}
       {isDb && (
         <DbCylinder
           width={node.w}
@@ -131,7 +133,6 @@ export function NodeCard({
         {hasPorts ? (
           <SoftScrollArea
             className="mt-2 flex-1"
-            onPointerDown={(e) => e.stopPropagation()}
             onWheel={(e) => e.stopPropagation()}
           >
             <NodePortsColumns

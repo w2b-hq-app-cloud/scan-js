@@ -28,6 +28,14 @@ export declare class Modeling {
     constructor(getModel: () => SphereModel, setModel: (model: SphereModel) => void, stack: CommandStack, viewId?: string | undefined);
     private replace;
     moveElement(id: string, x: number, y: number): void;
+    /** Commit several element moves as one undo step (after multi-drag preview). */
+    commitElementMoves(updates: Array<{
+        id: string;
+        x: number;
+        y: number;
+        ox: number;
+        oy: number;
+    }>): void;
     /** Update layout without stacking (used while dragging); commit via moveElement on pointer up. */
     previewMove(id: string, x: number, y: number): void;
     renameElement(id: string, name: string): void;
@@ -76,6 +84,17 @@ export declare class Modeling {
     previewMoveBoundary(id: string, x: number, y: number): void;
     /** Translate a boundary and all of its members by the same delta. Undoable. */
     moveBoundary(id: string, x: number, y: number): void;
+    /**
+     * Commit several boundary moves (each with member translation) as one undo step.
+     * `updates` use final x/y; `ox`/`oy` are positions before the drag.
+     */
+    commitBoundaryMoves(updates: Array<{
+        id: string;
+        x: number;
+        y: number;
+        ox: number;
+        oy: number;
+    }>): void;
     /** Live resize while dragging; commit with resizeBoundary on pointer up. */
     previewResizeBoundary(id: string, rect: BoundaryRect): void;
     resizeBoundary(id: string, rect: BoundaryRect): void;

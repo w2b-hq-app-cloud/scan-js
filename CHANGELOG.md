@@ -13,6 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `@spherescan/board`: architecture warning toast from YAML `status`/`warn` plus host `BoardAiAdapter.architect` overlay; **Ask Sphere to fix** and on-canvas / inspector Ask Sphere chips call `chat` with the component id/name in the prompt.
+- `@spherescan/board` / `@spherescan/modeler`: Ctrl/Cmd+click multi-select for components and boundaries; drag moves the whole selection; zoom chrome shows selection count.
+- `@spherescan/model`: strip YAML/JSON `null` on optional fields during parse (agents often emit `warn: null` / `status: null`, which Zod `.optional()` rejects).
 - `@spherescan/board`: **Fast design** mode (pen tool on the rail) — click places a component, thin box places a datastore, large box (≥300×220) creates a boundary, click-to-click connects; on-canvas legend while active; Esc cancels wire/draw then exits the mode.
 - `@spherescan/board`: connect-target highlight while Fast design (or Connect) wiring is active.
 

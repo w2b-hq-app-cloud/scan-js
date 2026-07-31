@@ -27,6 +27,10 @@ export function Inspector({
   onRenameBoundary,
   onSelectEdge,
   onSelectNode,
+  onAskSphere,
+  askChips,
+  askLoading,
+  onRequestAskSuggestions,
 }: {
   shell: BoardShell;
   node: SphereNode | null;
@@ -65,6 +69,10 @@ export function Inspector({
   onRenameBoundary: (id: string) => void;
   onSelectEdge: (id: string) => void;
   onSelectNode: (id: string) => void;
+  onAskSphere?: (prompt: string) => void;
+  askChips?: string[];
+  askLoading?: boolean;
+  onRequestAskSuggestions?: () => void;
 }) {
   const nodeById = useMemo(() => {
     const map: Record<string, SphereNode> = {};
@@ -104,6 +112,10 @@ export function Inspector({
           onAddPort={onAddPort}
           onUpdatePort={onUpdatePort}
           onDeletePort={onDeletePort}
+          onAskSphere={onAskSphere}
+          askChips={askChips}
+          askLoading={askLoading}
+          onRequestAskSuggestions={onRequestAskSuggestions}
         />
       )}
       {edge && !node && !group && (

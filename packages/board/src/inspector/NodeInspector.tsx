@@ -10,7 +10,7 @@ import {
   ExternalLink,
   FileCode2,
   Github,
-  Sparkles,
+  RefreshCw,
 } from "lucide-react";
 import type { SphereNode, SphereEdge } from "@spherescan/viewer";
 import { kindMeta } from "../kinds";
@@ -18,6 +18,7 @@ import { ElementIcon } from "../ElementIcon";
 import { IconPickerModal } from "../IconPickerModal";
 import { openExternal, edgeKindTitle } from "../board-style";
 import { EdgeIcon } from "../icons/EdgeIcon";
+import { AskSphereBody } from "../nodes/NodeAskSphere";
 import { Section } from "./Section";
 import { PortRow } from "./PortRow";
 
@@ -31,6 +32,10 @@ export function NodeInspector({
   onAddPort,
   onUpdatePort,
   onDeletePort,
+  onAskSphere,
+  askChips,
+  askLoading = false,
+  onRequestAskSuggestions,
 }: {
   productAi?: boolean;
   node: SphereNode;
@@ -45,6 +50,10 @@ export function NodeInspector({
     patch: { label?: string | null; protocol?: string | null },
   ) => void;
   onDeletePort: (id: string, portId: string) => void;
+  onAskSphere?: (prompt: string) => void;
+  askChips?: string[];
+  askLoading?: boolean;
+  onRequestAskSuggestions?: () => void;
 }) {
   const meta = kindMeta[node.kind];
   const [iconOpen, setIconOpen] = useState(false);
@@ -107,8 +116,18 @@ export function NodeInspector({
             <AlertTriangle className="h-3.5 w-3.5" /> Validation
           </div>
           {node.warn}
-          {productAi && (
-            <button className="mt-2 text-[11px] font-medium underline">Ask Sphere to fix</button>
+          {productAi && onAskSphere && (
+            <button
+              type="button"
+              className="mt-2 text-[11px] font-medium underline"
+              onClick={() =>
+                onAskSphere(
+                  `Fix architecture warning on "${node.title}" (id: ${node.id}): ${node.warn}`,
+                )
+              }
+            >
+              Ask Sphere to fix
+            </button>
           )}
         </div>
       )}
@@ -263,24 +282,34 @@ export function NodeInspector({
         )}
       </Section>
 
-      {productAi && (
-        <Section title="Ask Sphere">
-          <div className="flex flex-wrap gap-1.5">
-            {[
-              "Add resilience policies",
-              "Split into read/write",
-              "Add missing tests",
-              "Rename service",
-            ].map((s) => (
+      {productAi && onAskSphere && (
+        <Section
+          title="Ask Sphere"
+          action={
+            onRequestAskSuggestions &&
+            Boolean(askChips?.length) &&
+            !askLoading ? (
               <button
-                key={s}
-                className="rounded-full border border-border bg-background px-2.5 py-1 text-[10px] hover:bg-muted"
+                type="button"
+                title="Refresh suggestions"
+                aria-label="Refresh suggestions"
+                onClick={onRequestAskSuggestions}
+                className="rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
               >
-                <Sparkles className="mr-1 inline h-3 w-3 text-primary" />
-                {s}
+                <RefreshCw className="h-3.5 w-3.5" />
               </button>
-            ))}
-          </div>
+            ) : undefined
+          }
+        >
+          <AskSphereBody
+            chips={askChips ?? []}
+            loading={askLoading}
+            onRequestSuggestions={onRequestAskSuggestions}
+            onPick={(chip) =>
+              onAskSphere(`For component "${node.title}" (id: ${node.id}): ${chip}`)
+            }
+            showTitle={false}
+          />
         </Section>
       )}
 

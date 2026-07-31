@@ -68,8 +68,6 @@ components:
     repository:
       provider: github
       path: company/inventory-service
-    status: warn
-    warn: No async contract defined for Order Created events.
     consumes:
       - id: is-in
         label: REST

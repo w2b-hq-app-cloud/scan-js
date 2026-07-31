@@ -113,6 +113,29 @@ export class Modeling {
     this.replace(next, prev, `Move ${id}`);
   }
 
+  /** Commit several element moves as one undo step (after multi-drag preview). */
+  commitElementMoves(
+    updates: Array<{ id: string; x: number; y: number; ox: number; oy: number }>,
+  ) {
+    if (!updates.length) return;
+    const moved = updates.filter((u) => u.x !== u.ox || u.y !== u.oy);
+    if (!moved.length) return;
+    const next = cloneModel(this.getModel());
+    const undoModel = cloneModel(next);
+    const undoView = ensureView(undoModel, this.viewId);
+    for (const u of moved) {
+      const layout = undoView.layout[u.id] ?? { x: 0, y: 0 };
+      undoView.layout[u.id] = { ...layout, x: u.ox, y: u.oy };
+    }
+    syncBoundaryMembership(ensureView(next, this.viewId));
+    syncBoundaryMembership(undoView);
+    this.replace(
+      next,
+      undoModel,
+      moved.length === 1 ? `Move ${moved[0]!.id}` : `Move ${moved.length} elements`,
+    );
+  }
+
   /** Update layout without stacking (used while dragging); commit via moveElement on pointer up. */
   previewMove(id: string, x: number, y: number) {
     const next = cloneModel(this.getModel());
@@ -654,6 +677,49 @@ export class Modeling {
     }
     syncBoundaryMembership(view);
     this.replace(next, prev, `Move boundary ${id}`);
+  }
+
+  /**
+   * Commit several boundary moves (each with member translation) as one undo step.
+   * `updates` use final x/y; `ox`/`oy` are positions before the drag.
+   */
+  commitBoundaryMoves(
+    updates: Array<{ id: string; x: number; y: number; ox: number; oy: number }>,
+  ) {
+    if (!updates.length) return;
+    const moved = updates.filter((u) => u.x !== u.ox || u.y !== u.oy);
+    if (!moved.length) return;
+
+    const next = cloneModel(this.getModel());
+    const undoModel = cloneModel(next);
+    // Current model already has preview finals; build undo by walking back each delta.
+    const undoView = ensureView(undoModel, this.viewId);
+    for (const u of moved) {
+      const b = undoView.boundaries.find((x) => x.id === u.id);
+      if (!b) continue;
+      const dx = u.ox - b.x;
+      const dy = u.oy - b.y;
+      b.x = u.ox;
+      b.y = u.oy;
+      for (const memberId of b.members ?? []) {
+        const layout = undoView.layout[memberId];
+        if (!layout) continue;
+        undoView.layout[memberId] = {
+          ...layout,
+          x: layout.x + dx,
+          y: layout.y + dy,
+        };
+      }
+    }
+    syncBoundaryMembership(ensureView(next, this.viewId));
+    syncBoundaryMembership(undoView);
+    this.replace(
+      next,
+      undoModel,
+      moved.length === 1
+        ? `Move boundary ${moved[0]!.id}`
+        : `Move ${moved.length} boundaries`,
+    );
   }
 
   /** Live resize while dragging; commit with resizeBoundary on pointer up. */
