@@ -41,6 +41,8 @@ export declare class Modeling {
     renameElement(id: string, name: string): void;
     /** Set or clear a custom diagram icon (Lucide name, URL, or data URL). */
     updateElementIcon(id: string, icon: string | null): void;
+    /** Set or clear free-text `description` on a diagram element. */
+    updateElementDescription(id: string, description: string | null): void;
     renameSystem(name: string): void;
     deleteElement(id: string): void;
     /**

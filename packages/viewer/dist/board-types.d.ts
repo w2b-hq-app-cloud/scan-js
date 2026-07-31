@@ -11,6 +11,8 @@ export type SphereNode = {
     title: string;
     subtitle?: string;
     tech?: string;
+    /** Free-text notes from SCAN `description` (inspector). */
+    description?: string;
     /** Optional icon override: Lucide name, https URL, or data:image URL. */
     icon?: string;
     x: number;

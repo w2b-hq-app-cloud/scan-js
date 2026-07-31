@@ -352,6 +352,12 @@ export function useScanBoard(options: UseScanBoardOptions | string = {}) {
     [modeler],
   );
 
+  const updateElementDescription = useCallback(
+    (id: string, description: string | null) =>
+      modeler.modeling.updateElementDescription(id, description),
+    [modeler],
+  );
+
   const addPort = useCallback(
     (
       elementId: string,
@@ -533,6 +539,7 @@ export function useScanBoard(options: UseScanBoardOptions | string = {}) {
       updateConnection,
       renameElement,
       updateElementIcon,
+      updateElementDescription,
       addPort,
       updatePort,
       deletePort,
@@ -581,6 +588,7 @@ export function useScanBoard(options: UseScanBoardOptions | string = {}) {
       updateConnection,
       renameElement,
       updateElementIcon,
+      updateElementDescription,
       addPort,
       updatePort,
       deletePort,

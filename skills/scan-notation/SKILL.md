@@ -68,6 +68,8 @@ Copy this checklist:
 
 Keep **`type`** (role) separate from **`technology`** (stack), e.g. `type: service` + `technology: Spring Boot`.
 
+Optional **`description`**: free-text notes (role, ownership, constraints). Prefer setting it on every element in Sphere/design-agent output; editable in the inspector.
+
 Inline `repository:` on a component is a **ref** (`path` or `{ provider, path }`), not a canvas node. Use `repositories:` when the repo itself is a diagram element.
 
 ## Minimal valid document

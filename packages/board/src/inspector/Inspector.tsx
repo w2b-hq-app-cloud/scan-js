@@ -20,6 +20,7 @@ export function Inspector({
   onUpdateConnection,
   onUpdateBoundary,
   onUpdateElementIcon,
+  onUpdateElementDescription,
   onAddPort,
   onUpdatePort,
   onDeletePort,
@@ -58,6 +59,7 @@ export function Inspector({
     },
   ) => void;
   onUpdateElementIcon: (id: string, icon: string | null) => void;
+  onUpdateElementDescription: (id: string, description: string | null) => void;
   onAddPort: (id: string, role: "consume" | "expose") => void;
   onUpdatePort: (
     id: string,
@@ -109,6 +111,7 @@ export function Inspector({
           nodeById={nodeById}
           onSelectEdge={onSelectEdge}
           onUpdateIcon={onUpdateElementIcon}
+          onUpdateDescription={onUpdateElementDescription}
           onAddPort={onAddPort}
           onUpdatePort={onUpdatePort}
           onDeletePort={onDeletePort}

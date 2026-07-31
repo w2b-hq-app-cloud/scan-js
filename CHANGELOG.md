@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Optional SCAN element field **`description`** (components, channels, externals, agents, repositories, agent_runtimes); inspector textarea + modeler `updateElementDescription`; design agent instructed to always set it via `upsert_element`.
 - `@spherescan/board`: architecture warning toast from YAML `status`/`warn` plus host `BoardAiAdapter.architect` overlay; **Ask Sphere to fix** and on-canvas / inspector Ask Sphere chips call `chat` with the component id/name in the prompt.
 - `@spherescan/board` / `@spherescan/modeler`: Ctrl/Cmd+click multi-select for components and boundaries; drag moves the whole selection; zoom chrome shows selection count.
 - `@spherescan/model`: strip YAML/JSON `null` on optional fields during parse (agents often emit `warn: null` / `status: null`, which Zod `.optional()` rejects).

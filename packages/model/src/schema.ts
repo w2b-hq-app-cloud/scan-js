@@ -40,6 +40,8 @@ const componentSchema = z.object({
   ]),
   technology: z.string().optional(),
   subtitle: z.string().optional(),
+  /** Longer free-text notes about the element (inspector + agents). */
+  description: z.string().optional(),
   icon: iconSchema,
   repository: repositoryRefSchema.optional(),
   consumes: z.array(portSchema).optional(),
@@ -53,6 +55,7 @@ const channelSchema = z.object({
   name: z.string(),
   type: z.literal("event-stream").default("event-stream"),
   technology: z.string().optional(),
+  description: z.string().optional(),
   icon: iconSchema,
   consumes: z.array(portSchema).optional(),
   exposes: z.array(portSchema).optional(),
@@ -63,6 +66,7 @@ const externalSystemSchema = z.object({
   name: z.string(),
   type: z.literal("external-system").optional(),
   technology: z.string().optional(),
+  description: z.string().optional(),
   icon: iconSchema,
   repository: repositoryRefSchema.optional(),
   consumes: z.array(portSchema).optional(),
@@ -74,6 +78,7 @@ const agentSchema = z.object({
   name: z.string(),
   purpose: z.string().optional(),
   subtitle: z.string().optional(),
+  description: z.string().optional(),
   icon: iconSchema,
   runtime: z.string().optional(),
   consumes: z.array(portSchema).optional(),
@@ -84,6 +89,7 @@ const agentRuntimeSchema = z.object({
   id: z.string(),
   name: z.string(),
   type: z.string().optional(),
+  description: z.string().optional(),
 });
 
 const repositorySchema = z.object({
@@ -92,6 +98,7 @@ const repositorySchema = z.object({
   provider: z.string().optional(),
   path: z.string().optional(),
   subtitle: z.string().optional(),
+  description: z.string().optional(),
   icon: iconSchema,
   consumes: z.array(portSchema).optional(),
   exposes: z.array(portSchema).optional(),

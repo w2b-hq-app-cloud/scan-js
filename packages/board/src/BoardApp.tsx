@@ -168,6 +168,7 @@ export default function BoardApp({
     newBoard,
     renameElement,
     updateElementIcon,
+    updateElementDescription,
     addPort,
     updatePort,
     deletePort,
@@ -2775,6 +2776,14 @@ export default function BoardApp({
               } catch (err) {
                 const message = err instanceof Error ? err.message : "Update failed";
                 toast.error("Could not update icon", { description: message });
+              }
+            }}
+            onUpdateElementDescription={(id, description) => {
+              try {
+                updateElementDescription(id, description);
+              } catch (err) {
+                const message = err instanceof Error ? err.message : "Update failed";
+                toast.error("Could not update description", { description: message });
               }
             }}
             onAddPort={(id, role) => {

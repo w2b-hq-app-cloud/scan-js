@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 WABLOO PARTNERS SRL
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -29,6 +29,7 @@ export function NodeInspector({
   nodeById,
   onSelectEdge,
   onUpdateIcon,
+  onUpdateDescription,
   onAddPort,
   onUpdatePort,
   onDeletePort,
@@ -43,6 +44,7 @@ export function NodeInspector({
   nodeById: Record<string, SphereNode>;
   onSelectEdge: (id: string) => void;
   onUpdateIcon: (id: string, icon: string | null) => void;
+  onUpdateDescription: (id: string, description: string | null) => void;
   onAddPort: (id: string, role: "consume" | "expose") => void;
   onUpdatePort: (
     id: string,
@@ -57,6 +59,7 @@ export function NodeInspector({
 }) {
   const meta = kindMeta[node.kind];
   const [iconOpen, setIconOpen] = useState(false);
+  const [description, setDescription] = useState(node.description ?? "");
   const related = edges.filter((e) => e.from === node.id || e.to === node.id);
   const protocols = Array.from(
     new Set(
@@ -65,6 +68,17 @@ export function NodeInspector({
         .filter((p): p is string => Boolean(p)),
     ),
   );
+
+  useEffect(() => {
+    setDescription(node.description ?? "");
+  }, [node.id, node.description]);
+
+  const commitDescription = () => {
+    const next = description.trim();
+    const prev = (node.description ?? "").trim();
+    if (next === prev) return;
+    onUpdateDescription(node.id, next || null);
+  };
 
   return (
     <div className="flex-1 overflow-auto">
@@ -109,6 +123,18 @@ export function NodeInspector({
           </span>
         </div>
       </div>
+
+      <Section title="Description">
+        <textarea
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          onBlur={commitDescription}
+          rows={4}
+          placeholder="What this component does, ownership, constraints…"
+          className="w-full resize-y rounded-md border border-border bg-background px-2.5 py-2 text-[12px] leading-relaxed text-foreground outline-none placeholder:text-muted-foreground focus:border-primary focus:ring-1 focus:ring-primary/30"
+          aria-label="Component description"
+        />
+      </Section>
 
       {node.warn && (
         <div className="mx-4 mt-4 rounded-lg border border-warn/40 bg-warn-soft p-3 text-[11px] text-warn">

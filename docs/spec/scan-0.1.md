@@ -92,6 +92,7 @@ components:
     name: Order API
     type: service
     technology: Spring Boot
+    description: Accepts and validates customer orders; owns the order aggregate.
     repository:
       provider: github
       path: company/order-api
@@ -120,6 +121,7 @@ components:
 | `id`, `name`, `type` | yes | |
 | `technology` | no | Implementation hint |
 | `subtitle` | no | Secondary line under the title |
+| `description` | no | Free-text notes (role, ownership, constraints); Sphere inspector + design agent |
 | `icon` | no | Diagram icon override: Lucide name (`shield`), `https://...`, or `data:image/...` |
 | `repository` | no | String path **or** `{ provider?, path }` |
 | `consumes` / `exposes` | no | Port lists |
@@ -138,6 +140,7 @@ channels:
     name: Order Created
     type: event-stream      # const; default if omitted
     technology: Kafka
+    description: Domain event emitted when an order is accepted.
     consumes: [ ... ]
     exposes: [ ... ]
 ```
@@ -147,6 +150,7 @@ channels:
 | `id`, `name` | yes | |
 | `type` | no | Must be `event-stream` when present |
 | `technology` | no | e.g. Kafka, Pulsar |
+| `description` | no | Free-text notes |
 | `consumes` / `exposes` | no | Topic / schema ports |
 
 ---
@@ -160,6 +164,7 @@ external_systems:
   - id: payment-platform
     name: Payment Platform
     type: external-system     # optional const
+    description: Third-party payment provider (card capture and refunds).
     repository: stripe/openapi
     exposes:
       - id: pp-rest
@@ -172,6 +177,7 @@ external_systems:
 | `id`, `name` | yes | |
 | `type` | no | `external-system` when present |
 | `technology` | no | |
+| `description` | no | Free-text notes |
 | `repository` | no | String or `{ provider?, path }` |
 | `consumes` / `exposes` | no | |
 
@@ -185,6 +191,7 @@ agents:
     name: Coding Agent
     purpose: Build & Implement
     subtitle: Build & Implement
+    description: Implements approved design changes in application repositories.
     runtime: eng-agent-runtime    # id -> agent_runtimes
     consumes: [ ... ]
     exposes: [ ... ]
@@ -193,12 +200,13 @@ agent_runtimes:
   - id: eng-agent-runtime
     name: Engineering Agent Runtime
     type: governed-runtime        # free-form string
+    description: Shared runtime for engineering agents (tooling, secrets, network).
 ```
 
 | Element | Required fields | Notable optional fields |
 |---------|-----------------|-------------------------|
-| Agent | `id`, `name` | `purpose`, `subtitle`, `runtime`, ports |
-| Agent runtime | `id`, `name` | `type` (string) |
+| Agent | `id`, `name` | `purpose`, `subtitle`, `description`, `runtime`, ports |
+| Agent runtime | `id`, `name` | `type` (string), `description` |
 
 ---
 
@@ -213,6 +221,7 @@ repositories:
     provider: github
     path: company/order-platform
     subtitle: company/order-platform
+    description: Canonical monorepo for the order platform services.
     consumes: [ ... ]
     exposes: [ ... ]
 ```
@@ -221,6 +230,7 @@ repositories:
 |-------|----------|-------|
 | `id`, `name` | yes | |
 | `provider`, `path`, `subtitle` | no | |
+| `description` | no | Free-text notes |
 | `consumes` / `exposes` | no | |
 
 ---
