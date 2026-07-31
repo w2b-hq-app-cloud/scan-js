@@ -1,5 +1,5 @@
 import { edgeVisual, kindVisuals, renderLucideIcon, warnVisual, } from "./kind-icons.js";
-import { computeLabelStagger, edgePath, placeEdgeLabel, resolveEdgeAnchors, } from "./edge-geometry.js";
+import { edgePath, placeEdgeLabel, resolveEdgeAnchors, routeOrthogonalEdges, assignOrthogonalLanes, resolveLabelOverlaps, estimateEdgeLabelSize, } from "./edge-geometry.js";
 import { boundaryExportFill, boundaryExportStroke } from "./boundary-colors.js";
 function edgeFanIndex(edges, edgeId) {
     const target = edges.find((e) => e.id === edgeId);
@@ -156,8 +156,8 @@ function renderNode(n) {
         footerSvg +
         `</g>`);
 }
-/** Build an SVG snapshot of the board graph matching the live whiteboard cards. */
-export function graphToSvg(graph) {
+export function graphToSvg(graph, options = {}) {
+    const mode = options.mode ?? "orthogonal";
     const b = diagramBounds(graph);
     const groupRects = graph.groups
         .map((g) => {
@@ -174,6 +174,24 @@ export function graphToSvg(graph) {
         w: n.w,
         h: n.h,
     }));
+    const routedInputs = graph.edges.flatMap((e) => {
+        const from = graph.nodes.find((n) => n.id === e.from);
+        const to = graph.nodes.find((n) => n.id === e.to);
+        if (!from || !to)
+            return [];
+        const fan = edgeFanIndex(graph.edges, e.id);
+        return [
+            {
+                id: e.id,
+                from,
+                to,
+                fanIndex: fan.index,
+                fanCount: fan.count,
+            },
+        ];
+    });
+    const orthogonalPaths = mode === "orthogonal" ? routeOrthogonalEdges(routedInputs) : null;
+    const lanes = mode === "orthogonal" ? assignOrthogonalLanes(routedInputs) : new Map();
     const labeled = graph.edges
         .filter((e) => e.label)
         .map((e) => {
@@ -183,6 +201,7 @@ export function graphToSvg(graph) {
             return null;
         const fan = edgeFanIndex(graph.edges, e.id);
         const anchors = resolveEdgeAnchors(from, to, fan.index, fan.count);
+        const size = estimateEdgeLabelSize(e.label, e.contract);
         const rough = placeEdgeLabel({
             a: anchors.a,
             b: anchors.b,
@@ -193,11 +212,17 @@ export function graphToSvg(graph) {
             toBox: to,
             fanIndex: fan.index,
             fanCount: fan.count,
+            mode,
+            laneOffset: lanes.get(e.id),
+            labelW: size.w,
+            labelH: size.h,
         });
         return {
             id: e.id,
             x: rough.x,
             y: rough.y,
+            w: size.w,
+            h: size.h,
             e,
             a: anchors.a,
             bPt: anchors.b,
@@ -209,7 +234,7 @@ export function graphToSvg(graph) {
         };
     })
         .filter(Boolean);
-    const staggerMap = computeLabelStagger(labeled.map((l) => ({ id: l.id, x: l.x, y: l.y })));
+    const resolvedLabels = resolveLabelOverlaps(labeled.map((l) => ({ id: l.id, x: l.x, y: l.y, w: l.w, h: l.h })), { gap: 10 });
     const edges = graph.edges
         .map((e) => {
         const from = graph.nodes.find((n) => n.id === e.from);
@@ -225,34 +250,27 @@ export function graphToSvg(graph) {
             : e.kind === "async" || e.kind === "stream"
                 ? "url(#arrow-event)"
                 : "url(#arrow)";
-        const d = edgePath(anchors.a, anchors.b, anchors.fromSide, anchors.toSide);
+        const d = orthogonalPaths?.get(e.id) ??
+            edgePath(anchors.a, anchors.b, anchors.fromSide, anchors.toSide, mode, lanes.get(e.id) ?? 0);
         let labelSvg = "";
         if (e.label) {
-            const mid = placeEdgeLabel({
-                a: anchors.a,
-                b: anchors.b,
-                aSide: anchors.fromSide,
-                bSide: anchors.toSide,
-                nodes: nodeBoxes,
-                stagger: staggerMap.get(e.id) ?? 0,
-                fromBox: from,
-                toBox: to,
-                fanIndex: fan.index,
-                fanCount: fan.count,
-            });
+            const mid = resolvedLabels.get(e.id) ?? {
+                x: (anchors.a.x + anchors.b.x) / 2,
+                y: (anchors.a.y + anchors.b.y) / 2,
+            };
+            const size = estimateEdgeLabelSize(e.label, e.contract);
             const ev = edgeVisual(e.kind);
-            const contractLine = e.contract ? 12 : 0;
             const textW = Math.max(estimateTextWidth(e.label, 10), e.contract ? estimateTextWidth(e.contract, 9) : 0);
-            const boxW = textW + 28;
-            const boxH = 18 + contractLine;
+            const boxW = Math.max(textW + 28, size.w);
+            const boxH = size.h;
             const boxX = mid.x - boxW / 2;
             const boxY = mid.y - boxH / 2;
             labelSvg =
                 `<rect x="${boxX}" y="${boxY}" width="${boxW}" height="${boxH}" rx="6" fill="white" stroke="#e2e8f0"/>` +
                     renderLucideIcon(ev.icon, boxX + 4, boxY + (boxH - 12) / 2, 12, ev.color) +
-                    `<text x="${boxX + 20}" y="${boxY + 13}" font-family="system-ui,sans-serif" font-size="10" font-weight="500" fill="#0f172a">${escapeXml(e.label)}</text>` +
+                    `<text x="${boxX + 20}" y="${boxY + (e.contract ? 14 : boxH / 2 + 4)}" font-family="system-ui,sans-serif" font-size="10" font-weight="500" fill="#0f172a">${escapeXml(e.label)}</text>` +
                     (e.contract
-                        ? `<text x="${boxX + 20}" y="${boxY + 24}" font-family="system-ui,sans-serif" font-size="9" fill="#64748b">${escapeXml(e.contract)}</text>`
+                        ? `<text x="${boxX + 20}" y="${boxY + 28}" font-family="system-ui,sans-serif" font-size="9" fill="#64748b">${escapeXml(e.contract)}</text>`
                         : "");
         }
         return (`<path d="${d}" stroke="${style.stroke}" stroke-width="1.5" fill="none"${dashed} marker-end="${marker}" opacity="0.9"/>` +

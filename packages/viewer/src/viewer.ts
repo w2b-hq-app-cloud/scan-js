@@ -60,14 +60,17 @@ export class ScanViewer {
     return serializeSphereYaml(this.model);
   }
 
-  async saveSVG(): Promise<{ svg: string }> {
+  async saveSVG(opts?: { mode?: "bezier" | "orthogonal" }): Promise<{ svg: string }> {
     const graph = this.getGraph();
     if (!graph) throw new Error("No model loaded");
-    return { svg: graphToSvg(graph) };
+    return { svg: graphToSvg(graph, opts) };
   }
 
-  async savePNG(scale = 2): Promise<{ blob: Blob }> {
-    const { svg } = await this.saveSVG();
+  async savePNG(
+    scale = 2,
+    opts?: { mode?: "bezier" | "orthogonal" },
+  ): Promise<{ blob: Blob }> {
+    const { svg } = await this.saveSVG(opts);
     const blob = await svgToPngBlob(svg, scale);
     return { blob };
   }

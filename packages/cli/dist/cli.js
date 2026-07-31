@@ -8,7 +8,7 @@ import { graphToSvg, projectToGraph } from "@spherescan/viewer";
 function usage() {
     console.log(`scan <command> [options]
 
-SCAN â€” System & Component Architecture Notation toolkit (open source).
+SCAN - System & Component Architecture Notation toolkit (open source).
 Not the Sphere product platform.
 
 Commands:

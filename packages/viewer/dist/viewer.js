@@ -43,14 +43,14 @@ export class ScanViewer {
             throw new Error("No model loaded");
         return serializeSphereYaml(this.model);
     }
-    async saveSVG() {
+    async saveSVG(opts) {
         const graph = this.getGraph();
         if (!graph)
             throw new Error("No model loaded");
-        return { svg: graphToSvg(graph) };
+        return { svg: graphToSvg(graph, opts) };
     }
-    async savePNG(scale = 2) {
-        const { svg } = await this.saveSVG();
+    async savePNG(scale = 2, opts) {
+        const { svg } = await this.saveSVG(opts);
         const blob = await svgToPngBlob(svg, scale);
         return { blob };
     }

@@ -1,6 +1,6 @@
 {
   "name": "@spherescan/cli",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "SCAN CLI - validate and export System & Component Architecture Notation diagrams",
   "type": "module",
   "license": "Apache-2.0",
@@ -8,15 +8,19 @@
     "scan": "./dist/cli.js"
   },
   "main": "./dist/cli.js",
-  "files": ["dist", "LICENSE", "NOTICE"],
+  "files": [
+    "dist",
+    "LICENSE",
+    "NOTICE"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "scan": "node dist/cli.js"
   },
   "dependencies": {
-    "@spherescan/model": "0.1.0",
-    "@spherescan/viewer": "0.1.0"
+    "@spherescan/model": "0.2.0",
+    "@spherescan/viewer": "0.2.0"
   },
   "devDependencies": {
     "@types/node": "^22.16.5",

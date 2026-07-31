@@ -47,6 +47,7 @@ Copy this checklist:
 - [ ] Every connected id exists
 - [ ] Connection types are capability-plausible (see connection-rules.md; matrix is suggestions)
 - [ ] fromPort = expose on from; toPort = consume on to (when set)
+- [ ] Parallel edges (same from→to) have numbered labels: 1. …, 2. …
 - [ ] views[0].layout has every element id
 - [ ] Boundary members subset of layout ids; boxes use label/members + trust|runtime kind
 - [ ] Saved as *.scan.yaml
@@ -152,6 +153,32 @@ Default labels/contracts often used in fixtures: REST/OpenAPI, gRPC/Proto, DB Ac
 
 `operations` (optional): list endpoints/RPCs/topics shown on hover, e.g. `POST /orders`.
 
+### Multiple edges between the same pair (**required numbering**)
+
+Whenever **two or more** connections share the same ordered pair (`from` → `to`), **every** one of those edges must have a **numeric prefix** on `label` so the board can tell them apart:
+
+- Number **1-based in document order** among that pair (`1.`, `2.`, `3.`, …).
+- Keep a short descriptive name after the number: `1. List messages`, `2. Download ZIP`.
+- Do **not** leave parallel edges with identical bare labels (`REST` / `REST`) or unnumbered siblings.
+- A single edge between a pair stays unnumbered (`label: REST` is fine).
+- Reverse direction (`B → A`) is a different pair — number independently if that pair also has multiples.
+
+```yaml
+connections:
+  - id: e-list
+    from: importer
+    to: anaf-api
+    type: synchronous-request
+    label: 1. List messages
+    contract: OpenAPI
+  - id: e-download
+    from: importer
+    to: anaf-api
+    type: synchronous-request
+    label: 2. Download ZIP
+    contract: OpenAPI
+```
+
 **Legal kind pairs:** see [connection-rules.md](connection-rules.md). Do not invent types outside the table.
 
 ## Layout & boundaries
@@ -165,6 +192,7 @@ Default labels/contracts often used in fixtures: REST/OpenAPI, gRPC/Proto, DB Ac
 ## Authoring tips
 
 - Prefer **many small typed edges** over one vague connection.
+- When several edges share the same `from` → `to`, **always** number their `label`s (`1. …`, `2. …`) — see Connections above.
 - External systems expose APIs; your services **consume** them (edge often `external -> service` or service->service after an internal wrapper).
 - Warnings: `status: warn` + `warn: "..."`.
 - Output **complete YAML** the user can drop into the whiteboard or `scan validate`, saved as **`*.scan.yaml`**.

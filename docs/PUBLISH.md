@@ -39,12 +39,16 @@ The CLI:
 
 1. Bumps every publishable package version in `scan-js/` (and `@spherescan/*` dependency pins)
 2. Optionally prepares board for public publish (`--with-board`)
-3. Updates `CHANGELOG.md`
-4. Runs `npm run build` && `npm test` (unless `--skip-tests`)
-5. `npm publish -w … --access public` in dependency order
-6. Commits, creates annotated tag `vX.Y.Z` on the release commit, pushes branch + tag
+3. Updates `CHANGELOG.md` + SCAN docs version mentions
+4. Pins sphere-io `@spherescan/*` (+ docs) to the new version (unless `--no-sphere-pin`)
+5. Runs `npm run build` && `npm test` (unless `--skip-tests`)
+6. `npm publish -w … --access public` in dependency order
+7. Commits, creates annotated tag `vX.Y.Z` on the release commit, pushes branch + tag (scan-js)
+8. Commits + pushes the sphere-io pin update
 
-Useful flags: `--dry-run`, `--yes`/`-y`, `--otp <code>`, `--allow-dirty`, `--allow-branch`, `--no-git`, `--no-publish`.
+Dirty `scan-js` trees that only touch release-owned paths are allowed (folded into the release commit); other dirt requires `--allow-dirty`.
+
+Useful flags: `--dry-run`, `--yes`/`-y`, `--otp <code>`, `--allow-dirty`, `--allow-branch`, `--no-git`, `--no-publish`, `--no-sphere-pin`.
 
 ## Manual path (legacy)
 

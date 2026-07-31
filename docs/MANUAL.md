@@ -31,7 +31,7 @@ Notation deep-dive: [`docs/spec/scan-0.1.md`](spec/scan-0.1.md). This manual is 
 +----+---------------------------------------------------------------+-----+
 ```
 
-Mode banners (Connect / place component / place boundary) appear centered above the zoom controls when active.
+Mode banners (Connect / Fast design / place component / place boundary) appear centered above the zoom controls when active.
 
 ---
 
@@ -101,12 +101,26 @@ Overlay at the **top-left** of the canvas. Hover for tooltips.
 
 | Tool | Icon | Behavior |
 |------|------|----------|
-| **Select** | Pointer | Select, drag nodes, drag boundaries (moves members), resize boundaries, open inspector |
+| **Select** | Pointer | Select, drag nodes/boundaries (Ctrl/Cmd+click multi-select), resize boundaries, open inspector |
 | **Pan** | Hand | Drag the canvas (`grab` cursor) |
 | **Connect** | Arrow (finger when active) | Wire nodes / ports; see [Connections](#5-connections-expose--consume) |
+| **Fast design** | Pen | Toggle sketch mode: click → component, thin box → datastore, large box → boundary, click two components → connect. Legend shows while active. Stays on until toggled off or **Esc**. |
 | **Add component** | **+** | Opens the component kind menu |
 | **Add boundary** | Square | Opens trust / runtime boundary menu |
 | **Toggle grid** | Grid | Turns the dot grid on/off (default on) |
+
+### Fast design
+
+Toggle **Fast design** on the rail (pen icon). While active, a **legend** appears beside the rail:
+
+1. **Click** empty canvas → places the current Add-component kind (default **Service**).  
+2. **Drag a thin box** (short side roughly ≤140px, elongated either horizontally or vertically) → places a **Datastore**.  
+3. **Drag a large box** (at least ~300×220 — bigger than a default service card) → creates a **Trust** or **Runtime** boundary (whichever is selected in Add boundary). Smaller non-thin drags still place a component.  
+4. **Click** a component, then another → creates a connection (same rules as Connect).  
+5. While Fast design is on, **Add component** / **Add boundary** menus only change *what* click / large-box create; they do not leave the mode.  
+6. **Esc** cancels an in-progress wire or draw first; press again (or toggle the tool) to exit the mode.
+
+The rubber-band preview tint changes for datastore vs boundary. Normal Select / Pan / Connect stay available as separate tools so Fast design does not overlap them.
 
 ### Add component
 
@@ -161,10 +175,11 @@ Zoom is clamped between **30%** and **200%** (default ~85%).
 
 - Click empty canvas -> clear selection  
 - Click a **node** -> select (inspector)  
-- Drag a node in **Select** -> move (4px snap); undoable
-- Drag a **boundary** body -> move the box **and all members** together; undoable
-- Click an **edge** or edge **label** -> select connection
-- Click a **boundary** or its title chip -> select boundary
+- **Ctrl/Cmd+click** nodes or boundaries -> add/remove from multi-selection; zoom bar shows **N selected** when more than one  
+- Drag any selected item in **Select** -> move the whole multi-selection together (4px snap); one undo step  
+- Drag a **boundary** body -> move the box **and all members** together; undoable  
+- Click an **edge** or edge **label** -> select connection  
+- Click a **boundary** or its title chip -> select boundary  
 
 ### Drop YAML
 
@@ -390,7 +405,7 @@ See [section 8](#8-boundaries).
 
 ## 12. Validation banner
 
-A demo warning toast may appear near the bottom center (e.g. missing async contract). Dismiss with **x**. Live rule-engine validation toasts also appear for failed connects / import errors (Sonner, typically bottom-right).
+When components have `status: warn` in YAML **or** the Sphere Enterprise Architect agent reports findings, a bottom-center toast shows the count and message. **Ask Sphere to fix** (Sphere shell) sends a design-agent prompt that includes the component id and warning text. Dismiss with **x**. Connect/import failures still use Sonner toasts (typically bottom-right).
 
 ---
 
@@ -403,8 +418,9 @@ A demo warning toast may appear near the bottom center (e.g. missing async contr
 | **Ctrl/Cmd+ Y** or **Ctrl/Cmd+ Shift+Z** | Redo |
 | **Ctrl/Cmd+ D** | Duplicate selected component |
 | **F2** | Rename selected component or boundary |
-| **Delete** / **Backspace** | Delete selection (component confirms; edge/boundary immediate) |
-| **Esc** | Cancel Connect / place modes; clear in-progress wire; close context menu |
+| **Delete** / **Backspace** | Delete selection (all multi-selected components or boundaries; edge immediate) |
+| **Ctrl/Cmd+click** | Add/remove component or boundary from multi-selection |
+| **Esc** | Cancel Connect / Fast design wire or draw; exit Fast design / place modes; clear in-progress wire; close context menu |
 
 Shortcuts are ignored while typing in inputs.
 
@@ -458,7 +474,7 @@ These are visible but not fully implemented yet:
 - Context menu **Attach repository** / **Add API contract**  
 - View-tab count badges (static)  
 - Edge **Resilience** fields (display-only)  
-- Validation banner copy (demo content)
+- Architecture warning toast (YAML warn + Sphere architect overlay; Ask Sphere to fix when product shell)
 
 ---
 

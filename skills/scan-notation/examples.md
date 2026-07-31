@@ -229,6 +229,57 @@ views:
       github: { x: 700, y: 80, w: 260, h: 180 }
 ```
 
+## Example D - parallel edges (numbered labels)
+
+When two connections share the same `from` → `to`, number every label:
+
+```yaml
+scan: "0.1"
+
+system:
+  id: efactura-spv
+  name: eFactura SPV download
+
+components:
+  - id: importer
+    name: Import Job
+    type: service
+    technology: NestJS
+
+external_systems:
+  - id: anaf-api
+    name: ANAF FCTEL
+    type: external-system
+
+connections:
+  - id: e-list
+    from: importer
+    to: anaf-api
+    type: synchronous-request
+    label: 1. List messages
+    contract: OpenAPI
+    fromSide: r
+    toSide: l
+    operations:
+      - GET /listaMesajePaginatieFactura
+  - id: e-download
+    from: importer
+    to: anaf-api
+    type: synchronous-request
+    label: 2. Download ZIP
+    contract: OpenAPI
+    fromSide: r
+    toSide: l
+    operations:
+      - GET /descarcare?id=
+
+views:
+  - id: architecture-board
+    layout:
+      importer: { x: 80, y: 120, w: 260, h: 190 }
+      anaf-api: { x: 420, y: 120, w: 220, h: 150 }
+```
+
 ## Anti-patterns
 
 - Putting Kafka topics under `components` with `type: service` - use `channels`.
@@ -236,3 +287,4 @@ views:
 - Layout missing an element id that appears in `connections` - node won't render.
 - Reusing port ids across different elements is OK; reusing **element** ids is not.
 - Inventing connection types like `http` or `kafka` - use the enum above.
+- Multiple edges between the same `from`/`to` **without** numbered labels (`1.`, `2.`, …) - parallel arrows become ambiguous on the board.

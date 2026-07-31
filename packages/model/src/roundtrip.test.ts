@@ -53,3 +53,26 @@ test("slugifyId", () => {
   assert.equal(slugifyId("My Cool System"), "my-cool-system");
   assert.equal(slugifyId("  "), "system");
 });
+
+test("parse strips YAML null optional fields (agent warn: null)", () => {
+  const yaml = `scan: "0.1"
+system:
+  id: demo
+  name: Demo
+components:
+  - id: inventory-service
+    name: Inventory Service
+    type: service
+    status: ok
+    warn: null
+views:
+  - id: architecture-board
+    layout:
+      inventory-service: { x: 0, y: 0, w: 260, h: 190 }
+`;
+  const model = parseSphereYaml(yaml);
+  const comp = model.components.find((c) => c.id === "inventory-service");
+  assert.ok(comp);
+  assert.equal(comp?.status, "ok");
+  assert.equal(comp?.warn, undefined);
+});

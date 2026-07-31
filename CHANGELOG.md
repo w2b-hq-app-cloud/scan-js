@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `@spherescan/board`: load the Order Platform sample as a TS string module (no `*.yaml?raw`) so Vite/Rolldown works through Windows `node_modules` junctions.
+
+### Added
+
+- `@spherescan/board`: architecture warning toast from YAML `status`/`warn` plus host `BoardAiAdapter.architect` overlay; **Ask Sphere to fix** and on-canvas / inspector Ask Sphere chips call `chat` with the component id/name in the prompt.
+- `@spherescan/board` / `@spherescan/modeler`: Ctrl/Cmd+click multi-select for components and boundaries; drag moves the whole selection; zoom chrome shows selection count.
+- `@spherescan/model`: strip YAML/JSON `null` on optional fields during parse (agents often emit `warn: null` / `status: null`, which Zod `.optional()` rejects).
+- `@spherescan/board`: **Fast design** mode (pen tool on the rail) — click places a component, thin box places a datastore, large box (≥300×220) creates a boundary, click-to-click connects; on-canvas legend while active; Esc cancels wire/draw then exits the mode.
+- `@spherescan/board`: connect-target highlight while Fast design (or Connect) wiring is active.
+
+### Changed
+
+- `@spherescan/board`: scope-only split of `BoardApp.tsx` into `chrome/`, `tools/`, `nodes/`, `inspector/`, `preview/`, plus shared helpers (`board-types`, `board-geometry`, `board-style`, `board-files`). Public `index.ts` exports unchanged.
+- `@spherescan/viewer` / `@spherescan/board`: edge labels use AABB deconfliction so chips stack with a gap instead of overlapping.
+- `@spherescan/viewer` / `@spherescan/board`: orthogonal edges get mid-corridor **lane gaps** so parallel straight wires (and labels) no longer stack on top of each other.
+- `@spherescan/viewer` / `@spherescan/board` / `@spherescan/modeler`: SVG/PNG export (and CLI) use **orthogonal** edges by default to match the live board; pass `{ mode: "bezier" }` when curved arrows are selected.
+
+## [0.2.0] - 2026-07-30
+
 ### Added
 
 - `@spherescan/board`: agent preview dialogue shows generation duration in seconds.

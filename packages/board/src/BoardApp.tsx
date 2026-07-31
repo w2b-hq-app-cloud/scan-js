@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 WABLOO PARTNERS SRL
+
 import {
   useEffect,
   useMemo,
@@ -5,400 +8,111 @@ import {
   useState,
   useCallback,
   type CSSProperties,
-  type ReactNode,
+  type MouseEvent,
+  type PointerEvent,
 } from "react";
 import {
-  ArrowLeft,
-  ArrowRight,
-  Bot,
-  Boxes,
-  ChevronDown,
-  ChevronRight,
-  Circle,
-  ClipboardCopy,
-  Command as CommandIcon,
   Cpu,
-  Download,
   Filter,
-  Github,
-  Grid3x3,
-  Hand,
-  Layers,
   Locate,
   Maximize2,
-  Mic,
-  MousePointer2,
-  Paperclip,
+  PenLine,
   Plus,
   Pointer,
-  Redo2,
-  Search,
   Send,
   Shield,
-  Sparkles,
   Square,
-  Undo2,
   Upload,
-  Waypoints,
-  X,
   ZoomIn,
   ZoomOut,
-  History as HistoryIcon,
-  AlertTriangle,
-  Check,
-  FileCode2,
-  Radio,
-  Database as DbIcon,
-  Leaf,
-  Image as ImageIcon,
-  FilePlus2,
-  ExternalLink,
-  Link2,
-  Menu,
-  RefreshCw,
-  Loader2,
 } from "lucide-react";
 import {
   commandSuggestions,
   recentPrompts as seedRecentPrompts,
   previewChanges,
 } from "./chrome-data";
-import type { SphereNode, SphereEdge, SphereGroup, NodeKind, BoundaryColor } from "@spherescan/viewer";
+import type { SphereNode, SphereEdge } from "@spherescan/viewer";
 import {
   LABEL_LOD_ZOOM,
   anchorPoint,
-  computeLabelStagger,
   edgePath,
   placeEdgeLabel,
-  projectToGraph,
-  graphToSvg,
-  BOUNDARY_COLORS,
-  boundaryColorMeta,
   boundaryFillMix,
   boundaryStroke,
   resolveEdgeAnchors,
   routeOrthogonalEdges,
+  assignOrthogonalLanes,
+  resolveLabelOverlaps,
+  estimateEdgeLabelSize,
 } from "@spherescan/viewer";
 import { parseScanYaml } from "@spherescan/model";
 import type { CreateKind } from "@spherescan/modeler";
 import { toast } from "sonner";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "./ui/dropdown-menu";
-import { kindMeta } from "./kinds";
 import { Modal } from "./Modal";
 import { useScanBoard } from "./useScanBoard";
 import { ElementIcon } from "./ElementIcon";
-import { IconPickerModal } from "./IconPickerModal";
+import { TooltipProvider } from "./ui/tooltip";
+
+import type {
+  Point,
+  BoardTool,
+  ResizeHandle,
+  BoardAppProps,
+  BoardAiAttachment,
+  ArchitectureWarning,
+} from "./board-types";
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "./ui/tooltip";
+  FAST_CLICK_SLOP,
+  FAST_BOUNDARY_MIN_W,
+  FAST_BOUNDARY_MIN_H,
+  FAST_THIN_MAX_SHORT,
+  classifyFastDraft,
+  snap4,
+  normalizeDraftRect,
+  applyBoundaryResize,
+} from "./board-geometry";
+import { createKindHints, edgeKindTitle, edgeStyle } from "./board-style";
+import {
+  isScanFile,
+  isAiAttachmentFile,
+  readFileAsText,
+  readFileAsDataUrl,
+  MAX_VOICE_MS,
+  MAX_VOICE_BYTES,
+} from "./board-files";
+import { readStoredRecentPrompts, rememberRecentPrompt } from "./recent-prompts";
+import { IconBtn } from "./ui/IconBtn";
+import { EdgeIcon } from "./icons/EdgeIcon";
+import { ToolRail } from "./tools/ToolRail";
+import { FastDesignLegend } from "./tools/FastDesignLegend";
+import { NodeCard } from "./nodes/NodeCard";
+import { SelectionCheck } from "./nodes/SelectionCheck";
+import {
+  NodeAskSphere,
+  DEFAULT_ASK_SPHERE_CHIPS,
+} from "./nodes/NodeAskSphere";
+import { Inspector } from "./inspector/Inspector";
+import { TopBar } from "./chrome/TopBar";
+import { AIBar } from "./chrome/AIBar";
+import { ViewTabs } from "./chrome/ViewTabs";
+import { CommandPalette } from "./chrome/CommandPalette";
+import { ValidationToast } from "./chrome/ValidationToast";
+import { ContextMenu } from "./chrome/ContextMenu";
+import { Legend } from "./chrome/Legend";
+import { MiniMap } from "./chrome/MiniMap";
+import { PreviewDrawer } from "./preview/PreviewDrawer";
 
-const RECENT_PROMPTS_KEY = "sphere.board.recentPrompts";
-const MAX_RECENT_PROMPTS = 8;
-
-function readStoredRecentPrompts(): string[] {
-  if (typeof window === "undefined") return [...seedRecentPrompts];
-  try {
-    const raw = window.localStorage.getItem(RECENT_PROMPTS_KEY);
-    if (!raw) return [...seedRecentPrompts];
-    const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) return [...seedRecentPrompts];
-    const cleaned = parsed
-      .filter((item): item is string => typeof item === "string" && item.trim().length > 0)
-      .map((item) => item.trim())
-      .slice(0, MAX_RECENT_PROMPTS);
-    return cleaned.length ? cleaned : [...seedRecentPrompts];
-  } catch {
-    return [...seedRecentPrompts];
-  }
-}
-
-function rememberRecentPrompt(previous: string[], message: string): string[] {
-  const trimmed = message.trim();
-  if (!trimmed) return previous;
-  const next = [trimmed, ...previous.filter((item) => item !== trimmed)].slice(
-    0,
-    MAX_RECENT_PROMPTS,
-  );
-  try {
-    window.localStorage.setItem(RECENT_PROMPTS_KEY, JSON.stringify(next));
-  } catch {
-    /* ignore quota / private mode */
-  }
-  return next;
-}
-
-type Point = { x: number; y: number };
-
-function openExternal(url: string) {
-  window.open(url, "_blank", "noopener,noreferrer");
-}
-
-const createKindHints: Record<
-  CreateKind,
-  { nodeKind: NodeKind; label: string; hint: string }
-> = {
-  service: {
-    nodeKind: "service",
-    label: "Service",
-    hint: "Runnable API with REST ports",
-  },
-  "external-system": {
-    nodeKind: "external",
-    label: "External System",
-    hint: "Third-party or shared platform",
-  },
-  datastore: {
-    nodeKind: "database",
-    label: "Datastore",
-    hint: "Database or persistent store",
-  },
-  "event-stream": {
-    nodeKind: "event",
-    label: "Event / Stream",
-    hint: "Topic, queue, or event channel",
-  },
-  search: {
-    nodeKind: "search",
-    label: "Search",
-    hint: "Search / index component",
-  },
-  agent: {
-    nodeKind: "agent",
-    label: "Agent",
-    hint: "Autonomous or assisted runtime",
-  },
-  repository: {
-    nodeKind: "repo",
-    label: "Repository",
-    hint: "Source or contract repo",
-  },
-};
-
-function edgeKindTitle(kind: SphereEdge["kind"]): string {
-  switch (kind) {
-    case "rest":
-      return "REST";
-    case "grpc":
-      return "gRPC";
-    case "async":
-      return "Async";
-    case "db":
-      return "Database";
-    case "stream":
-      return "Stream";
-    case "git":
-      return "Git";
-    case "flow":
-      return "Flow";
-    default:
-      return "Connection";
-  }
-}
-
-function isScanFile(file: File): boolean {
-  const name = file.name.toLowerCase();
-  return (
-    name.endsWith(".scan") ||
-    name.endsWith(".yaml") ||
-    name.endsWith(".yml") ||
-    file.type === "application/x-yaml" ||
-    file.type === "text/yaml"
-  );
-}
-
-function isAiAttachmentFile(file: File): boolean {
-  const name = file.name.toLowerCase();
-  return (
-    file.type === "text/plain" ||
-    file.type === "text/markdown" ||
-    file.type === "image/png" ||
-    file.type === "image/jpeg" ||
-    name.endsWith(".txt") ||
-    name.endsWith(".md") ||
-    name.endsWith(".png") ||
-    name.endsWith(".jpg") ||
-    name.endsWith(".jpeg")
-  );
-}
-
-function readFileAsText(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : "");
-    reader.onerror = () => reject(reader.error ?? new Error(`Failed to read ${file.name}`));
-    reader.readAsText(file);
-  });
-}
-
-function readFileAsDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : "");
-    reader.onerror = () => reject(reader.error ?? new Error(`Failed to read ${file.name}`));
-    reader.readAsDataURL(file);
-  });
-}
-
-const kindColorVar: Record<NodeKind, string> = {
-  service: "var(--svc)",
-  external: "var(--ext)",
-  database: "var(--data)",
-  event: "var(--event)",
-  search: "var(--search)",
-  agent: "var(--agent)",
-  repo: "var(--repo)",
-};
-
-const edgeStyle = (kind: SphereEdge["kind"]) => {
-  switch (kind) {
-    case "rest":
-      return { stroke: "oklch(0.35 0.03 260)", dash: "", width: 1.5 };
-    case "grpc":
-      return { stroke: "oklch(0.4 0.03 260)", dash: "", width: 1.5 };
-    case "db":
-      return { stroke: "var(--agent)", dash: "6 4", width: 1.5 };
-    case "async":
-      return { stroke: "var(--event)", dash: "6 4", width: 1.5 };
-    case "stream":
-      return { stroke: "var(--event)", dash: "6 4", width: 1.5 };
-    case "git":
-      return { stroke: "oklch(0.5 0.02 260)", dash: "5 4", width: 1.5 };
-    case "flow":
-      return { stroke: "var(--agent)", dash: "5 4", width: 1.5 };
-  }
-};
-
-type ResizeHandle = "nw" | "n" | "ne" | "e" | "se" | "s" | "sw" | "w";
-
-const MIN_BOUNDARY_W = 160;
-const MIN_BOUNDARY_H = 120;
-
-function applyBoundaryResize(
-  start: { x: number; y: number; w: number; h: number },
-  handle: ResizeHandle,
-  dx: number,
-  dy: number,
-) {
-  let { x, y, w, h } = start;
-  if (handle.includes("e")) w = start.w + dx;
-  if (handle.includes("s")) h = start.h + dy;
-  if (handle.includes("w")) {
-    x = start.x + dx;
-    w = start.w - dx;
-  }
-  if (handle.includes("n")) {
-    y = start.y + dy;
-    h = start.h - dy;
-  }
-  if (w < MIN_BOUNDARY_W) {
-    if (handle.includes("w")) x = start.x + start.w - MIN_BOUNDARY_W;
-    w = MIN_BOUNDARY_W;
-  }
-  if (h < MIN_BOUNDARY_H) {
-    if (handle.includes("n")) y = start.y + start.h - MIN_BOUNDARY_H;
-    h = MIN_BOUNDARY_H;
-  }
-  return {
-    x: Math.round(x / 4) * 4,
-    y: Math.round(y / 4) * 4,
-    w: Math.round(w / 4) * 4,
-    h: Math.round(h / 4) * 4,
-  };
-}
-
-export type BoardShell = "scan" | "sphere";
-
-export type BoardAppProps = {
-  /** `scan` = OSS reference chrome; `sphere` = product AI / Share / collab chrome. Board canvas is identical. */
-  shell?: BoardShell;
-  /**
-   * Layout sizing. `viewport` (default) = full browser window; `parent` = fill the host container
-   * (use for embeds inside a page that already has chrome).
-   */
-  fill?: "viewport" | "parent";
-  /** Sphere product chrome: inserted before the diagram title (e.g. organization picker). */
-  topBarBeforeTitle?: ReactNode;
-  /** Sphere product chrome: after save status (e.g. visibility + Library link). */
-  topBarAfterStatus?: ReactNode;
-  /** Sphere product chrome: between brand and diagram title (e.g. account menu). */
-  topBarAfterBrand?: ReactNode;
-  /** Fired when dirty (unsaved) state changes - hosts can show leave confirmations. */
-  onDirtyChange?: (dirty: boolean) => void;
-  /**
-   * Browser `beforeunload` warning ("Reload site?"). Default true.
-   * Sphere product should set false and use a native Modal + router blocker instead.
-   */
-  warnOnUnload?: boolean;
-  /**
-   * Optional host persistence hook. When supplied, Cmd/Ctrl+S passes the
-   * current YAML document to the host instead of writing a local file.
-   * Return true only after the host has persisted the document successfully.
-   */
-  onSaveDocument?: (yaml: string) => Promise<boolean>;
-  /** Called after a model command changes the document, for host-driven autosave. */
-  onDocumentChange?: (yaml: string) => void;
-  /** YAML supplied by a host to replace the built-in sample document. */
-  initialYaml?: string | null;
-  /**
-   * Start from an empty Untitled board instead of the Order Platform sample.
-   * Ignored when `initialYaml` is supplied (e.g. opening a saved diagram).
-   * Sphere should set this for signed-in users on `/`.
-   */
-  startEmpty?: boolean;
-  /**
-   * Optional host AI adapter (Sphere product). When set, chat / suggestions /
-   * auto-layout call the host instead of mock chrome-data.
-   */
-  aiAdapter?: BoardAiAdapter | null;
-};
-
-export type BoardAiChatResult = {
-  reply: string;
-  yaml?: string | null;
-  suggestions?: string[];
-  sessionId?: string | null;
-  /** Wall-clock generation time in seconds (BFF or client-measured). */
-  durationSec?: number;
-};
-
-export type BoardAiAttachment = {
-  name: string;
-  mimeType: string;
-  kind: "text" | "image";
-  content: string;
-};
-
-export type BoardAiAdapter = {
-  chat: (input: {
-    message: string;
-    yaml: string;
-    selection?: string[];
-    sessionId?: string | null;
-    attachments?: BoardAiAttachment[];
-  }) => Promise<BoardAiChatResult>;
-  suggest?: (input: {
-    message?: string;
-    yaml: string;
-  }) => Promise<string[]>;
-  layout?: (input: { yaml: string }) => Promise<{
-    reply?: string;
-    yaml: string;
-  }>;
-  /** Optional STT: Sphere wires this to mesh faster-whisper. */
-  transcribeAudio?: (input: { blob: Blob; mimeType: string }) => Promise<string>;
-};
-
-const MAX_VOICE_MS = 60_000;
-const MAX_VOICE_BYTES = 10 * 1024 * 1024;
+export type {
+  Point,
+  BoardTool,
+  ResizeHandle,
+  BoardShell,
+  BoardAppProps,
+  BoardAiChatResult,
+  BoardAiAttachment,
+  BoardAiAdapter,
+  ArchitectureWarning,
+} from "./board-types";
 
 export default function BoardApp({
   shell = "scan",
@@ -466,13 +180,23 @@ export default function BoardApp({
 
   const [selected, setSelected] = useState<string | null>(null);
   const [selectedBoundary, setSelectedBoundary] = useState<string | null>(null);
+  /** Additional node ids when Ctrl/Cmd+click multi-selecting (primary is `selected`). */
+  const [selectedExtras, setSelectedExtras] = useState<string[]>([]);
+  /** Additional boundary ids for multi-select (primary is `selectedBoundary`). */
+  const [selectedBoundaryExtras, setSelectedBoundaryExtras] = useState<string[]>([]);
   const [hoverEdge, setHoverEdge] = useState<string | null>(null);
   const [selectedEdge, setSelectedEdge] = useState<string | null>(null);
   const [zoom, setZoom] = useState(0.85);
   const [pan, setPan] = useState<Point>({ x: 40, y: 20 });
-  const [tool, setTool] = useState<"select" | "pan" | "connect" | "create" | "boundary">("select");
+  const [tool, setTool] = useState<BoardTool>("select");
   const [createKind, setCreateKind] = useState<CreateKind>("service");
   const [boundaryKind, setBoundaryKind] = useState<"trust" | "runtime">("trust");
+  const [fastDraft, setFastDraft] = useState<{
+    x0: number;
+    y0: number;
+    x1: number;
+    y1: number;
+  } | null>(null);
   const [showGrid, setShowGrid] = useState(true);
   /** Orthogonal (90°) edges with hop arcs at crossings. */
   const [orthogonalEdges, setOrthogonalEdges] = useState(true);
@@ -494,6 +218,15 @@ export default function BoardApp({
   const voiceMaxTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const submitAiChatRef = useRef<(override?: string) => Promise<void>>(async () => {});
   const [aiSuggestions, setAiSuggestions] = useState<string[]>(commandSuggestions);
+  const [architectWarnings, setArchitectWarnings] = useState<
+    { elementId: string; message: string }[]
+  >([]);
+  const [architectBusy, setArchitectBusy] = useState(false);
+  const [nodeAskChips, setNodeAskChips] = useState<string[]>([]);
+  const [nodeAskLoading, setNodeAskLoading] = useState(false);
+  const [nodeAskForId, setNodeAskForId] = useState<string | null>(null);
+  const nodeAskGenRef = useRef(0);
+  const architectGenRef = useRef(0);
   const [aiRecentPrompts, setAiRecentPrompts] = useState<string[]>(seedRecentPrompts);
   const [aiMenuOpen, setAiMenuOpen] = useState(false);
   const [pendingAi, setPendingAi] = useState<{
@@ -564,14 +297,26 @@ export default function BoardApp({
     },
     [importYamlFile],
   );
-  const dragging = useRef<{ id: string; ox: number; oy: number } | null>(null);
+  const dragging = useRef<{
+    id: string;
+    ids: string[];
+    ox: number;
+    oy: number;
+    starts: Record<string, { x: number; y: number }>;
+  } | null>(null);
   const resizingBoundary = useRef<{
     id: string;
     handle: ResizeHandle;
     start: { x: number; y: number; w: number; h: number };
     origin: Point;
   } | null>(null);
-  const movingBoundary = useRef<{ id: string; ox: number; oy: number } | null>(null);
+  const movingBoundary = useRef<{
+    id: string;
+    ids: string[];
+    ox: number;
+    oy: number;
+    starts: Record<string, { x: number; y: number }>;
+  } | null>(null);
   const panning = useRef<{ sx: number; sy: number; px: number; py: number } | null>(null);
 
   const saveYaml = useCallback(async () => {
@@ -693,16 +438,42 @@ export default function BoardApp({
       if (e.key === "Delete" || e.key === "Backspace") {
         const tag = (e.target as HTMLElement)?.tagName;
         if (tag === "INPUT" || tag === "TEXTAREA") return;
-        if (selected) {
+        const nodeIds = [
+          ...new Set([
+            ...(selected ? [selected] : []),
+            ...selectedExtras,
+          ]),
+        ];
+        const boundaryIds = [
+          ...new Set([
+            ...(selectedBoundary ? [selectedBoundary] : []),
+            ...selectedBoundaryExtras,
+          ]),
+        ];
+        if (nodeIds.length) {
           e.preventDefault();
-          deleteElement(selected);
+          for (const id of nodeIds) {
+            try {
+              deleteElement(id);
+            } catch {
+              /* continue */
+            }
+          }
           setSelected(null);
-        } else if (selectedBoundary) {
+          setSelectedExtras([]);
+        } else if (boundaryIds.length) {
           e.preventDefault();
           try {
-            deleteBoundary(selectedBoundary);
+            for (const id of boundaryIds) {
+              deleteBoundary(id);
+            }
             setSelectedBoundary(null);
-            toast.success("Boundary deleted");
+            setSelectedBoundaryExtras([]);
+            toast.success(
+              boundaryIds.length === 1
+                ? "Boundary deleted"
+                : `${boundaryIds.length} boundaries deleted`,
+            );
           } catch (err) {
             const message = err instanceof Error ? err.message : "Delete failed";
             toast.error("Could not delete boundary", { description: message });
@@ -734,6 +505,18 @@ export default function BoardApp({
           setConnectCursor(null);
           setTool("select");
           toast.message(connectFrom ? "Connect cancelled" : "Connect mode off");
+        } else if (tool === "fast") {
+          if (fastDraft) {
+            setFastDraft(null);
+            toast.message("Draw cancelled");
+          } else if (connectFrom) {
+            setConnectFrom(null);
+            setConnectCursor(null);
+            toast.message("Connect cancelled");
+          } else {
+            setTool("select");
+            toast.message("Fast design off");
+          }
         } else if (tool === "create" || tool === "boundary") {
           setTool("select");
           toast.message("Place cancelled");
@@ -749,8 +532,10 @@ export default function BoardApp({
     undo,
     redo,
     selected,
+    selectedExtras,
     selectedEdge,
     selectedBoundary,
+    selectedBoundaryExtras,
     deleteElement,
     deleteBoundary,
     duplicateElement,
@@ -759,15 +544,19 @@ export default function BoardApp({
     connectFrom,
     saveYaml,
     tool,
+    fastDraft,
     groups,
     nodes,
     isSphere,
   ]);
 
   useEffect(() => {
-    if (tool !== "connect") {
+    if (tool !== "connect" && tool !== "fast") {
       setConnectFrom(null);
       setConnectCursor(null);
+    }
+    if (tool !== "fast") {
+      setFastDraft(null);
     }
   }, [tool]);
 
@@ -782,6 +571,29 @@ export default function BoardApp({
     if (!onDocumentChange || !model || !dirty) return;
     onDocumentChange(modeler.peekYAML());
   }, [historyStep, model, dirty, onDocumentChange, modeler]);
+
+  // Enterprise Architect: debounced analyze-only pass after board changes.
+  useEffect(() => {
+    if (!aiAdapter?.architect || !model || !ready) return;
+    setArchitectBusy(true);
+    const gen = ++architectGenRef.current;
+    const handle = window.setTimeout(() => {
+      const yaml = modeler.peekYAML();
+      void aiAdapter
+        .architect!({ yaml })
+        .then((res) => {
+          if (gen !== architectGenRef.current) return;
+          setArchitectWarnings(Array.isArray(res.warnings) ? res.warnings : []);
+        })
+        .catch(() => {
+          /* keep prior warnings on failure */
+        })
+        .finally(() => {
+          if (gen === architectGenRef.current) setArchitectBusy(false);
+        });
+    }, 1000);
+    return () => window.clearTimeout(handle);
+  }, [historyStep, model, ready, aiAdapter, modeler]);
 
   const loadedYamlRef = useRef<string | null>(null);
   useEffect(() => {
@@ -815,14 +627,88 @@ export default function BoardApp({
     return () => ro.disconnect();
   }, []);
 
-  const nodeById = useMemo(() => Object.fromEntries(nodes.map((n) => [n.id, n])), [nodes]);
+  const displayNodes = useMemo(() => {
+    const msgById = new Map(
+      architectWarnings.map((w) => [w.elementId, w.message] as const),
+    );
+    // Sphere: architect owns warn badges — don't show baked YAML status until live results.
+    if (aiAdapter?.architect) {
+      return nodes.map((n) => {
+        const msg = msgById.get(n.id);
+        if (msg) {
+          return { ...n, status: "warn" as const, warn: msg };
+        }
+        if (n.status === "warn" || n.warn) {
+          return { ...n, status: undefined, warn: undefined };
+        }
+        return n;
+      });
+    }
+    if (msgById.size === 0) return nodes;
+    return nodes.map((n) => {
+      const msg = msgById.get(n.id);
+      if (!msg) return n;
+      return {
+        ...n,
+        status: "warn" as const,
+        warn: n.warn?.trim() ? n.warn : msg,
+      };
+    });
+  }, [nodes, architectWarnings, aiAdapter?.architect]);
+
+  const nodeById = useMemo(
+    () => Object.fromEntries(displayNodes.map((n) => [n.id, n])),
+    [displayNodes],
+  );
+
+  const architectureWarnings = useMemo((): ArchitectureWarning[] => {
+    // With Enterprise Architect, toast waits for live analysis — ignore baked YAML mocks.
+    if (aiAdapter?.architect) {
+      const byId = new Map<string, ArchitectureWarning>();
+      for (const w of architectWarnings) {
+        const n = nodeById[w.elementId] ?? nodes.find((x) => x.id === w.elementId);
+        if (!n) continue;
+        byId.set(w.elementId, {
+          id: w.elementId,
+          title: n.title,
+          message: w.message,
+        });
+      }
+      return [...byId.values()];
+    }
+    const byId = new Map<string, ArchitectureWarning>();
+    for (const n of displayNodes) {
+      if (n.status === "warn" || n.warn) {
+        byId.set(n.id, {
+          id: n.id,
+          title: n.title,
+          message: n.warn ?? "Validation warning",
+        });
+      }
+    }
+    return [...byId.values()];
+  }, [aiAdapter?.architect, architectWarnings, displayNodes, nodeById, nodes]);
+
+  const selectedNodeIds = useMemo(() => {
+    const ids = new Set(selectedExtras);
+    if (selected) ids.add(selected);
+    return [...ids];
+  }, [selected, selectedExtras]);
+
+  const selectedBoundaryIds = useMemo(() => {
+    const ids = new Set(selectedBoundaryExtras);
+    if (selectedBoundary) ids.add(selectedBoundary);
+    return [...ids];
+  }, [selectedBoundary, selectedBoundaryExtras]);
+
+  const selectionCount = selectedNodeIds.length + selectedBoundaryIds.length;
 
   const focusIds = useMemo(() => {
     if (!focusMode) return null;
     // While wiring, keep every component fully visible — focus dimming hides valid targets.
-    if (tool === "connect" || connectFrom) return null;
+    if (tool === "connect" || tool === "fast" || connectFrom) return null;
     const seed = new Set<string>();
-    if (selected) seed.add(selected);
+    for (const id of selectedNodeIds) seed.add(id);
     if (selectedEdge) {
       const e = edges.find((x) => x.id === selectedEdge);
       if (e) {
@@ -846,7 +732,7 @@ export default function BoardApp({
       }
     }
     return hop;
-  }, [focusMode, selected, selectedEdge, hoverEdge, edges, tool, connectFrom]);
+  }, [focusMode, selectedNodeIds, selectedEdge, hoverEdge, edges, tool, connectFrom]);
 
   const edgeFanById = useMemo(() => {
     const counts = new Map<string, number>();
@@ -892,13 +778,30 @@ export default function BoardApp({
   const edgeLabelPositions = useMemo(() => {
     const boxes = nodes.map((n) => ({ x: n.x, y: n.y, w: n.w, h: n.h }));
     const routeMode = orthogonalEdges ? "orthogonal" : "bezier";
-    const rough: Array<{ id: string; x: number; y: number }> = [];
+    const routed = edges
+      .map((e) => {
+        const from = nodeById[e.from];
+        const to = nodeById[e.to];
+        if (!from || !to) return null;
+        const fan = edgeFanById.get(e.id);
+        return {
+          id: e.id,
+          from: { x: from.x, y: from.y, w: from.w, h: from.h },
+          to: { x: to.x, y: to.y, w: to.w, h: to.h },
+          fanIndex: fan?.index ?? 0,
+          fanCount: fan?.count ?? 1,
+        };
+      })
+      .filter((e): e is NonNullable<typeof e> => Boolean(e));
+    const lanes = orthogonalEdges ? assignOrthogonalLanes(routed) : new Map<string, number>();
+    const rough: Array<{ id: string; x: number; y: number; w: number; h: number }> = [];
     for (const e of edges) {
       if (!e.label) continue;
       const anchors = edgeAnchorsById.get(e.id);
       const from = nodeById[e.from];
       const to = nodeById[e.to];
       if (!anchors || !from || !to) continue;
+      const size = estimateEdgeLabelSize(e.label, e.contract);
       const p = placeEdgeLabel({
         a: anchors.a,
         b: anchors.b,
@@ -910,35 +813,14 @@ export default function BoardApp({
         toBox: to,
         fanIndex: edgeFanById.get(e.id)?.index,
         fanCount: edgeFanById.get(e.id)?.count,
+        laneOffset: lanes.get(e.id),
+        labelW: size.w,
+        labelH: size.h,
       });
-      rough.push({ id: e.id, x: p.x, y: p.y });
+      rough.push({ id: e.id, x: p.x, y: p.y, w: size.w, h: size.h });
     }
-    const stagger = computeLabelStagger(rough);
-    const out = new Map<string, Point>();
-    for (const e of edges) {
-      if (!e.label) continue;
-      const anchors = edgeAnchorsById.get(e.id);
-      const from = nodeById[e.from];
-      const to = nodeById[e.to];
-      if (!anchors || !from || !to) continue;
-      out.set(
-        e.id,
-        placeEdgeLabel({
-          a: anchors.a,
-          b: anchors.b,
-          aSide: anchors.fromSide,
-          bSide: anchors.toSide,
-          nodes: boxes,
-          stagger: stagger.get(e.id) ?? 0,
-          mode: routeMode,
-          fromBox: from,
-          toBox: to,
-          fanIndex: edgeFanById.get(e.id)?.index,
-          fanCount: edgeFanById.get(e.id)?.count,
-        }),
-      );
-    }
-    return out;
+    // AABB deconfliction so chips (Stream/AsyncAPI, etc.) never sit on top of each other.
+    return resolveLabelOverlaps(rough, { gap: 10 });
   }, [edges, nodes, nodeById, orthogonalEdges, edgeAnchorsById, edgeFanById]);
 
   const orthogonalEdgePaths = useMemo(() => {
@@ -990,15 +872,18 @@ export default function BoardApp({
     return { x: (cx - rx - p.x) / z, y: (cy - ry - p.y) / z };
   };
 
-  const startDrag = (e: React.PointerEvent, id: string) => {
-    if (tool === "connect") {
+  const startDrag = (e: PointerEvent, id: string) => {
+    if (tool === "connect" || tool === "fast") {
       e.stopPropagation();
       // Node body: port-less / fallback node->node wire
       if (!connectFrom) {
         setConnectFrom({ nodeId: id });
         setConnectCursor(clientToWorld(e.clientX, e.clientY));
         setSelected(id);
+        setSelectedExtras([]);
+        setSelectedBoundaryExtras([]);
         setSelectedEdge(null);
+        setSelectedBoundary(null);
       } else if (connectFrom.nodeId !== id) {
         try {
           connect(connectFrom.nodeId, id, {
@@ -1013,19 +898,60 @@ export default function BoardApp({
         }
         setConnectFrom(null);
         setConnectCursor(null);
-        setTool("select");
+        if (tool === "connect") setTool("select");
       }
       return;
     }
     if (tool !== "select") return;
     e.stopPropagation();
-    setSelected(id);
-    setSelectedBoundary(null);
-    setSelectedEdge(null);
+
+    const additive = e.ctrlKey || e.metaKey;
+    if (additive) {
+      e.preventDefault();
+      setSelectedEdge(null);
+      setSelectedBoundary(null);
+      setSelectedBoundaryExtras([]);
+      const current = new Set(selectedExtras);
+      if (selected) current.add(selected);
+      if (current.has(id)) current.delete(id);
+      else current.add(id);
+      const next = [...current];
+      setSelected(next.length ? next[next.length - 1]! : null);
+      setSelectedExtras(next.length > 1 ? next.slice(0, -1) : []);
+      return;
+    }
+
+    const alreadyMulti =
+      selectedNodeIds.includes(id) && selectedNodeIds.length > 1;
+    if (!alreadyMulti) {
+      setSelected(id);
+      setSelectedExtras([]);
+      setSelectedBoundaryExtras([]);
+      setSelectedBoundary(null);
+      setSelectedEdge(null);
+    } else {
+      setSelectedBoundary(null);
+      setSelectedBoundaryExtras([]);
+      setSelectedEdge(null);
+    }
+
+    const moveIds = alreadyMulti ? selectedNodeIds : [id];
     const n = nodeById[id];
+    if (!n) return;
     const w = clientToWorld(e.clientX, e.clientY);
-    dragging.current = { id, ox: w.x - n.x, oy: w.y - n.y };
-    beginDrag(id);
+    const starts: Record<string, { x: number; y: number }> = {};
+    for (const moveId of moveIds) {
+      const node = nodeById[moveId];
+      if (node) starts[moveId] = { x: node.x, y: node.y };
+    }
+    dragging.current = {
+      id,
+      ids: moveIds,
+      ox: w.x - n.x,
+      oy: w.y - n.y,
+      starts,
+    };
+    beginDrag(moveIds);
     (e.target as Element).setPointerCapture(e.pointerId);
   };
 
@@ -1033,7 +959,7 @@ export default function BoardApp({
     // Ports are always interactive: start/finish wiring without requiring the Connect tool first.
     if (!connectFrom) {
       if (role === "expose") {
-        setTool("connect");
+        if (tool !== "fast") setTool("connect");
         setConnectFrom({ nodeId, portId });
         setConnectCursor(null);
         setSelected(nodeId);
@@ -1082,7 +1008,7 @@ export default function BoardApp({
       }
       setConnectFrom(null);
       setConnectCursor(null);
-      setTool("select");
+      if (tool !== "fast") setTool("select");
       return;
     }
     try {
@@ -1097,11 +1023,11 @@ export default function BoardApp({
     }
     setConnectFrom(null);
     setConnectCursor(null);
-    setTool("select");
+    if (tool !== "fast") setTool("select");
   };
 
   const startBoundaryResize = (
-    e: React.PointerEvent,
+    e: PointerEvent,
     id: string,
     handle: ResizeHandle,
   ) => {
@@ -1125,21 +1051,61 @@ export default function BoardApp({
     (e.currentTarget as Element).setPointerCapture(e.pointerId);
   };
 
-  const startBoundaryMove = (e: React.PointerEvent, id: string) => {
+  const startBoundaryMove = (e: PointerEvent, id: string) => {
     if (tool !== "select" || e.button !== 0) return;
     e.stopPropagation();
     const g = groups.find((x) => x.id === id);
     if (!g) return;
-    setSelectedBoundary(id);
-    setSelected(null);
-    setSelectedEdge(null);
+
+    const additive = e.ctrlKey || e.metaKey;
+    if (additive) {
+      e.preventDefault();
+      setSelectedEdge(null);
+      setSelected(null);
+      setSelectedExtras([]);
+      const current = new Set(selectedBoundaryExtras);
+      if (selectedBoundary) current.add(selectedBoundary);
+      if (current.has(id)) current.delete(id);
+      else current.add(id);
+      const next = [...current];
+      setSelectedBoundary(next.length ? next[next.length - 1]! : null);
+      setSelectedBoundaryExtras(next.length > 1 ? next.slice(0, -1) : []);
+      return;
+    }
+
+    const alreadyMulti =
+      selectedBoundaryIds.includes(id) && selectedBoundaryIds.length > 1;
+    if (!alreadyMulti) {
+      setSelectedBoundary(id);
+      setSelectedBoundaryExtras([]);
+      setSelected(null);
+      setSelectedExtras([]);
+      setSelectedEdge(null);
+    } else {
+      setSelected(null);
+      setSelectedExtras([]);
+      setSelectedEdge(null);
+    }
+
+    const moveIds = alreadyMulti ? selectedBoundaryIds : [id];
     const w = clientToWorld(e.clientX, e.clientY);
-    movingBoundary.current = { id, ox: w.x - g.x, oy: w.y - g.y };
-    beginBoundaryMove(id);
+    const starts: Record<string, { x: number; y: number }> = {};
+    for (const moveId of moveIds) {
+      const group = groups.find((x) => x.id === moveId);
+      if (group) starts[moveId] = { x: group.x, y: group.y };
+    }
+    movingBoundary.current = {
+      id,
+      ids: moveIds,
+      ox: w.x - g.x,
+      oy: w.y - g.y,
+      starts,
+    };
+    beginBoundaryMove(moveIds);
     (e.currentTarget as Element).setPointerCapture(e.pointerId);
   };
 
-  const onPointerMove = (e: React.PointerEvent) => {
+  const onPointerMove = (e: PointerEvent) => {
     const rect = canvasRef.current?.getBoundingClientRect();
     const overChrome = (e.target as Element | null)?.closest?.("[data-canvas-chrome]");
     if (rect && !overChrome) {
@@ -1147,6 +1113,11 @@ export default function BoardApp({
         x: e.clientX - rect.left,
         y: e.clientY - rect.top,
       };
+    }
+    if (fastDraft) {
+      const w = clientToWorld(e.clientX, e.clientY);
+      setFastDraft((d) => (d ? { ...d, x1: w.x, y1: w.y } : d));
+      return;
     }
     if (connectFrom) {
       setConnectCursor(clientToWorld(e.clientX, e.clientY));
@@ -1162,26 +1133,35 @@ export default function BoardApp({
     if (movingBoundary.current) {
       const m = movingBoundary.current;
       const w = clientToWorld(e.clientX, e.clientY);
+      const anchorStart = m.starts[m.id];
+      if (!anchorStart) return;
+      const nx = Math.round((w.x - m.ox) / 4) * 4;
+      const ny = Math.round((w.y - m.oy) / 4) * 4;
+      const dx = nx - anchorStart.x;
+      const dy = ny - anchorStart.y;
       previewBoundaryMove(
-        m.id,
-        Math.round((w.x - m.ox) / 4) * 4,
-        Math.round((w.y - m.oy) / 4) * 4,
+        m.ids.map((bid) => {
+          const s = m.starts[bid] ?? anchorStart;
+          return { id: bid, x: s.x + dx, y: s.y + dy };
+        }),
       );
       return;
     }
     if (dragging.current) {
       const d = dragging.current;
       const w = clientToWorld(e.clientX, e.clientY);
+      const anchorStart = d.starts[d.id];
+      if (!anchorStart) return;
+      const nx = Math.round((w.x - d.ox) / 4) * 4;
+      const ny = Math.round((w.y - d.oy) / 4) * 4;
+      const dx = nx - anchorStart.x;
+      const dy = ny - anchorStart.y;
       setNodesPreview((prev) =>
-        prev.map((n) =>
-          n.id === d.id
-            ? {
-                ...n,
-                x: Math.round((w.x - d.ox) / 4) * 4,
-                y: Math.round((w.y - d.oy) / 4) * 4,
-              }
-            : n,
-        ),
+        prev.map((n) => {
+          const s = d.starts[n.id];
+          if (!s) return n;
+          return { ...n, x: s.x + dx, y: s.y + dy };
+        }),
       );
     }
     if (panning.current) {
@@ -1192,7 +1172,69 @@ export default function BoardApp({
     }
   };
 
-  const onPointerUp = () => {
+  const commitFastDraft = useCallback(
+    (draft: { x0: number; y0: number; x1: number; y1: number }) => {
+      const { x, y, w, h } = normalizeDraftRect(draft);
+      const kind = classifyFastDraft(w, h);
+
+      if (kind === "click" || kind === "component") {
+        const id = createElement(
+          createKind,
+          kind === "click" ? snap4(draft.x0) : snap4(x),
+          kind === "click" ? snap4(draft.y0) : snap4(y),
+        );
+        setSelected(id);
+        setSelectedEdge(null);
+        setSelectedBoundary(null);
+        toast.success(`${createKindHints[createKind].label} added`, {
+          description:
+            kind === "click"
+              ? "Click another component to connect · thin box → Datastore · large box → boundary"
+              : `Thin (short ≤${FAST_THIN_MAX_SHORT}px) → Datastore · ≥${FAST_BOUNDARY_MIN_W}×${FAST_BOUNDARY_MIN_H} → boundary`,
+        });
+        return;
+      }
+
+      if (kind === "datastore") {
+        const id = createElement("datastore", snap4(x), snap4(y));
+        setSelected(id);
+        setSelectedEdge(null);
+        setSelectedBoundary(null);
+        toast.success("Datastore added", {
+          description: "Thin box gesture · click components to connect",
+        });
+        return;
+      }
+
+      try {
+        const id = createBoundary(boundaryKind, {
+          x: snap4(x),
+          y: snap4(y),
+          w: snap4(w),
+          h: snap4(h),
+        });
+        setSelectedBoundary(id);
+        setSelected(null);
+        setSelectedEdge(null);
+        toast.success(
+          boundaryKind === "trust" ? "Trust boundary added" : "Runtime boundary added",
+          { description: "Drag another box or click components to connect" },
+        );
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Could not create boundary";
+        toast.error("Boundary failed", { description: message });
+      }
+    },
+    [boundaryKind, createBoundary, createElement, createKind],
+  );
+
+  const onPointerUp = (e: PointerEvent) => {
+    if (fastDraft) {
+      const w = clientToWorld(e.clientX, e.clientY);
+      const draft = { ...fastDraft, x1: w.x, y1: w.y };
+      setFastDraft(null);
+      commitFastDraft(draft);
+    }
     if (resizingBoundary.current) {
       endBoundaryResize();
       resizingBoundary.current = null;
@@ -1208,10 +1250,28 @@ export default function BoardApp({
     panning.current = null;
   };
 
-  const onCanvasPointerDown = (e: React.PointerEvent) => {
+  const onCanvasPointerDown = (e: PointerEvent) => {
+    if (tool === "fast" && e.button === 0) {
+      // Empty-canvas sketch: click → component, drag box → boundary.
+      // Node clicks are handled in startDrag / ports and stopPropagation.
+      const w = clientToWorld(e.clientX, e.clientY);
+      setSelected(null);
+      setSelectedExtras([]);
+      setSelectedBoundary(null);
+      setSelectedBoundaryExtras([]);
+      setSelectedEdge(null);
+      setCtxMenu(null);
+      if (connectFrom) {
+        setConnectFrom(null);
+        setConnectCursor(null);
+      }
+      setFastDraft({ x0: w.x, y0: w.y, x1: w.x, y1: w.y });
+      (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
+      return;
+    }
     if (tool === "create" && e.button === 0) {
       const w = clientToWorld(e.clientX, e.clientY);
-      const id = createElement(createKind, Math.round(w.x / 4) * 4, Math.round(w.y / 4) * 4);
+      const id = createElement(createKind, snap4(w.x), snap4(w.y));
       setSelected(id);
       setSelectedEdge(null);
       setSelectedBoundary(null);
@@ -1225,8 +1285,8 @@ export default function BoardApp({
       const w = clientToWorld(e.clientX, e.clientY);
       const bw = 480;
       const bh = 320;
-      const x = Math.round((w.x - bw / 2) / 4) * 4;
-      const y = Math.round((w.y - bh / 2) / 4) * 4;
+      const x = snap4(w.x - bw / 2);
+      const y = snap4(w.y - bh / 2);
       try {
         const id = createBoundary(boundaryKind, { x, y, w: bw, h: bh });
         setSelectedBoundary(id);
@@ -1252,7 +1312,9 @@ export default function BoardApp({
       };
     } else {
       setSelected(null);
+      setSelectedExtras([]);
       setSelectedBoundary(null);
+      setSelectedBoundaryExtras([]);
       setSelectedEdge(null);
       setCtxMenu(null);
       if (connectFrom || tool === "connect") {
@@ -1550,6 +1612,53 @@ export default function BoardApp({
 
   submitAiChatRef.current = submitAiChat;
 
+  const askSphereAbout = useCallback((message: string) => {
+    setPrompt(message);
+    void submitAiChatRef.current(message);
+  }, []);
+
+  // Clear stale chips when selection changes (do not auto-fetch).
+  useEffect(() => {
+    setNodeAskChips([]);
+    setNodeAskLoading(false);
+    setNodeAskForId(null);
+    nodeAskGenRef.current += 1;
+  }, [selected]);
+
+  const loadNodeAskSuggestions = useCallback(() => {
+    if (!isSphere || !selected || !model) return;
+    const title = nodeById[selected]?.title ?? selected;
+    const gen = ++nodeAskGenRef.current;
+    setNodeAskLoading(true);
+    setNodeAskForId(selected);
+    setNodeAskChips([]);
+
+    const finish = (chips: string[]) => {
+      if (gen !== nodeAskGenRef.current) return;
+      setNodeAskChips(chips);
+      setNodeAskLoading(false);
+    };
+
+    if (!aiAdapter?.suggest) {
+      finish([...DEFAULT_ASK_SPHERE_CHIPS]);
+      return;
+    }
+
+    const yaml = modeler.peekYAML();
+    void aiAdapter
+      .suggest({
+        message: `Suggest next diagram actions for component "${title}" (id: ${selected})`,
+        yaml,
+        selection: [selected],
+      })
+      .then((chips) => {
+        finish(chips?.length ? chips.slice(0, 6) : [...DEFAULT_ASK_SPHERE_CHIPS]);
+      })
+      .catch(() => {
+        finish([...DEFAULT_ASK_SPHERE_CHIPS]);
+      });
+  }, [isSphere, selected, model, nodeById, aiAdapter, modeler]);
+
   const stopVoiceCapture = useCallback(() => {
     if (voiceMaxTimerRef.current) {
       clearTimeout(voiceMaxTimerRef.current);
@@ -1806,7 +1915,7 @@ export default function BoardApp({
   const zoomOut = () => zoomAt(zoomRef.current - 0.15, lastPointerOnCanvas.current);
 
 
-  const openContextMenu = (e: React.MouseEvent, id: string) => {
+  const openContextMenu = (e: MouseEvent, id: string) => {
     e.preventDefault();
     e.stopPropagation();
     setSelected(id);
@@ -1873,7 +1982,8 @@ export default function BoardApp({
         onDownloadYaml={() => void saveYaml()}
         onImportYaml={() => fileInputRef.current?.click()}
         onExportSvg={() => {
-          void exportSvg()
+          const mode = orthogonalEdges ? "orthogonal" : "bezier";
+          void exportSvg({ mode })
             .then((r) => toast.success("Exported SVG", { description: r.filename }))
             .catch((err) =>
               toast.error("SVG export failed", {
@@ -1882,7 +1992,8 @@ export default function BoardApp({
             );
         }}
         onExportPng={() => {
-          void exportPng()
+          const mode = orthogonalEdges ? "orthogonal" : "bezier";
+          void exportPng({ mode })
             .then((r) => toast.success("Exported PNG", { description: r.filename }))
             .catch((err) =>
               toast.error("PNG export failed", {
@@ -1929,7 +2040,7 @@ export default function BoardApp({
         onAutoLayout={() => void runAutoLayout()}
         focusMode={focusMode}
         onToggleFocusMode={() => setFocusMode((v) => !v)}
-        nodes={nodes}
+        nodes={displayNodes}
         groups={groups}
       />
 
@@ -1940,8 +2051,8 @@ export default function BoardApp({
           className={`absolute inset-0 ${showGrid ? "dot-grid" : "bg-canvas"} ${
             tool === "pan"
               ? "cursor-grab"
-              : tool === "connect"
-                ? "cursor-pointer"
+              : tool === "connect" || tool === "fast"
+                ? "cursor-crosshair"
                 : "cursor-default"
           }`}
           onPointerDown={onCanvasPointerDown}
@@ -1993,7 +2104,7 @@ export default function BoardApp({
           >
             {/* GROUPS */}
             {groups.map((g) => {
-              const selectedGroup = selectedBoundary === g.id;
+              const selectedGroup = selectedBoundaryIds.includes(g.id);
               const handles: ResizeHandle[] = [
                 "nw",
                 "n",
@@ -2052,6 +2163,7 @@ export default function BoardApp({
                   }}
                   onPointerDown={(e) => startBoundaryMove(e, g.id)}
                 >
+                  {selectedGroup && <SelectionCheck />}
                   <div className="absolute -top-3 left-4 flex items-center gap-2">
                     <button
                       type="button"
@@ -2064,8 +2176,23 @@ export default function BoardApp({
                       onPointerDown={(e) => e.stopPropagation()}
                       onClick={(e) => {
                         e.stopPropagation();
+                        if (e.ctrlKey || e.metaKey) {
+                          setSelectedEdge(null);
+                          setSelected(null);
+                          setSelectedExtras([]);
+                          const current = new Set(selectedBoundaryExtras);
+                          if (selectedBoundary) current.add(selectedBoundary);
+                          if (current.has(g.id)) current.delete(g.id);
+                          else current.add(g.id);
+                          const next = [...current];
+                          setSelectedBoundary(next.length ? next[next.length - 1]! : null);
+                          setSelectedBoundaryExtras(next.length > 1 ? next.slice(0, -1) : []);
+                          return;
+                        }
                         setSelectedBoundary(g.id);
+                        setSelectedBoundaryExtras([]);
                         setSelected(null);
+                        setSelectedExtras([]);
                         setSelectedEdge(null);
                       }}
                     >
@@ -2319,16 +2446,18 @@ export default function BoardApp({
               })()}
 
             {/* NODES */}
-            {nodes.map((n) => (
+            {displayNodes.map((n) => (
               <NodeCard
                 key={n.id}
                 node={n}
-                selected={selected === n.id}
+                selected={selectedNodeIds.includes(n.id)}
                 connectSource={connectFrom?.nodeId === n.id}
                 connectSourcePortId={
                   connectFrom?.nodeId === n.id ? connectFrom.portId : undefined
                 }
-                connectMode={tool === "connect" || Boolean(connectFrom)}
+                connectMode={
+                  tool === "connect" || tool === "fast" || Boolean(connectFrom)
+                }
                 dim={dimmed(n)}
                 highlight={
                   view === "contracts" && n.status === "warn"
@@ -2342,34 +2471,111 @@ export default function BoardApp({
                 }}
                 onClick={(e) => {
                   e.stopPropagation();
-                  if (tool === "connect") return;
+                  if (tool === "connect" || tool === "fast") return;
+                  if (e.ctrlKey || e.metaKey) return;
+                  if (selectedNodeIds.includes(n.id) && selectedNodeIds.length > 1) return;
                   setSelected(n.id);
+                  setSelectedExtras([]);
+                  setSelectedBoundary(null);
+                  setSelectedBoundaryExtras([]);
                   setSelectedEdge(null);
                 }}
                 onDoubleClick={(e) => {
                   e.stopPropagation();
-                  if (tool === "connect") return;
+                  if (tool === "connect" || tool === "fast") return;
                   setSelected(n.id);
+                  setSelectedExtras([]);
                   setSelectedEdge(null);
                   setSelectedBoundary(null);
+                  setSelectedBoundaryExtras([]);
                   setRenameModal({ nodeId: n.id, value: n.title });
                 }}
               />
             ))}
+            {isSphere &&
+              aiAdapter?.chat &&
+              selected &&
+              selNode &&
+              tool === "select" &&
+              selectedNodeIds.length === 1 && (
+                <NodeAskSphere
+                  x={selNode.x}
+                  y={selNode.y}
+                  w={selNode.w}
+                  chips={nodeAskForId === selected ? nodeAskChips : []}
+                  loading={nodeAskLoading && nodeAskForId === selected}
+                  chatBusy={aiBusy}
+                  onRequestSuggestions={loadNodeAskSuggestions}
+                  onPick={(chip) =>
+                    askSphereAbout(
+                      `For component "${selNode.title}" (id: ${selNode.id}): ${chip}`,
+                    )
+                  }
+                />
+              )}
+            {/* Fast design rubber-band preview */}
+            {fastDraft && (() => {
+              const r = normalizeDraftRect(fastDraft);
+              const draftKind = classifyFastDraft(r.w, r.h);
+              const ring =
+                draftKind === "boundary"
+                  ? "border-primary bg-primary/5"
+                  : draftKind === "datastore"
+                    ? "border-data bg-data-soft/60"
+                    : "border-muted-foreground/50 bg-muted/20";
+              const label =
+                draftKind === "boundary"
+                  ? boundaryKind === "trust"
+                    ? "Trust boundary"
+                    : "Runtime"
+                  : draftKind === "datastore"
+                    ? "Datastore"
+                    : null;
+              return (
+                <div
+                  className={`pointer-events-none absolute rounded-2xl border-2 border-dashed ${ring}`}
+                  style={{
+                    left: r.x,
+                    top: r.y,
+                    width: Math.max(r.w, 2),
+                    height: Math.max(r.h, 2),
+                    zIndex: 40,
+                  }}
+                >
+                  {label && (
+                    <span className="absolute left-2 top-1.5 rounded-md bg-surface/90 px-1.5 py-0.5 text-[10px] font-semibold text-foreground hairline">
+                      {label}
+                    </span>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         </div>
 
-        {(tool === "connect" || connectFrom) && (
+        {(tool === "connect" || tool === "fast" || connectFrom) && (
           <div className="pointer-events-none absolute bottom-20 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 rounded-xl border border-border bg-surface/95 px-4 py-2 text-xs shadow-lg backdrop-blur">
-            <Pointer className="h-3.5 w-3.5 text-primary" />
-            <span className="font-medium text-foreground">
-              {connectFrom
-                ? `Source: ${nodeById[connectFrom.nodeId]?.title ?? connectFrom.nodeId}${
-                    connectFrom.portId ? ` · ${connectFrom.portId}` : ""
-                  } - click a consume port (or node)`
-                : "Click an expose port (or node) to start"}
-            </span>
-            <span className="text-muted-foreground">Esc to cancel</span>
+            {tool === "fast" && !connectFrom ? (
+              <>
+                <PenLine className="h-3.5 w-3.5 text-primary" />
+                <span className="font-medium text-foreground">
+                  Fast design on — see legend (left)
+                </span>
+                <span className="text-muted-foreground">Esc to exit</span>
+              </>
+            ) : (
+              <>
+                <Pointer className="h-3.5 w-3.5 text-primary" />
+                <span className="font-medium text-foreground">
+                  {connectFrom
+                    ? `Source: ${nodeById[connectFrom.nodeId]?.title ?? connectFrom.nodeId}${
+                        connectFrom.portId ? ` · ${connectFrom.portId}` : ""
+                      } - click a consume port (or node)`
+                    : "Click an expose port (or node) to start"}
+                </span>
+                <span className="text-muted-foreground">Esc to cancel</span>
+              </>
+            )}
           </div>
         )}
 
@@ -2408,13 +2614,31 @@ export default function BoardApp({
             setOrthogonalEdges={setOrthogonalEdges}
             onPickCreate={(kind) => {
               setCreateKind(kind);
+              if (tool === "fast") {
+                toast.message(`Fast design places ${createKindHints[kind].label}`);
+                return;
+              }
               setTool("create");
             }}
             onPickBoundary={(kind) => {
               setBoundaryKind(kind);
+              if (tool === "fast") {
+                toast.message(
+                  kind === "trust"
+                    ? "Fast design boxes create Trust boundaries"
+                    : "Fast design boxes create Runtime boundaries",
+                );
+                return;
+              }
               setTool("boundary");
             }}
           />
+          {tool === "fast" && (
+            <FastDesignLegend
+              createLabel={createKindHints[createKind].label}
+              boundaryLabel={boundaryKind === "trust" ? "Trust boundary" : "Runtime"}
+            />
+          )}
         </div>
 
         {/* ZOOM CONTROLS */}
@@ -2441,6 +2665,17 @@ export default function BoardApp({
           <IconBtn label="Locate selection">
             <Locate className="h-4 w-4" />
           </IconBtn>
+          {selectionCount > 1 && (
+            <>
+              <div className="mx-1 h-5 w-px bg-border" />
+              <span
+                className="px-2 text-[11px] font-medium tabular-nums text-muted-foreground"
+                title="Ctrl/Cmd+click to add or remove from selection"
+              >
+                {selectionCount} selected
+              </span>
+            </>
+          )}
         </div>
 
         {/* MINIMAP + LEGEND */}
@@ -2478,7 +2713,24 @@ export default function BoardApp({
         </div>
 
         {/* VALIDATION TOAST */}
-        <ValidationToast productAi={isSphere} />
+        <ValidationToast
+          warnings={architectureWarnings}
+          productAi={isSphere}
+          validating={aiBusy || architectBusy}
+          onSelect={(w) => {
+            setSelected(w.id);
+            setSelectedEdge(null);
+            setSelectedBoundary(null);
+          }}
+          onAskFix={(w) => {
+            setSelected(w.id);
+            setSelectedEdge(null);
+            setSelectedBoundary(null);
+            askSphereAbout(
+              `Fix architecture warning on "${w.title}" (id: ${w.id}): ${w.message}`,
+            );
+          }}
+        />
 
         {/* INSPECTOR */}
         {(selNode || selEdge || selBoundary) && (
@@ -2487,8 +2739,12 @@ export default function BoardApp({
             node={selNode ?? null}
             edge={selEdge ?? null}
             group={selBoundary}
-            nodes={nodes}
+            nodes={displayNodes}
             edges={edges}
+            onAskSphere={isSphere ? askSphereAbout : undefined}
+            askChips={nodeAskForId === selected ? nodeAskChips : []}
+            askLoading={nodeAskLoading && nodeAskForId === selected}
+            onRequestAskSuggestions={isSphere ? loadNodeAskSuggestions : undefined}
             onClose={() => {
               setSelected(null);
               setSelectedEdge(null);
@@ -2918,2850 +3174,3 @@ export default function BoardApp({
   );
 }
 
-/* ------------------------- TOP BAR ------------------------- */
-
-function TopBar({
-  shell,
-  systemName,
-  topBarBeforeTitle,
-  topBarAfterStatus,
-  topBarAfterBrand,
-  canUndo,
-  canRedo,
-  dirty,
-  onUndo,
-  onRedo,
-  onNewBoard,
-  onRenameDiagram,
-  onPalette,
-  onDownloadYaml,
-  onImportYaml,
-  onExportSvg,
-  onExportPng,
-}: {
-  shell: BoardShell;
-  systemName: string;
-  topBarBeforeTitle?: ReactNode;
-  topBarAfterStatus?: ReactNode;
-  topBarAfterBrand?: ReactNode;
-  canUndo: boolean;
-  canRedo: boolean;
-  dirty: boolean;
-  onUndo: () => void;
-  onRedo: () => void;
-  onNewBoard: () => void;
-  onRenameDiagram: () => void;
-  onPalette: () => void;
-  onDownloadYaml: () => void;
-  onImportYaml: () => void;
-  onExportSvg: () => void;
-  onExportPng: () => void;
-}) {
-  const isSphere = shell === "sphere";
-  const [coworkOpen, setCoworkOpen] = useState(false);
-  return (
-    <div
-      className={`flex shrink-0 items-center justify-between border-b border-border bg-surface px-4 ${
-        isSphere ? "h-14" : "h-12"
-      }`}
-    >
-      <div className="flex items-center gap-3">
-        <div className="flex items-center gap-2">
-          {isSphere && <AiOrb />}
-          <div className="leading-tight">
-            <div className="text-sm font-semibold tracking-tight">
-              {isSphere ? "Sphere" : "SCAN"}
-            </div>
-            <div className="text-[10px] text-muted-foreground">
-              {isSphere ? "Architecture Whiteboard" : "Notation modeler"}
-            </div>
-          </div>
-        </div>
-        <div className="mx-2 h-6 w-px bg-border" />
-        {topBarAfterBrand ? (
-          <>
-            {topBarAfterBrand}
-            <div className="mx-2 h-6 w-px bg-border" />
-          </>
-        ) : null}
-        <div className="flex items-center gap-1 text-xs text-muted-foreground">
-          {topBarBeforeTitle}
-          <button
-            type="button"
-            onClick={onRenameDiagram}
-            title="Rename diagram"
-            className="rounded-md px-2 py-1 font-medium text-foreground hover:bg-muted"
-          >
-            {systemName}
-          </button>
-          {!isSphere && (
-            <span
-              className={`rounded-full px-2 py-0.5 text-[10px] font-medium flex items-center gap-1 ${
-                dirty ? "bg-warn-soft text-warn" : "bg-ok-soft text-ok"
-              }`}
-              title={dirty ? "Unsaved local changes" : "All changes saved"}
-            >
-              {dirty ? (
-                <>
-                  <Circle className="h-2.5 w-2.5 fill-current" /> Unsaved
-                </>
-              ) : (
-                <>
-                  <Check className="h-3 w-3" /> Saved
-                </>
-              )}
-            </span>
-          )}
-          {topBarAfterStatus}
-        </div>
-      </div>
-      <div className="flex items-center gap-2">
-        <div className="flex items-center gap-0.5 rounded-lg bg-muted p-0.5">
-          <IconBtn label="Undo" onClick={onUndo} variant="ghost" disabled={!canUndo}>
-            <Undo2 className="h-4 w-4" />
-          </IconBtn>
-          <IconBtn label="Redo" onClick={onRedo} variant="ghost" disabled={!canRedo}>
-            <Redo2 className="h-4 w-4" />
-          </IconBtn>
-          <div className="mx-1 h-5 w-px bg-border" />
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button
-                type="button"
-                title="Board & export"
-                aria-label="Board & export"
-                className="grid h-8 w-8 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-surface hover:text-foreground"
-              >
-                <Menu className="h-4 w-4" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="min-w-[11rem]">
-              <DropdownMenuItem onSelect={onNewBoard}>
-                <FilePlus2 className="h-4 w-4" />
-                New board
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={onImportYaml}>
-                <Upload className="h-4 w-4" />
-                Import YAML
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={onDownloadYaml}>
-                <Download className="h-4 w-4" />
-                Save YAML
-                <span className="ml-auto text-[10px] text-muted-foreground">Ctrl+S</span>
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onSelect={onExportSvg}>
-                <FileCode2 className="h-4 w-4" />
-                Export SVG
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={onExportPng}>
-                <ImageIcon className="h-4 w-4" />
-                Export PNG
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-        {isSphere && (
-          <>
-            <button
-              onClick={onPalette}
-              className="flex items-center gap-2 rounded-lg border border-border bg-surface px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted"
-            >
-              <Search className="h-3.5 w-3.5" /> Search components, contracts...
-              <span className="ml-2 flex items-center gap-0.5 rounded bg-muted px-1.5 py-0.5 text-[10px] font-mono">
-                <CommandIcon className="h-3 w-3" /> K
-              </span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setCoworkOpen(true)}
-              title="Collaboration coming soon"
-              className="flex -space-x-2 rounded-md p-0.5 hover:bg-muted"
-            >
-              {["EM", "JR", "AN"].map((i, idx) => (
-                <div
-                  key={i}
-                  className="grid h-7 w-7 place-items-center rounded-full text-[10px] font-semibold text-white ring-2 ring-surface"
-                  style={{
-                    background: ["var(--svc)", "var(--agent)", "var(--event)"][idx],
-                  }}
-                >
-                  {i}
-                </div>
-              ))}
-            </button>
-            <button
-              type="button"
-              onClick={() => setCoworkOpen(true)}
-              className="rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:opacity-90"
-              title="Collaboration coming soon"
-            >
-              Share
-            </button>
-          </>
-        )}
-      </div>
-
-      <Modal
-        open={coworkOpen}
-        onClose={() => setCoworkOpen(false)}
-        title="Co-work coming soon"
-        description="Realtime sharing and editing with teammates is on the way. For now, save diagrams to your organization and open them from the Library."
-        tone="info"
-        size="sm"
-        actions={[
-          {
-            label: "Got it",
-            variant: "primary",
-            onClick: () => setCoworkOpen(false),
-            autoFocus: true,
-          },
-        ]}
-      />
-    </div>
-  );
-}
-
-/* ------------------------- AI BAR ------------------------- */
-
-function AiOrb() {
-  return <div className="ai-orb-minimal h-7 w-7 rounded-full" />;
-}
-
-function AIBar({
-  prompt,
-  setPrompt,
-  onSubmit,
-  busy = false,
-  recording = false,
-  voiceEnabled = false,
-  onToggleVoice,
-  suggestions,
-  recent,
-  attachments,
-  onAttachFiles,
-  onRemoveAttachment,
-  menuOpen,
-  onMenuOpenChange,
-}: {
-  prompt: string;
-  setPrompt: (v: string) => void;
-  onSubmit: () => void;
-  busy?: boolean;
-  recording?: boolean;
-  voiceEnabled?: boolean;
-  onToggleVoice?: () => void;
-  suggestions: string[];
-  recent: string[];
-  attachments: BoardAiAttachment[];
-  onAttachFiles: (files: FileList | null) => void;
-  onRemoveAttachment: (name: string) => void;
-  menuOpen: boolean;
-  onMenuOpenChange: (open: boolean) => void;
-}) {
-  const attachInputRef = useRef<HTMLInputElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const inputLocked = busy || recording;
-  const voiceLabel = !voiceEnabled
-    ? "Voice input unavailable"
-    : recording
-      ? "Stop recording"
-      : busy
-        ? "Voice input busy"
-        : "Voice input";
-  return (
-    <div className="relative z-30 border-b border-border bg-surface/80 backdrop-blur">
-      <div className={`mx-auto flex w-full max-w-5xl items-center gap-2 px-4 ${attachments.length ? "pb-10 pt-3" : "py-3"}`}>
-        <div className="relative flex flex-1 items-center gap-2 rounded-2xl border border-border bg-surface px-3 py-2 node-shadow focus-within:ring-2 focus-within:ring-primary/30">
-          <Sparkles className="h-4 w-4 text-primary" />
-
-          <input
-            ref={inputRef}
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            onFocus={() => onMenuOpenChange(true)}
-            onBlur={() => setTimeout(() => onMenuOpenChange(false), 150)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && prompt.trim() && !inputLocked) {
-                onMenuOpenChange(false);
-                inputRef.current?.blur();
-                onSubmit();
-              }
-              if (e.key === "Escape") {
-                onMenuOpenChange(false);
-                inputRef.current?.blur();
-              }
-            }}
-            disabled={inputLocked}
-            placeholder={
-              recording
-                ? "Listening… click the mic to stop"
-                : "Ask Sphere to design or modify this architecture..."
-            }
-            className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground disabled:opacity-60"
-          />
-          <IconBtn
-            label="Attach reference"
-            onClick={() => attachInputRef.current?.click()}
-            disabled={inputLocked}
-          >
-            <Paperclip className="h-4 w-4" />
-          </IconBtn>
-          <input
-            ref={attachInputRef}
-            type="file"
-            accept=".txt,.md,.png,.jpg,.jpeg,text/plain,text/markdown,image/png,image/jpeg"
-            multiple
-            className="hidden"
-            onChange={(e) => {
-              onAttachFiles(e.target.files);
-              e.target.value = "";
-            }}
-          />
-          <IconBtn
-            label={voiceLabel}
-            onClick={onToggleVoice}
-            active={recording}
-            danger={recording}
-            disabled={!voiceEnabled || (busy && !recording)}
-          >
-            <Mic className={`h-4 w-4 ${recording ? "text-red-500" : ""}`} />
-          </IconBtn>
-          <button
-            onClick={() => {
-              if (!prompt.trim() || inputLocked) return;
-              onMenuOpenChange(false);
-              inputRef.current?.blur();
-              onSubmit();
-            }}
-            disabled={inputLocked || !prompt.trim()}
-            className="ml-1 flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
-          >
-            <Send className="h-3.5 w-3.5" /> {busy ? "Thinking…" : "Send"}
-          </button>
-
-          {attachments.length > 0 && (
-            <div className="absolute -bottom-9 left-2 right-2 flex flex-wrap gap-1">
-              {attachments.map((file) => (
-                <button
-                  key={file.name}
-                  type="button"
-                  onClick={() => onRemoveAttachment(file.name)}
-                  className="max-w-[220px] truncate rounded-full border border-border bg-muted px-2 py-0.5 text-[10px] text-muted-foreground hover:bg-muted/70 hover:text-foreground"
-                  title={`Remove ${file.name}`}
-                >
-                  {file.kind === "image" ? "img" : "doc"}: {file.name} ×
-                </button>
-              ))}
-            </div>
-          )}
-
-          {menuOpen && (
-            <div className="absolute left-0 right-0 top-full z-30 mt-2 overflow-hidden rounded-xl border border-border bg-popover node-shadow-lg">
-              <div className="border-b border-border px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                Suggested commands
-              </div>
-              <div className="max-h-60 overflow-auto py-1">
-                {suggestions.map((s) => (
-                  <button
-                    key={s}
-                    onMouseDown={() => setPrompt(s)}
-                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-muted"
-                  >
-                    <Sparkles className="h-3.5 w-3.5 text-primary" />
-                    {s}
-                  </button>
-                ))}
-              </div>
-              <div className="border-t border-border px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                Recent
-              </div>
-              <div className="pb-2">
-                {recent.length === 0 ? (
-                  <div className="px-3 py-2 text-xs text-muted-foreground">No recent prompts yet</div>
-                ) : (
-                  recent.map((s) => (
-                    <button
-                      key={s}
-                      onMouseDown={() => setPrompt(s)}
-                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-muted-foreground hover:bg-muted"
-                    >
-                      <HistoryIcon className="h-3.5 w-3.5 shrink-0" />
-                      <span className="truncate">{s}</span>
-                    </button>
-                  ))
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ------------------------- VIEW TABS ------------------------- */
-
-function ViewTabs({
-  view,
-  setView,
-  onAutoLayout,
-  focusMode,
-  onToggleFocusMode,
-  nodes,
-  groups,
-}: {
-  view: "all" | "external" | "contracts" | "agents";
-  setView: (v: "all" | "external" | "contracts" | "agents") => void;
-  onAutoLayout: () => void;
-  focusMode: boolean;
-  onToggleFocusMode: () => void;
-  nodes: SphereNode[];
-  groups: SphereGroup[];
-}) {
-  const externalCount = nodes.filter((n) => n.kind === "external").length;
-  const agentCount = nodes.filter((n) => n.kind === "agent").length;
-  const contractWarn = nodes.filter((n) => n.status === "warn").length;
-  const allCount = nodes.length + groups.length;
-
-  const tabs = [
-    { id: "all" as const, label: "All Systems", icon: Layers, count: allCount },
-    {
-      id: "external" as const,
-      label: "External Integrations",
-      icon: Building2Icon,
-      count: externalCount,
-    },
-    {
-      id: "contracts" as const,
-      label: "Contracts",
-      icon: FileCode2,
-      count: nodes.length,
-      warn: contractWarn,
-    },
-    {
-      id: "agents" as const,
-      label: "Agent Runtime",
-      icon: Bot,
-      count: agentCount,
-    },
-  ];
-  return (
-    <div className="flex shrink-0 items-center justify-between border-b border-border bg-background px-4 py-1.5">
-      <div className="flex items-center gap-1">
-        {tabs.map((t) => (
-          <button
-            key={t.id}
-            onClick={() => setView(t.id)}
-            className={`flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
-              view === t.id
-                ? "bg-surface text-foreground hairline"
-                : "text-muted-foreground hover:bg-muted"
-            }`}
-          >
-            <t.icon className="h-3.5 w-3.5" />
-            {t.label}
-            <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] tabular-nums">
-              {t.count}
-            </span>
-            {"warn" in t && t.warn ? (
-              <span className="flex items-center gap-1 rounded-full bg-warn-soft px-1.5 py-0.5 text-[10px] text-warn">
-                <AlertTriangle className="h-2.5 w-2.5" />
-                {t.warn}
-              </span>
-            ) : null}
-          </button>
-        ))}
-      </div>
-      <div className="flex items-center gap-2">
-        <button className="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-muted">
-          <Filter className="h-3.5 w-3.5" /> Filters
-        </button>
-        <button
-          type="button"
-          onClick={onToggleFocusMode}
-          title="Dim nodes and edges outside the selection neighborhood"
-          className={`flex items-center gap-1.5 rounded-md px-2 py-1 text-xs hover:bg-muted ${
-            focusMode
-              ? "bg-surface text-foreground hairline"
-              : "text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          <Locate className="h-3.5 w-3.5" /> Focus
-        </button>
-        <button
-          type="button"
-          onClick={onAutoLayout}
-          className="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
-        >
-          <Grid3x3 className="h-3.5 w-3.5" /> Auto-layout
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function Building2Icon(props: React.SVGProps<SVGSVGElement>) {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  return <Boxes {...props} />;
-}
-
-/* ------------------------- NODE ------------------------- */
-
-/** Thin iOS-style overlay scrollbar (native bar hidden; pill fades after idle). */
-function SoftScrollArea({
-  className,
-  children,
-  onPointerDown,
-  onWheel,
-}: {
-  className?: string;
-  children: ReactNode;
-  onPointerDown?: (e: React.PointerEvent) => void;
-  onWheel?: (e: React.WheelEvent) => void;
-}) {
-  const scrollerRef = useRef<HTMLDivElement>(null);
-  const [thumb, setThumb] = useState({ top: 0, height: 0, show: false, needed: false });
-  const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const syncThumb = useCallback((flash: boolean) => {
-    const el = scrollerRef.current;
-    if (!el) return;
-    const { scrollTop, scrollHeight, clientHeight } = el;
-    const needed = scrollHeight > clientHeight + 1;
-    if (!needed) {
-      setThumb({ top: 0, height: 0, show: false, needed: false });
-      return;
-    }
-    const height = Math.max(18, (clientHeight / scrollHeight) * clientHeight);
-    const maxTop = Math.max(0, clientHeight - height);
-    const top =
-      maxTop === 0 ? 0 : (scrollTop / (scrollHeight - clientHeight)) * maxTop;
-    setThumb((t) => ({
-      top,
-      height,
-      needed: true,
-      show: flash ? true : t.show,
-    }));
-    if (flash) {
-      if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
-      hideTimerRef.current = setTimeout(() => {
-        setThumb((t) => ({ ...t, show: false }));
-      }, 900);
-    }
-  }, []);
-
-  useEffect(() => {
-    const el = scrollerRef.current;
-    if (!el) return;
-    const run = () => syncThumb(false);
-    run();
-    const ro = new ResizeObserver(run);
-    ro.observe(el);
-    const content = el.firstElementChild;
-    if (content) ro.observe(content);
-    return () => {
-      ro.disconnect();
-      if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
-    };
-  }, [syncThumb, children]);
-
-  return (
-    <div
-      className={`relative min-h-0 overflow-hidden ${className ?? ""}`}
-      onMouseEnter={() => syncThumb(true)}
-    >
-      <div
-        ref={scrollerRef}
-        tabIndex={-1}
-        className="absolute inset-0 overflow-y-auto overflow-x-hidden overscroll-contain outline-none focus:outline-none [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
-        onPointerDown={onPointerDown}
-        onWheel={onWheel}
-        onScroll={() => syncThumb(true)}
-      >
-        {children}
-      </div>
-      {thumb.needed && (
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-y-1 right-0.5 z-[2] w-[3px]"
-        >
-          <div
-            className="absolute left-0 w-full rounded-full bg-foreground/35 transition-opacity duration-300 ease-out"
-            style={{
-              height: thumb.height,
-              transform: `translateY(${thumb.top}px)`,
-              opacity: thumb.show ? 1 : 0,
-            }}
-          />
-        </div>
-      )}
-    </div>
-  );
-}
-
-function NodePortsColumns({
-  node,
-  connectSourcePortId,
-  onPortPointerDown,
-}: {
-  node: SphereNode;
-  connectSourcePortId?: string;
-  onPortPointerDown?: (
-    e: React.PointerEvent,
-    portId: string,
-    role: "expose" | "consume",
-  ) => void;
-}) {
-  const consumes = node.consumes ?? [];
-  const exposes = node.exposes ?? [];
-  const isDb = node.kind === "database";
-
-  if (!consumes.length && !exposes.length) return null;
-
-  return (
-    <div className="grid grid-cols-2 gap-2 px-3 pb-1 text-[10px]">
-      <div className="min-w-0">
-        {consumes.length > 0 && (
-          <>
-            <div
-              className={`sticky top-0 z-[1] mb-1 pb-0.5 font-semibold uppercase tracking-wider text-muted-foreground ${
-                isDb ? "bg-transparent" : "bg-surface/95 backdrop-blur-[2px]"
-              }`}
-            >
-              Consumes
-            </div>
-            {consumes.map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                title={`${p.label}${p.protocol ? ` (${p.protocol})` : ""} - click to select wire or finish connect`}
-                className="flex w-full cursor-pointer items-center gap-1.5 rounded py-0.5 text-left outline-none hover:bg-muted focus:outline-none focus-visible:outline-none"
-                onPointerDown={(e) => onPortPointerDown?.(e, p.id, "consume")}
-              >
-                <Circle
-                  className="h-2 w-2 shrink-0 fill-none"
-                  style={{ color: kindColorVar[node.kind] }}
-                />
-                <span className="truncate font-medium">{p.label}</span>
-                {p.protocol && (
-                  <span className="truncate text-muted-foreground">({p.protocol})</span>
-                )}
-              </button>
-            ))}
-          </>
-        )}
-      </div>
-      <div className="min-w-0 text-right">
-        {exposes.length > 0 && (
-          <>
-            <div
-              className={`sticky top-0 z-[1] mb-1 pb-0.5 font-semibold uppercase tracking-wider text-muted-foreground ${
-                isDb ? "bg-transparent" : "bg-surface/95 backdrop-blur-[2px]"
-              }`}
-            >
-              Exposes
-            </div>
-            {exposes.map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                title={`${p.label}${p.protocol ? ` (${p.protocol})` : ""} - click to start a connection`}
-                className={`flex w-full cursor-pointer items-center justify-end gap-1.5 rounded py-0.5 outline-none hover:bg-muted focus:outline-none focus-visible:outline-none ${
-                  connectSourcePortId === p.id
-                    ? "bg-primary/15 ring-1 ring-primary/40"
-                    : ""
-                }`}
-                onPointerDown={(e) => onPortPointerDown?.(e, p.id, "expose")}
-              >
-                <span className="truncate font-medium">{p.label}</span>
-                {p.protocol && (
-                  <span className="truncate text-muted-foreground">({p.protocol})</span>
-                )}
-                <Circle
-                  className="h-2 w-2 shrink-0 fill-current"
-                  style={{ color: kindColorVar[node.kind] }}
-                />
-              </button>
-            ))}
-          </>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function NodeCard({
-  node,
-  selected,
-  connectSource,
-  connectSourcePortId,
-  dim,
-  highlight,
-  onPointerDown,
-  onContextMenu,
-  onPortPointerDown,
-  onClick,
-  onDoubleClick,
-}: {
-  node: SphereNode;
-  selected: boolean;
-  connectSource?: boolean;
-  connectSourcePortId?: string;
-  connectMode?: boolean;
-  dim: boolean;
-  highlight: boolean;
-  onPointerDown: (e: React.PointerEvent) => void;
-  onContextMenu: (e: React.MouseEvent) => void;
-  onPortPointerDown?: (
-    e: React.PointerEvent,
-    portId: string,
-    role: "expose" | "consume",
-  ) => void;
-  onClick: (e: React.MouseEvent) => void;
-  onDoubleClick?: (e: React.MouseEvent) => void;
-}) {
-  const meta = kindMeta[node.kind];
-  const isDb = node.kind === "database";
-  const emphasized = Boolean(connectSource || selected);
-  const consumes = node.consumes ?? [];
-  const exposes = node.exposes ?? [];
-  const hasPorts = consumes.length > 0 || exposes.length > 0;
-
-  return (
-    <div
-      className={`absolute z-[1] select-none transition-opacity ${dim ? "opacity-30" : ""}`}
-      style={{ left: node.x, top: node.y, width: node.w, height: node.h }}
-      onPointerDown={onPointerDown}
-      onContextMenu={onContextMenu}
-      onClick={onClick}
-      onDoubleClick={onDoubleClick}
-    >
-      {isDb && (
-        <DbCylinder
-          width={node.w}
-          height={node.h}
-          color={kindColorVar[node.kind]}
-          selected={emphasized}
-        />
-      )}
-      <div
-        className={`group relative flex h-full w-full flex-col overflow-hidden rounded-xl ${
-          isDb
-            ? `bg-transparent ${
-                connectSource
-                  ? "outline outline-2 outline-offset-2 outline-primary"
-                  : highlight
-                    ? "outline outline-2 outline-offset-2 outline-[var(--warn)]"
-                    : ""
-              }`
-            : `border-2 bg-surface node-shadow ${
-                connectSource
-                  ? "ring-4 ring-primary/40 node-shadow-lg outline outline-2 outline-offset-2 outline-primary"
-                  : selected
-                    ? "ring-4 ring-primary/25 node-shadow-lg"
-                    : ""
-              } ${highlight && !connectSource ? "ring-2 ring-warn" : ""}`
-        }`}
-        style={
-          isDb
-            ? undefined
-            : {
-                borderColor: emphasized
-                  ? kindColorVar[node.kind]
-                  : `color-mix(in oklab, ${kindColorVar[node.kind]} 45%, transparent)`,
-              }
-        }
-      >
-        <div className="flex shrink-0 items-start justify-between gap-2 px-3 pt-3">
-          <div className="flex min-w-0 items-start gap-2">
-            <div
-              className={`grid h-7 w-7 shrink-0 place-items-center rounded-md ${meta.soft}`}
-            >
-              <ElementIcon
-                icon={node.icon}
-                Fallback={meta.Icon}
-                className={`h-4 w-4 ${meta.color}`}
-              />
-            </div>
-            <div className="min-w-0">
-              <div className="truncate text-sm font-semibold leading-tight">{node.title}</div>
-              {node.subtitle && (
-                <div className="truncate text-[11px] text-muted-foreground">{node.subtitle}</div>
-              )}
-            </div>
-          </div>
-          <button
-            type="button"
-            title={node.repoUrl ? `Open ${node.repo}` : node.repo ? node.repo : "No repository"}
-            className={`shrink-0 rounded p-0.5 outline-none focus:outline-none ${
-              node.repoUrl
-                ? "cursor-pointer opacity-0 group-hover:opacity-100 hover:bg-muted"
-                : "pointer-events-none opacity-0"
-            }`}
-            onClick={(e) => {
-              e.stopPropagation();
-              if (node.repoUrl) openExternal(node.repoUrl);
-            }}
-          >
-            <Github className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground" />
-          </button>
-        </div>
-
-        {hasPorts ? (
-          <SoftScrollArea
-            className="mt-2 flex-1"
-            onPointerDown={(e) => e.stopPropagation()}
-            onWheel={(e) => e.stopPropagation()}
-          >
-            <NodePortsColumns
-              node={node}
-              connectSourcePortId={connectSourcePortId}
-              onPortPointerDown={onPortPointerDown}
-            />
-          </SoftScrollArea>
-        ) : (
-          <div className="min-h-0 flex-1" />
-        )}
-
-        {node.tech && (
-          <div className="mt-auto flex shrink-0 items-center justify-between px-3 pb-2.5 pt-1.5">
-            {node.status === "warn" ? (
-              <span className="flex items-center gap-1 rounded-full bg-warn-soft px-2 py-0.5 text-[10px] font-medium text-warn">
-                <AlertTriangle className="h-2.5 w-2.5" /> Missing contract
-              </span>
-            ) : (
-              <span />
-            )}
-            <span
-              className="rounded-full px-2 py-0.5 text-[10px] font-medium"
-              style={{
-                background: `color-mix(in oklab, ${kindColorVar[node.kind]} 10%, transparent)`,
-                color: kindColorVar[node.kind],
-              }}
-            >
-              {node.tech}
-            </span>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function DbCylinder({
-  width,
-  height,
-  color,
-  selected,
-}: {
-  width: number;
-  height: number;
-  color: string;
-  selected: boolean;
-}) {
-  const rx = Math.max(8, width / 2 - 10);
-  const ry = Math.min(14, height * 0.12);
-  const cx = width / 2;
-  const topY = ry + 2;
-  const bottomY = height - ry - 2;
-  const stroke = selected ? color : `color-mix(in oklab, ${color} 55%, transparent)`;
-
-  return (
-    <svg
-      className="absolute inset-0"
-      width={width}
-      height={height}
-      viewBox={`0 0 ${width} ${height}`}
-      fill="none"
-      style={{ pointerEvents: "none" }}
-    >
-      <path
-        d={`M ${cx - rx} ${topY} L ${cx - rx} ${bottomY} A ${rx} ${ry} 0 0 0 ${cx + rx} ${bottomY} L ${cx + rx} ${topY} A ${rx} ${ry} 0 0 1 ${cx - rx} ${topY}`}
-        fill="white"
-        stroke={stroke}
-        strokeWidth={selected ? 2.5 : 1.5}
-      />
-      {[0.28, 0.52, 0.76].map((t) => {
-        const y = topY + (bottomY - topY) * t;
-        return (
-          <path
-            key={t}
-            d={`M ${cx - rx} ${y} A ${rx} ${ry} 0 0 0 ${cx + rx} ${y}`}
-            stroke={`color-mix(in oklab, ${color} 30%, transparent)`}
-            strokeWidth={1}
-            fill="none"
-          />
-        );
-      })}
-      <ellipse
-        cx={cx}
-        cy={bottomY}
-        rx={rx}
-        ry={ry}
-        fill="white"
-        stroke={stroke}
-        strokeWidth={selected ? 2.5 : 1.5}
-      />
-      <ellipse
-        cx={cx}
-        cy={topY}
-        rx={rx}
-        ry={ry}
-        fill="white"
-        stroke={stroke}
-        strokeWidth={selected ? 2.5 : 1.5}
-      />
-    </svg>
-  );
-}
-
-/* ------------------------- INSPECTOR ------------------------- */
-
-function Inspector({
-  shell,
-  node,
-  edge,
-  group,
-  nodes,
-  edges,
-  onClose,
-  onUpdateConnection,
-  onUpdateBoundary,
-  onUpdateElementIcon,
-  onAddPort,
-  onUpdatePort,
-  onDeletePort,
-  onDeleteBoundary,
-  onRenameBoundary,
-  onSelectEdge,
-  onSelectNode,
-}: {
-  shell: BoardShell;
-  node: SphereNode | null;
-  edge: SphereEdge | null;
-  group: SphereGroup | null;
-  nodes: SphereNode[];
-  edges: SphereEdge[];
-  onClose: () => void;
-  onUpdateConnection: (
-    id: string,
-    patch: {
-      label?: string | null;
-      contract?: string | null;
-      operations?: string[] | null;
-    },
-  ) => void;
-  onUpdateBoundary: (
-    id: string,
-    patch: {
-      label?: string | null;
-      tag?: string | null;
-      kind?: "trust" | "runtime";
-      icon?: string | null;
-      color?: BoundaryColor | null;
-    },
-  ) => void;
-  onUpdateElementIcon: (id: string, icon: string | null) => void;
-  onAddPort: (id: string, role: "consume" | "expose") => void;
-  onUpdatePort: (
-    id: string,
-    portId: string,
-    patch: { label?: string | null; protocol?: string | null },
-  ) => void;
-  onDeletePort: (id: string, portId: string) => void;
-  onDeleteBoundary: (id: string) => void;
-  onRenameBoundary: (id: string) => void;
-  onSelectEdge: (id: string) => void;
-  onSelectNode: (id: string) => void;
-}) {
-  const nodeById = useMemo(() => {
-    const map: Record<string, SphereNode> = {};
-    for (const n of nodes) map[n.id] = n;
-    return map;
-  }, [nodes]);
-
-  return (
-    <div className="absolute right-4 top-4 z-20 flex h-[calc(100%-2rem)] w-[340px] flex-col overflow-hidden rounded-2xl border border-border bg-surface node-shadow-lg">
-      <div className="flex items-center justify-between border-b border-border px-4 py-3">
-        <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-          Inspector
-        </div>
-        <button onClick={onClose} className="rounded-md p-1 hover:bg-muted">
-          <X className="h-4 w-4" />
-        </button>
-      </div>
-
-      {group && !node && !edge && (
-        <BoundaryInspector
-          group={group}
-          nodes={nodes}
-          onUpdate={onUpdateBoundary}
-          onDelete={onDeleteBoundary}
-          onRename={onRenameBoundary}
-          onSelectNode={onSelectNode}
-        />
-      )}
-      {node && (
-        <NodeInspector
-          productAi={shell === "sphere"}
-          node={node}
-          edges={edges}
-          nodeById={nodeById}
-          onSelectEdge={onSelectEdge}
-          onUpdateIcon={onUpdateElementIcon}
-          onAddPort={onAddPort}
-          onUpdatePort={onUpdatePort}
-          onDeletePort={onDeletePort}
-        />
-      )}
-      {edge && !node && !group && (
-        <EdgeInspector
-          edge={edge}
-          nodeById={nodeById}
-          onUpdate={onUpdateConnection}
-        />
-      )}
-    </div>
-  );
-}
-
-function BoundaryInspector({
-  group,
-  nodes,
-  onUpdate,
-  onDelete,
-  onRename,
-  onSelectNode,
-}: {
-  group: SphereGroup;
-  nodes: SphereNode[];
-  onUpdate: (
-    id: string,
-    patch: {
-      label?: string | null;
-      tag?: string | null;
-      kind?: "trust" | "runtime";
-      icon?: string | null;
-      color?: BoundaryColor | null;
-    },
-  ) => void;
-  onDelete: (id: string) => void;
-  onRename: (id: string) => void;
-  onSelectNode: (id: string) => void;
-}) {
-  const [label, setLabel] = useState(group.title);
-  const [tag, setTag] = useState(group.tag ?? "");
-  const [kind, setKind] = useState<"trust" | "runtime">(group.kind ?? "trust");
-  const [iconOpen, setIconOpen] = useState(false);
-
-  useEffect(() => {
-    setLabel(group.title);
-    setTag(group.tag ?? "");
-    setKind(group.kind ?? "trust");
-  }, [group.id, group.title, group.tag, group.kind]);
-
-  const members = (group.members ?? [])
-    .map((id) => nodes.find((n) => n.id === id))
-    .filter((n): n is SphereNode => Boolean(n));
-
-  const dirty =
-    label.trim() !== group.title ||
-    (tag.trim() || undefined) !== (group.tag || undefined) ||
-    kind !== (group.kind ?? "trust");
-
-  const Fallback = kind === "runtime" ? Cpu : Shield;
-  const softClass = kind === "runtime" ? "bg-muted" : "bg-svc-soft";
-  const colorClass = kind === "runtime" ? "text-muted-foreground" : "text-svc";
-
-  return (
-    <div className="flex-1 overflow-auto">
-      <div className="border-b border-border px-4 py-4">
-        <div className="flex items-start gap-3">
-          <button
-            type="button"
-            title="Change icon"
-            onClick={() => setIconOpen(true)}
-            className={`grid h-10 w-10 place-items-center rounded-lg ring-offset-2 transition hover:ring-2 hover:ring-primary/30 ${softClass}`}
-          >
-            <ElementIcon
-              icon={group.icon}
-              Fallback={Fallback}
-              className={`h-5 w-5 ${colorClass}`}
-            />
-          </button>
-          <div className="min-w-0 flex-1">
-            <div className="truncate text-sm font-semibold">{group.title}</div>
-            <div className="text-[11px] text-muted-foreground">
-              {kind === "runtime" ? "Runtime boundary" : "Trust boundary"}
-              <span className="text-muted-foreground/80"> · click icon to change</span>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={() => onRename(group.id)}
-            className="rounded-md px-2 py-1 text-[10px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
-          >
-            F2
-          </button>
-        </div>
-      </div>
-
-      <div className="space-y-4 p-4">
-        <Section title="Name">
-          <input
-            value={label}
-            onChange={(e) => setLabel(e.target.value)}
-            className="w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-xs outline-none focus:border-primary"
-            placeholder="Boundary name"
-          />
-        </Section>
-
-        <Section title="Kind">
-          <div className="flex gap-2">
-            {(["trust", "runtime"] as const).map((k) => (
-              <button
-                key={k}
-                type="button"
-                onClick={() => setKind(k)}
-                className={`flex-1 rounded-md border px-2 py-1.5 text-[11px] font-medium capitalize ${
-                  kind === k
-                    ? "border-primary bg-primary/10 text-primary"
-                    : "border-border text-muted-foreground hover:bg-muted"
-                }`}
-              >
-                {k}
-              </button>
-            ))}
-          </div>
-        </Section>
-
-        <Section title="Color">
-          <div className="flex flex-wrap gap-2">
-            {BOUNDARY_COLORS.map((token) => {
-              const meta = boundaryColorMeta[token];
-              const selected = group.color === token;
-              return (
-                <button
-                  key={token}
-                  type="button"
-                  title={meta.label}
-                  aria-label={meta.label}
-                  aria-pressed={selected}
-                  onClick={() => onUpdate(group.id, { color: token })}
-                  className={`h-7 w-7 rounded-full transition ${
-                    selected
-                      ? "ring-2 ring-foreground ring-offset-2 ring-offset-background"
-                      : "hover:scale-110"
-                  }`}
-                  style={{ backgroundColor: meta.hex }}
-                />
-              );
-            })}
-          </div>
-          <p className="mt-1.5 text-[10px] text-muted-foreground">
-            {boundaryColorMeta[group.color].label}
-          </p>
-        </Section>
-
-        <Section title="Tag">
-          <input
-            value={tag}
-            onChange={(e) => setTag(e.target.value)}
-            className="w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-xs outline-none focus:border-primary"
-            placeholder="e.g. Trust Boundary"
-          />
-        </Section>
-
-        <Section title={`Members (${members.length})`}>
-          {members.length ? (
-            <div className="space-y-1">
-              {members.map((n) => {
-                const meta = kindMeta[n.kind];
-                return (
-                  <button
-                    key={n.id}
-                    type="button"
-                    onClick={() => onSelectNode(n.id)}
-                    className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs hover:bg-muted"
-                  >
-                    <ElementIcon
-                      icon={n.icon}
-                      Fallback={meta.Icon}
-                      className={`h-3.5 w-3.5 ${meta.color}`}
-                    />
-                    <span className="truncate">{n.title}</span>
-                  </button>
-                );
-              })}
-            </div>
-          ) : (
-            <p className="text-[11px] text-muted-foreground">
-              No members yet. Resize so component centers fall inside the box.
-            </p>
-          )}
-        </Section>
-
-        <div className="flex gap-2">
-          <button
-            type="button"
-            disabled={!dirty || !label.trim()}
-            onClick={() =>
-              onUpdate(group.id, {
-                label: label.trim(),
-                tag: tag.trim() || null,
-                kind,
-              })
-            }
-            className="flex-1 rounded-lg bg-primary px-3 py-2 text-xs font-medium text-primary-foreground disabled:opacity-40"
-          >
-            Save changes
-          </button>
-          <button
-            type="button"
-            onClick={() => onDelete(group.id)}
-            className="rounded-lg border border-destructive/40 px-3 py-2 text-xs font-medium text-destructive hover:bg-destructive/10"
-          >
-            Delete
-          </button>
-        </div>
-      </div>
-
-      <IconPickerModal
-        open={iconOpen}
-        onClose={() => setIconOpen(false)}
-        title="Boundary icon"
-        currentIcon={group.icon}
-        fallbackIcon={Fallback}
-        softClass={softClass}
-        colorClass={colorClass}
-        onSave={(icon) => onUpdate(group.id, { icon })}
-      />
-    </div>
-  );
-}
-
-function NodeInspector({
-  productAi = false,
-  node,
-  edges,
-  nodeById,
-  onSelectEdge,
-  onUpdateIcon,
-  onAddPort,
-  onUpdatePort,
-  onDeletePort,
-}: {
-  productAi?: boolean;
-  node: SphereNode;
-  edges: SphereEdge[];
-  nodeById: Record<string, SphereNode>;
-  onSelectEdge: (id: string) => void;
-  onUpdateIcon: (id: string, icon: string | null) => void;
-  onAddPort: (id: string, role: "consume" | "expose") => void;
-  onUpdatePort: (
-    id: string,
-    portId: string,
-    patch: { label?: string | null; protocol?: string | null },
-  ) => void;
-  onDeletePort: (id: string, portId: string) => void;
-}) {
-  const meta = kindMeta[node.kind];
-  const [iconOpen, setIconOpen] = useState(false);
-  const related = edges.filter((e) => e.from === node.id || e.to === node.id);
-  const protocols = Array.from(
-    new Set(
-      [...(node.consumes ?? []), ...(node.exposes ?? [])]
-        .map((p) => p.protocol)
-        .filter((p): p is string => Boolean(p)),
-    ),
-  );
-
-  return (
-    <div className="flex-1 overflow-auto">
-      <div className="border-b border-border px-4 py-4">
-        <div className="flex items-start gap-3">
-          <button
-            type="button"
-            title="Change icon"
-            onClick={() => setIconOpen(true)}
-            className={`grid h-10 w-10 place-items-center rounded-lg ring-offset-2 transition hover:ring-2 hover:ring-primary/30 ${meta.soft}`}
-          >
-            <ElementIcon
-              icon={node.icon}
-              Fallback={meta.Icon}
-              className={`h-5 w-5 ${meta.color}`}
-            />
-          </button>
-          <div className="min-w-0 flex-1">
-            <div className="text-base font-semibold">{node.title}</div>
-            <div className="text-xs text-muted-foreground">
-              {meta.label}
-              {node.subtitle ? ` · ${node.subtitle}` : ""}
-            </div>
-            <div className="mt-1 truncate font-mono text-[10px] text-muted-foreground">
-              {node.id}
-            </div>
-            <div className="mt-1 text-[10px] text-muted-foreground">Click icon to change</div>
-          </div>
-        </div>
-        <div className="mt-3 flex flex-wrap gap-1.5">
-          {node.status === "warn" && (
-            <span className="flex items-center gap-1 rounded-full bg-warn-soft px-2 py-0.5 text-[10px] font-medium text-warn">
-              <AlertTriangle className="h-2.5 w-2.5" /> Validation warning
-            </span>
-          )}
-          <span className="rounded-full bg-muted px-2 py-0.5 text-[10px]">{meta.label}</span>
-          {node.tech && (
-            <span className="rounded-full bg-muted px-2 py-0.5 text-[10px]">{node.tech}</span>
-          )}
-          <span className="rounded-full bg-muted px-2 py-0.5 text-[10px]">
-            {related.length} connection{related.length === 1 ? "" : "s"}
-          </span>
-        </div>
-      </div>
-
-      {node.warn && (
-        <div className="mx-4 mt-4 rounded-lg border border-warn/40 bg-warn-soft p-3 text-[11px] text-warn">
-          <div className="mb-1 flex items-center gap-1.5 font-semibold">
-            <AlertTriangle className="h-3.5 w-3.5" /> Validation
-          </div>
-          {node.warn}
-          {productAi && (
-            <button className="mt-2 text-[11px] font-medium underline">Ask Sphere to fix</button>
-          )}
-        </div>
-      )}
-
-      <Section title="API Surface">
-        <div className="mb-2 flex gap-1.5">
-          <button
-            type="button"
-            onClick={() => onAddPort(node.id, "consume")}
-            className="rounded-md border border-border px-2 py-1 text-[10px] font-medium hover:bg-muted"
-          >
-            + Consume
-          </button>
-          <button
-            type="button"
-            onClick={() => onAddPort(node.id, "expose")}
-            className="rounded-md border border-border px-2 py-1 text-[10px] font-medium hover:bg-muted"
-          >
-            + Expose
-          </button>
-        </div>
-        {node.consumes?.length ? (
-          <div className="space-y-1.5">
-            <div className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-              <ArrowLeft className="h-3 w-3" /> Consumes
-            </div>
-            {node.consumes.map((p) => (
-              <PortRow
-                key={p.id}
-                label={p.label}
-                protocol={p.protocol}
-                kind={node.kind}
-                onChange={(patch) => onUpdatePort(node.id, p.id, patch)}
-                onDelete={() => onDeletePort(node.id, p.id)}
-              />
-            ))}
-          </div>
-        ) : null}
-        {node.exposes?.length ? (
-          <div className={`space-y-1.5 ${node.consumes?.length ? "mt-3" : ""}`}>
-            <div className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-              <ArrowRight className="h-3 w-3" /> Exposes
-            </div>
-            {node.exposes.map((p) => (
-              <PortRow
-                key={p.id}
-                label={p.label}
-                protocol={p.protocol}
-                kind={node.kind}
-                onChange={(patch) => onUpdatePort(node.id, p.id, patch)}
-                onDelete={() => onDeletePort(node.id, p.id)}
-              />
-            ))}
-          </div>
-        ) : null}
-        {!node.consumes?.length && !node.exposes?.length && (
-          <div className="text-[11px] text-muted-foreground">
-            No ports yet. Add Consume / Expose above, then wire on the canvas: Expose {"->"} Consume.
-          </div>
-        )}
-      </Section>
-
-      <Section title="Connections">
-        {related.length ? (
-          <div className="space-y-1.5">
-            {related.map((e) => {
-              const otherId = e.from === node.id ? e.to : e.from;
-              const other = nodeById[otherId];
-              const outbound = e.from === node.id;
-              return (
-                <button
-                  key={e.id}
-                  type="button"
-                  onClick={() => onSelectEdge(e.id)}
-                  className="flex w-full items-start gap-2 rounded-lg border border-border bg-background px-2.5 py-2 text-left hover:bg-muted"
-                >
-                  <EdgeIcon kind={e.kind} />
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-[11px] font-medium">
-                      {outbound ? "->" : "<-"} {other?.title ?? otherId}
-                    </div>
-                    <div className="truncate text-[10px] text-muted-foreground">
-                      {e.label ?? edgeKindTitle(e.kind)}
-                      {e.contract ? ` · ${e.contract}` : ""}
-                      {e.fromPort || e.toPort
-                        ? ` · ${e.fromPort ?? "*"} -> ${e.toPort ?? "*"}`
-                        : ""}
-                      {e.operations?.length ? ` · ${e.operations.length} ops` : ""}
-                    </div>
-                  </div>
-                  <ChevronRight className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                </button>
-              );
-            })}
-          </div>
-        ) : (
-          <div className="text-[11px] text-muted-foreground">
-            Not connected yet. Click an Exposes port on the card, then a Consumes port on another
-            node (or use the Connect tool).
-          </div>
-        )}
-      </Section>
-
-      <Section title="Repository">
-        {node.repo ? (
-          <button
-            type="button"
-            disabled={!node.repoUrl}
-            onClick={() => {
-              if (node.repoUrl) openExternal(node.repoUrl);
-            }}
-            className="flex w-full items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-left text-xs hover:bg-muted disabled:cursor-default disabled:opacity-70"
-          >
-            <Github className="h-4 w-4 shrink-0" />
-            <div className="min-w-0 flex-1">
-              <div className="truncate font-medium">{node.repo}</div>
-              <div className="text-[10px] text-muted-foreground">
-                {node.repoUrl ? "Open in new tab" : "Path only - no browse URL"}
-              </div>
-            </div>
-            {node.repoUrl ? (
-              <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
-            ) : (
-              <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
-            )}
-          </button>
-        ) : (
-          <div className="rounded-lg border border-dashed border-border px-3 py-2 text-[11px] text-muted-foreground">
-            No repository linked in the SCAN model yet.
-          </div>
-        )}
-      </Section>
-
-      <Section title="Contracts">
-        {protocols.length ? (
-          <div className="space-y-1.5">
-            {protocols.map((c) => (
-              <div
-                key={c}
-                className="flex items-center gap-2 rounded-md border border-border bg-background px-2 py-1.5 text-[11px]"
-              >
-                <FileCode2 className="h-3.5 w-3.5 text-muted-foreground" />
-                <span className="flex-1 truncate">{c}</span>
-                <span className="rounded bg-muted px-1.5 py-0.5 text-[9px]">from ports</span>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="text-[11px] text-muted-foreground">
-            No protocol metadata on ports yet.
-          </div>
-        )}
-      </Section>
-
-      {productAi && (
-        <Section title="Ask Sphere">
-          <div className="flex flex-wrap gap-1.5">
-            {[
-              "Add resilience policies",
-              "Split into read/write",
-              "Add missing tests",
-              "Rename service",
-            ].map((s) => (
-              <button
-                key={s}
-                className="rounded-full border border-border bg-background px-2.5 py-1 text-[10px] hover:bg-muted"
-              >
-                <Sparkles className="mr-1 inline h-3 w-3 text-primary" />
-                {s}
-              </button>
-            ))}
-          </div>
-        </Section>
-      )}
-
-      <IconPickerModal
-        open={iconOpen}
-        onClose={() => setIconOpen(false)}
-        title="Component icon"
-        currentIcon={node.icon}
-        fallbackIcon={meta.Icon}
-        softClass={meta.soft}
-        colorClass={meta.color}
-        onSave={(icon) => onUpdateIcon(node.id, icon)}
-      />
-    </div>
-  );
-}
-
-function EdgeInspector({
-  edge,
-  nodeById,
-  onUpdate,
-}: {
-  edge: SphereEdge;
-  nodeById: Record<string, SphereNode>;
-  onUpdate: (
-    id: string,
-    patch: {
-      label?: string | null;
-      contract?: string | null;
-      operations?: string[] | null;
-    },
-  ) => void;
-}) {
-  const [label, setLabel] = useState(edge.label ?? "");
-  const [contract, setContract] = useState(edge.contract ?? "");
-  const [operationsText, setOperationsText] = useState(
-    (edge.operations ?? []).join("\n"),
-  );
-
-  useEffect(() => {
-    setLabel(edge.label ?? "");
-    setContract(edge.contract ?? "");
-    setOperationsText((edge.operations ?? []).join("\n"));
-  }, [edge.id, edge.label, edge.contract, edge.operations]);
-
-  const opsList = operationsText
-    .split("\n")
-    .map((l) => l.trim())
-    .filter(Boolean);
-  const beforeOps = (edge.operations ?? []).join("\n");
-  const dirty =
-    (label.trim() || "") !== (edge.label ?? "") ||
-    (contract.trim() || "") !== (edge.contract ?? "") ||
-    opsList.join("\n") !== beforeOps;
-
-  const save = () => {
-    if (!dirty) return;
-    onUpdate(edge.id, {
-      label: label.trim() || null,
-      contract: contract.trim() || null,
-      operations: opsList.length ? opsList : null,
-    });
-  };
-
-  const fromNode = nodeById[edge.from];
-  const toNode = nodeById[edge.to];
-
-  return (
-    <div className="flex-1 overflow-auto">
-      <div className="border-b border-border px-4 py-4">
-        <div className="flex items-center gap-2">
-          <EdgeIcon kind={edge.kind} />
-          <div className="text-base font-semibold">{edgeKindTitle(edge.kind)} connection</div>
-        </div>
-        <div className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
-          <span className="truncate font-medium text-foreground">
-            {fromNode?.title ?? edge.from}
-          </span>
-          <ArrowRight className="h-3 w-3 shrink-0" />
-          <span className="truncate font-medium text-foreground">
-            {toNode?.title ?? edge.to}
-          </span>
-        </div>
-        {(edge.fromPort || edge.toPort) && (
-          <div className="mt-1.5 flex items-center gap-1 font-mono text-[10px] text-muted-foreground">
-            <Link2 className="h-3 w-3 shrink-0" />
-            {edge.fromPort ?? " - "} {"->"} {edge.toPort ?? " - "}
-          </div>
-        )}
-      </div>
-      <Section title="Label">
-        <input
-          value={label}
-          onChange={(e) => setLabel(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              save();
-            }
-          }}
-          placeholder="e.g. REST, Publish, Git Integration"
-          className="w-full rounded-md border border-border bg-background px-2.5 py-2 text-xs outline-none focus:ring-2 focus:ring-primary/30"
-        />
-      </Section>
-      <Section title="Contract">
-        <div className="space-y-2">
-          <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-            <FileCode2 className="h-3.5 w-3.5 shrink-0" />
-            <span>Protocol or contract reference stored on the connection</span>
-          </div>
-          <input
-            value={contract}
-            onChange={(e) => setContract(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                save();
-              }
-            }}
-            placeholder="e.g. OpenAPI, AsyncAPI, openapi.yaml"
-            className="w-full rounded-md border border-border bg-background px-2.5 py-2 font-mono text-xs outline-none focus:ring-2 focus:ring-primary/30"
-          />
-        </div>
-      </Section>
-      <Section title="Endpoints / operations">
-        <div className="space-y-2">
-          <p className="text-[11px] text-muted-foreground">
-            One per line - shown when hovering the connection on the canvas.
-          </p>
-          <textarea
-            value={operationsText}
-            onChange={(e) => setOperationsText(e.target.value)}
-            rows={5}
-            placeholder={"POST /orders\nGET /orders/{id}"}
-            className="w-full resize-y rounded-md border border-border bg-background px-2.5 py-2 font-mono text-[11px] outline-none focus:ring-2 focus:ring-primary/30"
-          />
-          <button
-            type="button"
-            disabled={!dirty}
-            onClick={save}
-            className="w-full rounded-lg bg-primary px-3 py-2 text-xs font-medium text-primary-foreground hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            Save connection
-          </button>
-        </div>
-      </Section>
-      <Section title="Resilience">
-        <div className="grid grid-cols-2 gap-2 text-[11px]">
-          {[
-            ["Timeout", "2s"],
-            ["Retries", "3"],
-            ["Circuit breaker", "on"],
-            ["Rate limit", "100/s"],
-          ].map(([k, v]) => (
-            <div key={k} className="rounded-md border border-border bg-background px-2 py-1.5">
-              <div className="text-[9px] uppercase text-muted-foreground">{k}</div>
-              <div className="font-medium">{v}</div>
-            </div>
-          ))}
-        </div>
-        <p className="mt-2 text-[10px] text-muted-foreground">
-          Resilience fields are Sphere placeholders - not part of SCAN model yet.
-        </p>
-      </Section>
-    </div>
-  );
-}
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="border-b border-border px-4 py-3">
-      <div className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-        {title}
-      </div>
-      {children}
-    </div>
-  );
-}
-
-function PortRow({
-  label,
-  protocol,
-  kind,
-  onChange,
-  onDelete,
-}: {
-  label: string;
-  protocol?: string;
-  kind: NodeKind;
-  onChange?: (patch: { label?: string | null; protocol?: string | null }) => void;
-  onDelete?: () => void;
-}) {
-  const [draftLabel, setDraftLabel] = useState(label);
-  const [draftProtocol, setDraftProtocol] = useState(protocol ?? "");
-
-  useEffect(() => {
-    setDraftLabel(label);
-    setDraftProtocol(protocol ?? "");
-  }, [label, protocol]);
-
-  const commit = () => {
-    if (!onChange) return;
-    const nextLabel = draftLabel.trim();
-    if (!nextLabel) {
-      setDraftLabel(label);
-      return;
-    }
-    if (nextLabel !== label || (draftProtocol.trim() || undefined) !== (protocol || undefined)) {
-      onChange({
-        label: nextLabel,
-        protocol: draftProtocol.trim() || null,
-      });
-    }
-  };
-
-  return (
-    <div className="flex items-center gap-1.5 rounded-md border border-border bg-background px-2 py-1.5 text-[11px]">
-      <Circle className="h-2 w-2 shrink-0 fill-current" style={{ color: kindColorVar[kind] }} />
-      <input
-        value={draftLabel}
-        onChange={(e) => setDraftLabel(e.target.value)}
-        onBlur={commit}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-        }}
-        className="min-w-0 flex-1 bg-transparent font-medium outline-none"
-        aria-label="Port label"
-      />
-      <input
-        value={draftProtocol}
-        onChange={(e) => setDraftProtocol(e.target.value)}
-        onBlur={commit}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-        }}
-        placeholder="protocol"
-        className="w-[72px] bg-transparent text-right text-muted-foreground outline-none placeholder:text-muted-foreground/50"
-        aria-label="Port protocol"
-      />
-      {onDelete && (
-        <button
-          type="button"
-          title="Remove port"
-          onClick={onDelete}
-          className="rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-destructive"
-        >
-          <X className="h-3 w-3" />
-        </button>
-      )}
-    </div>
-  );
-}
-
-/* ------------------------- TOOL RAIL ------------------------- */
-
-function ToolRail({
-  tool,
-  setTool,
-  showGrid,
-  setShowGrid,
-  orthogonalEdges,
-  setOrthogonalEdges,
-  onPickCreate,
-  onPickBoundary,
-}: {
-  tool: "select" | "pan" | "connect" | "create" | "boundary";
-  setTool: (t: "select" | "pan" | "connect" | "create" | "boundary") => void;
-  showGrid: boolean;
-  setShowGrid: (b: boolean) => void;
-  orthogonalEdges: boolean;
-  setOrthogonalEdges: (b: boolean) => void;
-  onPickCreate: (kind: CreateKind) => void;
-  onPickBoundary: (kind: "trust" | "runtime") => void;
-}) {
-  const items: {
-    id: "select" | "pan" | "connect";
-    icon: React.ComponentType<{ className?: string }>;
-    label: string;
-  }[] = [
-    { id: "select", icon: MousePointer2, label: "Select" },
-    { id: "pan", icon: Hand, label: "Pan" },
-    { id: "connect", icon: ArrowRight, label: "Connect" },
-  ];
-  return (
-    <div className="absolute left-4 top-4 z-10 flex flex-col items-center gap-2 rounded-xl bg-surface p-1.5 node-shadow hairline">
-      {items.map((it) => {
-        const Icon = it.id === "connect" && tool === "connect" ? Pointer : it.icon;
-        return (
-          <IconBtn
-            key={it.id}
-            label={it.label}
-            tooltipSide="right"
-            onClick={() => setTool(it.id)}
-            active={tool === it.id}
-          >
-            <Icon className="h-4 w-4" />
-          </IconBtn>
-        );
-      })}
-      <div className="my-1 h-px w-6 bg-border" />
-      <PopoverAdd active={tool === "create"} onPick={onPickCreate} />
-      <PopoverBoundary active={tool === "boundary"} onPick={onPickBoundary} />
-      <IconBtn
-        label="Toggle grid"
-        tooltipSide="right"
-        onClick={() => setShowGrid(!showGrid)}
-        active={showGrid}
-      >
-        <Grid3x3 className="h-4 w-4" />
-      </IconBtn>
-      <IconBtn
-        label={orthogonalEdges ? "Curved arrows" : "Straight 90° arrows"}
-        tooltipSide="right"
-        onClick={() => setOrthogonalEdges(!orthogonalEdges)}
-        active={orthogonalEdges}
-      >
-        <Waypoints className="h-4 w-4" />
-      </IconBtn>
-    </div>
-  );
-}
-
-function PopoverAdd({
-  active,
-  onPick,
-}: {
-  active?: boolean;
-  onPick: (kind: CreateKind) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const items = (
-    Object.keys(createKindHints) as CreateKind[]
-  ).map((kind) => ({ kind, label: createKindHints[kind].label, nodeKind: createKindHints[kind].nodeKind }));
-  return (
-    <div className="relative">
-      <IconBtn
-        label="Add component"
-        tooltipSide="right"
-        onClick={() => setOpen(!open)}
-        active={open || active}
-      >
-        <Plus className="h-4 w-4" />
-      </IconBtn>
-      {open && (
-        <div className="absolute left-full top-0 z-30 ml-2 w-56 overflow-hidden rounded-xl border border-border bg-popover node-shadow-lg">
-          <div className="border-b border-border px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-            Add Component
-          </div>
-          {items.map((it) => {
-            const meta = kindMeta[it.nodeKind];
-            return (
-              <button
-                key={it.kind}
-                onClick={() => {
-                  onPick(it.kind);
-                  setOpen(false);
-                }}
-                className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-muted"
-              >
-                <div className={`grid h-6 w-6 place-items-center rounded ${meta.soft}`}>
-                  <meta.Icon className={`h-3.5 w-3.5 ${meta.color}`} />
-                </div>
-                {it.label}
-              </button>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function PopoverBoundary({
-  active,
-  onPick,
-}: {
-  active?: boolean;
-  onPick: (kind: "trust" | "runtime") => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const items: { kind: "trust" | "runtime"; label: string; hint: string; Icon: typeof Shield }[] = [
-    { kind: "trust", label: "Trust Boundary", hint: "Security / ownership box", Icon: Shield },
-    { kind: "runtime", label: "Runtime", hint: "Execution / deploy box for any services", Icon: Cpu },
-  ];
-  return (
-    <div className="relative">
-      <IconBtn
-        label="Add boundary"
-        tooltipSide="right"
-        onClick={() => setOpen(!open)}
-        active={open || active}
-      >
-        <Square className="h-4 w-4" />
-      </IconBtn>
-      {open && (
-        <div className="absolute left-full top-0 z-30 ml-2 w-56 overflow-hidden rounded-xl border border-border bg-popover node-shadow-lg">
-          <div className="border-b border-border px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-            Add Boundary
-          </div>
-          {items.map((it) => (
-            <button
-              key={it.kind}
-              type="button"
-              onClick={() => {
-                onPick(it.kind);
-                setOpen(false);
-              }}
-              className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-muted"
-            >
-              <div
-                className={`grid h-6 w-6 place-items-center rounded ${
-                  it.kind === "runtime" ? "bg-muted" : "bg-svc-soft"
-                }`}
-              >
-                <it.Icon
-                  className={`h-3.5 w-3.5 ${it.kind === "runtime" ? "text-muted-foreground" : "text-svc"}`}
-                />
-              </div>
-              <div className="min-w-0">
-                <div className="font-medium">{it.label}</div>
-                <div className="text-[10px] text-muted-foreground">{it.hint}</div>
-              </div>
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function IconBtn({
-  children,
-  label,
-  onClick,
-  active,
-  danger,
-  variant,
-  disabled,
-  tooltipSide = "top",
-  tooltip = true,
-}: {
-  children: React.ReactNode;
-  label: string;
-  onClick?: () => void;
-  active?: boolean;
-  danger?: boolean;
-  variant?: "ghost";
-  disabled?: boolean;
-  tooltipSide?: "top" | "right" | "bottom" | "left";
-  tooltip?: boolean;
-}) {
-  const button = (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-label={label}
-      disabled={disabled}
-      className={`grid h-8 w-8 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-40 disabled:pointer-events-none ${
-        active
-          ? danger
-            ? "bg-red-500/10 text-red-500"
-            : "bg-primary/10 text-primary"
-          : ""
-      } ${variant === "ghost" ? "hover:bg-surface" : ""}`}
-    >
-      {children}
-    </button>
-  );
-  if (!tooltip) return button;
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>{button}</TooltipTrigger>
-      <TooltipContent side={tooltipSide} sideOffset={8}>
-        {label}
-      </TooltipContent>
-    </Tooltip>
-  );
-}
-
-/* ------------------------- LEGEND + MINIMAP + TOAST ------------------------- */
-
-function Legend() {
-  const items: { kind: NodeKind }[] = [
-    { kind: "external" },
-    { kind: "service" },
-    { kind: "database" },
-    { kind: "event" },
-    { kind: "search" },
-    { kind: "agent" },
-    { kind: "repo" },
-  ];
-  return (
-    <div className="w-[220px] overflow-hidden rounded-xl border border-border bg-surface node-shadow">
-      <div className="border-b border-border px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-        Legend
-      </div>
-      <div className="grid grid-cols-2 gap-x-2 gap-y-1 p-2 text-[10px]">
-        {items.map((it) => {
-          const m = kindMeta[it.kind];
-          return (
-            <div key={it.kind} className="flex items-center gap-1.5">
-              <span
-                className="inline-block h-2.5 w-2.5 rounded-sm"
-                style={{
-                  background: `color-mix(in oklab, ${kindColorVar[it.kind]} 15%, transparent)`,
-                  border: `1px solid ${kindColorVar[it.kind]}`,
-                }}
-              />
-              {m.label}
-            </div>
-          );
-        })}
-      </div>
-      <div className="border-t border-border p-2 text-[10px] text-muted-foreground">
-        <div className="mb-1 flex items-center gap-1.5">
-          <FileCode2 className="h-3 w-3" /> Contract / Schema
-        </div>
-        <div className="mb-1 flex items-center gap-1.5">
-          <ArrowLeft className="h-3 w-3" /> Consumes (In)
-        </div>
-        <div className="flex items-center gap-1.5">
-          <ArrowRight className="h-3 w-3" /> Exposes (Out)
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function MiniMap({
-  nodes,
-  groups,
-  edges,
-  pan,
-  zoom,
-  canvasSize,
-  systemName,
-  onNavigate,
-  onPanDelta,
-}: {
-  nodes: SphereNode[];
-  groups: SphereGroup[];
-  edges: SphereEdge[];
-  pan: Point;
-  zoom: number;
-  canvasSize: { w: number; h: number };
-  systemName: string;
-  onNavigate: (worldX: number, worldY: number) => void;
-  onPanDelta: (dxWorld: number, dyWorld: number) => void;
-}) {
-  const mapW = 220;
-  const mapH = 130;
-  const pad = 24;
-  const mapRef = useRef<HTMLDivElement>(null);
-  const drag = useRef<{ lastX: number; lastY: number } | null>(null);
-
-  const bounds = useMemo(() => {
-    let minX = Infinity;
-    let minY = Infinity;
-    let maxX = -Infinity;
-    let maxY = -Infinity;
-    const include = (x: number, y: number, w: number, h: number) => {
-      minX = Math.min(minX, x);
-      minY = Math.min(minY, y);
-      maxX = Math.max(maxX, x + w);
-      maxY = Math.max(maxY, y + h);
-    };
-    for (const n of nodes) include(n.x, n.y, n.w, n.h);
-    for (const g of groups) include(g.x, g.y, g.w, g.h);
-    if (!Number.isFinite(minX)) {
-      return { minX: 0, minY: 0, width: 1000, height: 600 };
-    }
-    return {
-      minX: minX - pad,
-      minY: minY - pad,
-      width: Math.max(1, maxX - minX + pad * 2),
-      height: Math.max(1, maxY - minY + pad * 2),
-    };
-  }, [nodes, groups]);
-
-  const scale = Math.min(mapW / bounds.width, mapH / bounds.height);
-  const offsetX = (mapW - bounds.width * scale) / 2;
-  const offsetY = (mapH - bounds.height * scale) / 2;
-
-  const toMap = (x: number, y: number) => ({
-    x: (x - bounds.minX) * scale + offsetX,
-    y: (y - bounds.minY) * scale + offsetY,
-  });
-
-  const toWorld = (mx: number, my: number) => ({
-    x: (mx - offsetX) / scale + bounds.minX,
-    y: (my - offsetY) / scale + bounds.minY,
-  });
-
-  const viewWorld = {
-    x: -pan.x / zoom,
-    y: -pan.y / zoom,
-    w: canvasSize.w / zoom,
-    h: canvasSize.h / zoom,
-  };
-  const viewMap = toMap(viewWorld.x, viewWorld.y);
-  const viewMapW = viewWorld.w * scale;
-  const viewMapH = viewWorld.h * scale;
-
-  const localPoint = (e: React.PointerEvent | React.MouseEvent) => {
-    const rect = mapRef.current?.getBoundingClientRect();
-    return {
-      x: e.clientX - (rect?.left ?? 0),
-      y: e.clientY - (rect?.top ?? 0),
-    };
-  };
-
-  const onPointerDown = (e: React.PointerEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const p = localPoint(e);
-    const insideViewport =
-      p.x >= viewMap.x &&
-      p.x <= viewMap.x + viewMapW &&
-      p.y >= viewMap.y &&
-      p.y <= viewMap.y + viewMapH;
-    if (!insideViewport) {
-      const w = toWorld(p.x, p.y);
-      onNavigate(w.x, w.y);
-    }
-    drag.current = { lastX: p.x, lastY: p.y };
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-  };
-
-  const onPointerMove = (e: React.PointerEvent) => {
-    if (!drag.current) return;
-    const p = localPoint(e);
-    const dxMap = p.x - drag.current.lastX;
-    const dyMap = p.y - drag.current.lastY;
-    if (dxMap === 0 && dyMap === 0) return;
-    onPanDelta(dxMap / scale, dyMap / scale);
-    drag.current = { lastX: p.x, lastY: p.y };
-  };
-
-  const onPointerUp = (e: React.PointerEvent) => {
-    drag.current = null;
-    try {
-      (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
-    } catch {
-      /* already released */
-    }
-  };
-
-  const nodeById = useMemo(
-    () => Object.fromEntries(nodes.map((n) => [n.id, n])),
-    [nodes],
-  );
-
-  const label =
-    systemName.length > 22 ? `${systemName.slice(0, 20)}...` : systemName;
-
-  return (
-    <div className="overflow-hidden rounded-xl border border-border bg-surface node-shadow">
-      <div className="flex items-center justify-between border-b border-border px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-        Minimap
-        <span
-          className="max-w-[140px] truncate rounded bg-muted px-1.5 py-0.5 text-[9px] normal-case font-medium text-foreground"
-          title={systemName}
-        >
-          {label}
-        </span>
-      </div>
-      <div
-        ref={mapRef}
-        className="relative cursor-crosshair bg-canvas select-none"
-        style={{ width: mapW, height: mapH }}
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        onPointerCancel={onPointerUp}
-      >
-        {groups.map((g) => {
-          const p = toMap(g.x, g.y);
-          return (
-            <div
-              key={g.id}
-              className="pointer-events-none absolute rounded-sm border border-dashed border-border/80 bg-muted/30"
-              style={{
-                left: p.x,
-                top: p.y,
-                width: Math.max(2, g.w * scale),
-                height: Math.max(2, g.h * scale),
-              }}
-            />
-          );
-        })}
-        <svg
-          className="pointer-events-none absolute inset-0"
-          width={mapW}
-          height={mapH}
-        >
-          {edges.map((e) => {
-            const from = nodeById[e.from];
-            const to = nodeById[e.to];
-            if (!from || !to) return null;
-            const a = toMap(from.x + from.w / 2, from.y + from.h / 2);
-            const b = toMap(to.x + to.w / 2, to.y + to.h / 2);
-            return (
-              <line
-                key={e.id}
-                x1={a.x}
-                y1={a.y}
-                x2={b.x}
-                y2={b.y}
-                stroke="color-mix(in oklab, var(--border) 80%, transparent)"
-                strokeWidth={1}
-              />
-            );
-          })}
-        </svg>
-        {nodes.map((n) => {
-          const p = toMap(n.x, n.y);
-          return (
-            <div
-              key={n.id}
-              className="pointer-events-none absolute rounded-[1px]"
-              style={{
-                left: p.x,
-                top: p.y,
-                width: Math.max(2, n.w * scale),
-                height: Math.max(2, n.h * scale),
-                background: `color-mix(in oklab, ${kindColorVar[n.kind]} 45%, white)`,
-                border: `1px solid ${kindColorVar[n.kind]}`,
-              }}
-            />
-          );
-        })}
-        <div
-          className="pointer-events-none absolute rounded border-2 border-primary/70 bg-primary/10"
-          style={{
-            left: viewMap.x,
-            top: viewMap.y,
-            width: Math.max(8, viewMapW),
-            height: Math.max(8, viewMapH),
-          }}
-        />
-      </div>
-    </div>
-  );
-}
-
-function ValidationToast({ productAi = false }: { productAi?: boolean }) {
-  const [open, setOpen] = useState(true);
-  if (!open) return null;
-  return (
-    <div className="absolute bottom-6 left-1/2 z-10 flex -translate-x-1/2 items-center gap-3 rounded-xl border border-warn/40 bg-surface px-4 py-2.5 node-shadow-lg">
-      <div className="grid h-8 w-8 place-items-center rounded-lg bg-warn-soft">
-        <AlertTriangle className="h-4 w-4 text-warn" />
-      </div>
-      <div className="text-[11px]">
-        <div className="font-semibold">1 architecture warning</div>
-        <div className="text-muted-foreground">
-          Inventory Service is missing an async contract for OrderCreated
-        </div>
-      </div>
-      {productAi && (
-        <button className="rounded-md bg-primary px-2.5 py-1 text-[10px] font-medium text-primary-foreground">
-          Ask Sphere to fix
-        </button>
-      )}
-      <button onClick={() => setOpen(false)} className="rounded p-1 hover:bg-muted">
-        <X className="h-3.5 w-3.5" />
-      </button>
-    </div>
-  );
-}
-
-/* ------------------------- CONTEXT MENU ------------------------- */
-
-function ContextMenu({
-  x,
-  y,
-  onClose,
-  nodeTitle,
-  onDelete,
-  onRename,
-  onDuplicate,
-  onConnect,
-  onGroupBoundary,
-}: {
-  x: number;
-  y: number;
-  onClose: () => void;
-  nodeTitle: string;
-  onDelete: () => void;
-  onRename: () => void;
-  onDuplicate: () => void;
-  onConnect: () => void;
-  onGroupBoundary: () => void;
-}) {
-  const items: { label: string; danger?: boolean; shortcut?: string; action?: () => void }[] = [
-    { label: "Connect", action: onConnect },
-    { label: "Rename", shortcut: "F2", action: onRename },
-    { label: "Duplicate", shortcut: "Cmd+D", action: onDuplicate },
-    { label: "Group into boundary", action: onGroupBoundary },
-    { label: "Attach repository" },
-    { label: "Add API contract" },
-    { label: "Delete", danger: true, shortcut: "Backspace", action: onDelete },
-  ];
-  return (
-    <>
-      <div className="fixed inset-0 z-40" onClick={onClose} />
-      <div
-        className="fixed z-50 w-56 overflow-hidden rounded-xl border border-border bg-popover node-shadow-lg"
-        style={{ left: x, top: y }}
-      >
-        <div className="border-b border-border px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-          {nodeTitle}
-        </div>
-        {items.map((it) => (
-          <button
-            key={it.label}
-            onClick={() => {
-              if (it.action) {
-                it.action();
-              } else {
-                onClose();
-              }
-            }}
-            className={`flex w-full items-center justify-between px-3 py-1.5 text-left text-xs hover:bg-muted ${
-              it.danger ? "text-destructive" : ""
-            }`}
-          >
-            {it.label}
-            {it.shortcut && (
-              <span className="text-[10px] text-muted-foreground">{it.shortcut}</span>
-            )}
-          </button>
-        ))}
-      </div>
-    </>
-  );
-}
-
-/* ------------------------- PREVIEW DRAWER ------------------------- */
-
-function fitPreviewSvg(svg: string): string {
-  return svg
-    .replace(/<\?xml[^?]*\?>\s*/i, "")
-    .replace(/\swidth="[^"]*"/, ' width="100%"')
-    .replace(/\sheight="[^"]*"/, ' height="auto"');
-}
-
-function formatYamlPreviewError(err: unknown): string {
-  if (
-    err &&
-    typeof err === "object" &&
-    "issues" in err &&
-    Array.isArray((err as { issues: unknown }).issues)
-  ) {
-    const issues = (err as {
-      issues: Array<{ path?: Array<string | number>; message?: string }>;
-    }).issues;
-    return issues
-      .slice(0, 3)
-      .map((issue) => {
-        const path = Array.isArray(issue.path) ? issue.path.join(".") : "";
-        return path ? `${path}: ${issue.message ?? "invalid"}` : (issue.message ?? "invalid");
-      })
-      .join("; ");
-  }
-  return err instanceof Error ? err.message : "Invalid SCAN YAML";
-}
-
-function ScanYamlDiagramPreview({
-  yaml,
-  error,
-}: {
-  yaml: string;
-  error: string | null;
-}) {
-  const preview = useMemo(() => {
-    if (error) return { ok: false as const, error };
-    try {
-      const model = parseScanYaml(yaml);
-      const graph = projectToGraph(model);
-      if (!graph.nodes.length && !graph.groups.length) {
-        return { ok: false as const, error: "No diagram elements to preview yet." };
-      }
-      return { ok: true as const, svg: fitPreviewSvg(graphToSvg(graph)) };
-    } catch (err) {
-      return { ok: false as const, error: formatYamlPreviewError(err) };
-    }
-  }, [yaml, error]);
-
-  return (
-    <div className="mt-4 overflow-hidden rounded-lg border border-border bg-canvas">
-      <div className="flex items-center justify-between border-b border-border bg-muted/40 px-3 py-1.5">
-        <span className="font-mono text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-          Diagram preview
-        </span>
-        <span className="text-[10px] text-muted-foreground">What Apply will load</span>
-      </div>
-      {preview.ok ? (
-        <div
-          className="max-h-[260px] overflow-auto bg-[#f8fafc] p-2 [&_svg]:mx-auto [&_svg]:block [&_svg]:max-w-full"
-          dangerouslySetInnerHTML={{ __html: preview.svg }}
-        />
-      ) : (
-        <div className="space-y-2 px-3 py-3">
-          <div className="flex items-start gap-2 text-[11px] text-destructive">
-            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-            <span>Preview unavailable: {preview.error}</span>
-          </div>
-          <p className="text-[10px] text-muted-foreground">
-            Use Regenerate to send this error back to Sphere AI for a corrected YAML.
-          </p>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function validatePreviewYaml(yaml: string): string | null {
-  try {
-    const model = parseScanYaml(yaml);
-    const graph = projectToGraph(model);
-    if (!graph.nodes.length && !graph.groups.length) {
-      return "No diagram elements to preview yet.";
-    }
-    return null;
-  } catch (err) {
-    return formatYamlPreviewError(err);
-  }
-}
-
-type DiffLine = { kind: "context" | "add" | "remove"; text: string };
-
-function computeYamlDiff(baseYaml: string, nextYaml: string): DiffLine[] {
-  const a = baseYaml.split("\n");
-  const b = nextYaml.split("\n");
-  const out: DiffLine[] = [];
-  let i = 0;
-  let j = 0;
-  const LOOKAHEAD = 24;
-
-  while (i < a.length && j < b.length) {
-    if (a[i] === b[j]) {
-      out.push({ kind: "context", text: a[i] });
-      i += 1;
-      j += 1;
-      continue;
-    }
-
-    let aMatch = -1;
-    let bMatch = -1;
-    for (let k = 1; k <= LOOKAHEAD; k += 1) {
-      if (aMatch === -1 && i + k < a.length && a[i + k] === b[j]) aMatch = i + k;
-      if (bMatch === -1 && j + k < b.length && b[j + k] === a[i]) bMatch = j + k;
-      if (aMatch !== -1 && bMatch !== -1) break;
-    }
-
-    if (aMatch === -1 && bMatch === -1) {
-      out.push({ kind: "remove", text: a[i] });
-      out.push({ kind: "add", text: b[j] });
-      i += 1;
-      j += 1;
-      continue;
-    }
-    if (aMatch !== -1 && (bMatch === -1 || aMatch - i <= bMatch - j)) {
-      while (i < aMatch) {
-        out.push({ kind: "remove", text: a[i] });
-        i += 1;
-      }
-      continue;
-    }
-    while (j < bMatch) {
-      out.push({ kind: "add", text: b[j] });
-      j += 1;
-    }
-  }
-  while (i < a.length) {
-    out.push({ kind: "remove", text: a[i] });
-    i += 1;
-  }
-  while (j < b.length) {
-    out.push({ kind: "add", text: b[j] });
-    j += 1;
-  }
-  return out;
-}
-
-function YamlPreviewBlock({
-  yaml,
-  baseYaml,
-}: {
-  yaml: string;
-  baseYaml?: string | null;
-}) {
-  const TRUNCATE_LINES = 12;
-  const [expanded, setExpanded] = useState(false);
-  const [copied, setCopied] = useState(false);
-
-  const diffLines = useMemo(() => {
-    if (!baseYaml?.trim()) {
-      return yaml.split("\n").map((text) => ({ kind: "context" as const, text }));
-    }
-    return computeYamlDiff(baseYaml, yaml);
-  }, [baseYaml, yaml]);
-
-  const added = diffLines.filter((line) => line.kind === "add").length;
-  const removed = diffLines.filter((line) => line.kind === "remove").length;
-  const hasDiff = Boolean(baseYaml?.trim()) && (added > 0 || removed > 0);
-  const isTruncated = !expanded && diffLines.length > TRUNCATE_LINES;
-  const visible = isTruncated ? diffLines.slice(0, TRUNCATE_LINES) : diffLines;
-  const lineDigits = Math.max(2, String(diffLines.length).length);
-
-  const copyYaml = () => {
-    void navigator.clipboard.writeText(yaml).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1800);
-    });
-  };
-
-  return (
-    <div className="mt-4 overflow-hidden rounded-lg border border-border bg-[hsl(var(--muted)/0.6)]">
-      <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-1.5">
-        <span className="font-mono text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-          SCAN YAML — {yaml.split("\n").length} lines
-        </span>
-        <div className="flex items-center gap-2">
-          {hasDiff && (
-            <span className="font-mono text-[10px] tabular-nums">
-              <span className="text-ok">+{added}</span>
-              <span className="text-muted-foreground"> / </span>
-              <span className="text-destructive">-{removed}</span>
-            </span>
-          )}
-          <button
-            onClick={copyYaml}
-            title="Copy YAML"
-            className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-muted-foreground hover:bg-muted hover:text-foreground"
-          >
-            <ClipboardCopy className="h-3 w-3" />
-            {copied ? "Copied!" : "Copy"}
-          </button>
-        </div>
-      </div>
-      <pre className="max-h-[320px] overflow-auto px-3 py-2 font-mono text-[11px] leading-relaxed">
-        {visible.map((line, idx) => {
-          const lineNo = idx + 1;
-          const prefix = line.kind === "add" ? "+" : line.kind === "remove" ? "-" : " ";
-          const cls =
-            line.kind === "add"
-              ? "bg-ok-soft/50 text-ok"
-              : line.kind === "remove"
-                ? "bg-destructive/10 text-destructive"
-                : "text-foreground";
-          return (
-            <div key={`${idx}-${line.kind}-${line.text}`} className={`flex whitespace-pre-wrap px-1 ${cls}`}>
-              <span
-                className="select-none pr-2 text-muted-foreground/80"
-                style={{ minWidth: `${lineDigits}ch`, textAlign: "right" }}
-                aria-hidden="true"
-              >
-                {lineNo}
-              </span>
-              <span>
-                {prefix}
-                {line.text}
-              </span>
-            </div>
-          );
-        })}
-        {isTruncated && <div className="px-1 text-muted-foreground">…</div>}
-      </pre>
-      {diffLines.length > TRUNCATE_LINES && (
-        <button
-          onClick={() => setExpanded((v) => !v)}
-          className="w-full border-t border-border px-3 py-1.5 text-center text-[10px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
-        >
-          {expanded
-            ? "Show less"
-            : hasDiff
-              ? `Show full diff (${diffLines.length} lines)`
-              : `Show all ${diffLines.length} lines`}
-        </button>
-      )}
-    </div>
-  );
-}
-
-function PreviewDrawer({
-  title,
-  reply,
-  yaml,
-  baseYaml,
-  hasYaml,
-  incomplete = false,
-  durationSec,
-  busy = false,
-  onCancel,
-  onApply,
-  onRegenerate,
-}: {
-  title: string;
-  reply: string;
-  yaml: string | null;
-  baseYaml: string | null;
-  hasYaml: boolean;
-  incomplete?: boolean;
-  durationSec?: number;
-  busy?: boolean;
-  onCancel: () => void;
-  onApply: () => void;
-  onRegenerate: (validationError: string) => void;
-}) {
-  const previewError = useMemo(
-    () => (hasYaml && yaml ? validatePreviewYaml(yaml) : null),
-    [hasYaml, yaml],
-  );
-  const canApply = hasYaml && !previewError && !busy;
-  const showRegenerate = Boolean(previewError || incomplete);
-  const durationLabel =
-    typeof durationSec === "number" && Number.isFinite(durationSec)
-      ? `Generated in ${durationSec < 10 ? durationSec.toFixed(1) : Math.round(durationSec)}s`
-      : null;
-
-  return (
-    <div className="absolute inset-0 z-40 flex items-center justify-center bg-foreground/10 backdrop-blur-sm">
-      <div className="w-[680px] overflow-hidden rounded-2xl border border-border bg-surface node-shadow-lg">
-        <div className="flex items-center gap-3 border-b border-border bg-gradient-to-r from-primary/10 to-event/10 px-5 py-4">
-          <div className="grid h-9 w-9 place-items-center rounded-lg bg-gradient-to-br from-primary to-event text-primary-foreground">
-            <Sparkles className="h-4 w-4" />
-          </div>
-          <div className="flex-1">
-            <div className="text-sm font-semibold">{title}</div>
-            <div className="text-[11px] text-muted-foreground">
-              {incomplete && !hasYaml
-                ? "Incomplete or truncated response — regenerate for the full diagram"
-                : hasYaml
-                  ? previewError
-                    ? "YAML has validation issues — regenerate to fix"
-                    : "Preview before applying to the architecture board"
-                  : "Reply only — no diagram changes proposed"}
-            </div>
-          </div>
-          <button
-            onClick={onCancel}
-            disabled={busy}
-            className="rounded-md p-1 hover:bg-muted disabled:opacity-40"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-        <div className="max-h-[560px] overflow-auto p-4">
-          <div className="whitespace-pre-wrap rounded-lg border border-border bg-muted/40 px-3 py-3 text-sm leading-relaxed text-foreground">
-            {reply || "No message."}
-          </div>
-          {durationLabel ? (
-            <div className="mt-1.5 text-[11px] text-muted-foreground">{durationLabel}</div>
-          ) : null}
-          {hasYaml && yaml ? (
-            <>
-              <ScanYamlDiagramPreview yaml={yaml} error={previewError} />
-              <YamlPreviewBlock yaml={yaml} baseYaml={baseYaml} />
-            </>
-          ) : (
-            <div className="mt-4 rounded-lg bg-muted p-3 text-[11px] text-muted-foreground">
-              {incomplete
-                ? "No complete YAML was returned. Use Regenerate to retry with the same prompt and attachments."
-                : "No YAML was returned. Ask Sphere to add or change architecture elements to get an applyable proposal."}
-            </div>
-          )}
-          {hasYaml && !previewError && (
-            <div className="mt-3 rounded-lg bg-ok-soft/40 border border-ok/30 p-3 text-[11px] text-muted-foreground">
-              Applying will replace the current board document with the agent YAML (undo with Ctrl+Z after load via a new history root).
-            </div>
-          )}
-        </div>
-        <div className="flex items-center justify-between border-t border-border px-5 py-3">
-          <span className="text-[11px] text-muted-foreground">
-            {busy
-              ? "Regenerating…"
-              : previewError
-                ? "Validation failed"
-                : incomplete
-                  ? "Incomplete response"
-                  : hasYaml
-                    ? "SCAN YAML ready"
-                    : "Chat only"}
-          </span>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={onCancel}
-              disabled={busy}
-              className="rounded-lg border border-border bg-surface px-3 py-1.5 text-xs font-medium hover:bg-muted disabled:opacity-40"
-            >
-              Cancel
-            </button>
-            {showRegenerate && (
-              <button
-                onClick={() =>
-                  onRegenerate(
-                    previewError ??
-                      "Previous response was truncated or incomplete — return the full SCAN document.",
-                  )
-                }
-                disabled={busy}
-                className="flex items-center gap-1.5 rounded-lg border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/15 disabled:opacity-40"
-              >
-                {busy ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <RefreshCw className="h-3.5 w-3.5" />
-                )}
-                {busy ? "Fixing…" : "Regenerate"}
-              </button>
-            )}
-            <button
-              onClick={onApply}
-              disabled={!canApply}
-              className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:opacity-90 disabled:opacity-40"
-            >
-              <Check className="h-3.5 w-3.5" /> Apply changes
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ------------------------- COMMAND PALETTE ------------------------- */
-
-function CommandPalette({
-  onClose,
-  onCreateComponent,
-}: {
-  onClose: () => void;
-  onCreateComponent: (kind: CreateKind) => void;
-}) {
-  const [q, setQ] = useState("");
-  type PaletteIcon = React.ComponentType<{ className?: string }>;
-  type PaletteItem =
-    | { icon: PaletteIcon; label: string; meta: string; kind: CreateKind }
-    | { icon: PaletteIcon; label: string; meta?: undefined; kind?: undefined };
-
-  const componentItems: PaletteItem[] = [
-    { icon: Leaf, label: "Service", meta: "Spring Boot / API", kind: "service" },
-    { icon: DbIcon, label: "Datastore", meta: "PostgreSQL / MySQL", kind: "datastore" },
-    { icon: Radio, label: "Event / Stream", meta: "Kafka / Queue / Topic", kind: "event-stream" },
-    { icon: Search, label: "Search", meta: "Elasticsearch / Index", kind: "search" },
-    { icon: Bot, label: "Agent", meta: "Agent runtime", kind: "agent" },
-    { icon: Github, label: "Repository", meta: "Code / Contracts", kind: "repository" },
-    { icon: ExternalLink, label: "External System", meta: "3rd party dependency", kind: "external-system" },
-  ];
-  const groups: Array<{ title: string; items: PaletteItem[] }> = [
-    {
-      title: "Components",
-      items: componentItems,
-    },
-    {
-      title: "Actions",
-      items: [
-        { icon: Plus, label: "Add service" },
-        { icon: ArrowRight, label: "Draw connection" },
-        { icon: Sparkles, label: "Highlight services without contracts" },
-        { icon: Square, label: "Wrap in trust boundary" },
-      ],
-    },
-    {
-      title: "Views",
-      items: [
-        { icon: Layers, label: "Show all systems" },
-        { icon: Building2Icon, label: "External integrations" },
-        { icon: FileCode2, label: "Contract map" },
-        { icon: Bot, label: "Agent runtime" },
-      ],
-    },
-  ];
-  const query = q.trim().toLowerCase();
-  const visibleGroups = groups
-    .map((group) => ({
-      ...group,
-      items: group.items.filter((item) => {
-        if (!query) return true;
-        const meta = item.meta ?? "";
-        return `${group.title} ${item.label} ${meta}`.toLowerCase().includes(query);
-      }),
-    }))
-    .filter((group) => group.items.length > 0);
-  return (
-    <div className="absolute inset-0 z-40 flex items-start justify-center bg-foreground/10 pt-24 backdrop-blur-sm">
-      <div
-        className="w-[560px] overflow-hidden rounded-2xl border border-border bg-popover node-shadow-lg"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center gap-2 border-b border-border px-4 py-3">
-          <Search className="h-4 w-4 text-muted-foreground" />
-          <input
-            autoFocus
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Search components, contracts, actions..."
-            className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
-          />
-          <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px]">ESC</span>
-        </div>
-        <div className="max-h-[420px] overflow-auto p-2">
-          {visibleGroups.map((g) => (
-            <div key={g.title} className="mb-2">
-              <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                {g.title}
-              </div>
-              {g.items.map((it) => (
-                <button
-                  key={it.label}
-                  onClick={() => {
-                    if (it.kind) {
-                      onCreateComponent(it.kind);
-                      return;
-                    }
-                    onClose();
-                  }}
-                  className="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left text-xs hover:bg-muted"
-                >
-                  <div className="grid h-6 w-6 place-items-center rounded bg-muted">
-                    <it.icon className="h-3.5 w-3.5" />
-                  </div>
-                  <span className="flex-1">{it.label}</span>
-                  {it.meta ? (
-                    <span className="text-[10px] text-muted-foreground">{it.meta}</span>
-                  ) : null}
-                </button>
-              ))}
-            </div>
-          ))}
-        </div>
-        <div className="flex items-center justify-between border-t border-border px-3 py-2 text-[10px] text-muted-foreground">
-          <div className="flex items-center gap-2">
-            <span>Up/Down Navigate</span>
-            <span>Enter Select</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <CommandIcon className="h-3 w-3" />
-            <span>K</span>
-          </div>
-        </div>
-      </div>
-      <div className="absolute inset-0 -z-10" onClick={onClose} />
-    </div>
-  );
-}
-
-/* ------------------------- EDGE ICON ------------------------- */
-
-function EdgeIcon({ kind }: { kind: SphereEdge["kind"] }) {
-  const map = {
-    rest: { icon: FileCode2, color: "text-foreground" },
-    grpc: { icon: FileCode2, color: "text-foreground" },
-    async: { icon: Radio, color: "text-event" },
-    stream: { icon: Radio, color: "text-event" },
-    db: { icon: DbIcon, color: "text-agent" },
-    git: { icon: Github, color: "text-foreground" },
-    flow: { icon: ArrowRight, color: "text-agent" },
-  } as const;
-  const { icon: Icon, color } = map[kind];
-  return <Icon className={`h-3 w-3 ${color}`} />;
-}

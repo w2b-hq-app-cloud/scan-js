@@ -42,6 +42,7 @@ Build in this order. Later layers depend on earlier ones being stable.
 
 | ID | Status | Summary |
 |----|--------|---------|
+| **E7** | done | Split BoardApp into chrome/tools/nodes/inspector/preview modules (+ Fast design mode) |
 | **A1** | done | JSON Schema matches Zod (`$defs`, enums); fixtures validated via Ajv |
 | **A3** | done | `createEmptyModel(systemName)` in `@spherescan/model` |
 | **A5** | done | Spec completeness for v0.1 elements + connection types + DI |
@@ -74,6 +75,7 @@ Build in this order. Later layers depend on earlier ones being stable.
 | Rules | **B4**, **B2**, **B3** | Matrix / containment / soft warnings |
 | UX polish | **E10** | Keyboard shortcuts (F2 rename, tools) - Cmd+D duplicate done via E5 |
 | Modeler | **D5**, **D6** | Cheap drag preview; multi-select move |
+| Board follow-up | — | Optional: thin `BoardApp.tsx` orchestrator further (canvas/pointer hooks) |
 
 ---
 
@@ -153,7 +155,7 @@ Build in this order. Later layers depend on earlier ones being stable.
 | E4 | done | Edge inspector: edit label/contract | Saves via modeler command | `@spherescan/board` + D3 |
 | E5 | done | Wire context menu Duplicate | Uses D2; Ctrl/Cmd+D | `@spherescan/board` ContextMenu |
 | E6 | done | Empty board / New board action | Starts from A3 factory | Toolbar + modeler import |
-| E7 | todo | Split `BoardApp.tsx` into modules (canvas, topbar, inspector, tools) | Files &lt; ~400 lines each; behavior unchanged | `packages/board/src/` - **solo agent** |
+| E7 | done | Split `BoardApp.tsx` into modules (canvas, topbar, inspector, tools) | Scoped modules under `chrome/` `tools/` `nodes/` `inspector/` `preview/`; `BoardApp.tsx` remains orchestrator (~2.7k); public exports unchanged | `packages/board/src/` |
 | E8 | done | Toast on failed connect (replace `console.warn`) | User-visible message | `@spherescan/board` |
 | E9 | done | Dirty indicator + beforeunload when unsaved | Browser warns on close; Ctrl+S saves YAML | `useSphereBoard.ts`, TopBar |
 | E10 | todo | Keyboard: F2 rename, Esc clear connect, tool shortcuts | Matches context menu hints | `@spherescan/board` |
