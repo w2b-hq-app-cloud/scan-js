@@ -1,7 +1,8 @@
-import { slugifyId } from "@spherescan/model";
+import { parseSphereYaml, slugifyId, } from "@spherescan/model";
 import { canConnect, suggestConnectionType } from "@spherescan/rules";
 import { computeAutoLayout } from "./auto-layout.js";
-function cloneModel(model) {
+import { mergeModels } from "./merge.js";
+export function cloneModel(model) {
     return structuredClone(model);
 }
 function findLinkHost(model, id) {
@@ -65,7 +66,7 @@ function defaultSize(kind) {
             return { w: 260, h: 190 };
     }
 }
-function createId(prefix) {
+export function createId(prefix) {
     return `${prefix}-${Math.random().toString(36).slice(2, 8)}`;
 }
 const MIN_BOUNDARY_W = 160;
@@ -1064,6 +1065,16 @@ export class Modeling {
                 delete c.toPort;
         }
         this.replace(next, prev, `Delete port ${portId}`);
+    }
+    /** Merges another SCAN document's elements/connections into the current
+     *  model as a single undoable step (id collisions remapped, incoming
+     *  content offset to avoid overlapping existing nodes). */
+    mergeYAML(yaml, options) {
+        const prev = cloneModel(this.getModel());
+        const incoming = parseSphereYaml(yaml);
+        const next = mergeModels(prev, incoming, this.viewId, options);
+        syncBoundaryMembership(ensureView(next, this.viewId));
+        this.replace(next, prev, "Attach diagram");
     }
 }
 function findPortHost(model, id) {

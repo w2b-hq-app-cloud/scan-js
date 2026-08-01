@@ -95,6 +95,14 @@ export type BoardAppProps = {
   /** YAML supplied by a host to replace the built-in sample document. */
   initialYaml?: string | null;
   /**
+   * One-shot: YAML to merge (additive) into the current board, e.g. a library
+   * template attached from another screen. Applied once, then the host should
+   * clear it via `onMergeApplied`.
+   */
+  pendingMergeYaml?: string | null;
+  /** Fired after `pendingMergeYaml` has been applied to the board. */
+  onMergeApplied?: () => void;
+  /**
    * Start from an empty Untitled board instead of the Order Platform sample.
    * Ignored when `initialYaml` is supplied (e.g. opening a saved diagram).
    */

@@ -113,6 +113,8 @@ export default function BoardApp({
   onDocumentChange,
   onSystemIdentityChange,
   initialYaml,
+  pendingMergeYaml,
+  onMergeApplied,
   startEmpty = false,
   applyYaml = null,
   applyYamlNonce = 0,
@@ -181,6 +183,7 @@ export default function BoardApp({
     renameSystem,
     model,
     loadYamlText,
+    mergeYamlText,
     modeler,
     ready,
   } = board;
@@ -327,6 +330,21 @@ export default function BoardApp({
       toast.error("Could not save YAML", { description: message });
     }
   }, [downloadYaml, onSaveDocument, modeler]);
+
+  // Always writes a local .scan.yaml file, regardless of host persistence —
+  // distinct from Save, which goes to the host (cloud/local-store) when configured.
+  const downloadYamlCopy = useCallback(async () => {
+    try {
+      const result = await downloadYaml();
+      if (!result) return;
+      toast.success(
+        result.connected ? `Saved to disk as ${result.filename}` : `Downloaded ${result.filename}`,
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Download failed";
+      toast.error("Could not download YAML", { description: message });
+    }
+  }, [downloadYaml]);
 
   // Keyboard: undo/redo, save, delete
   useEffect(() => {
@@ -636,6 +654,14 @@ export default function BoardApp({
     appliedYamlNonceRef.current = applyYamlNonce;
     void loadYamlText(applyYaml);
   }, [ready, applyYaml, applyYamlNonce, loadYamlText]);
+
+  const mergedYamlRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!ready || !pendingMergeYaml) return;
+    if (mergedYamlRef.current === pendingMergeYaml) return;
+    mergedYamlRef.current = pendingMergeYaml;
+    void mergeYamlText(pendingMergeYaml).then(() => onMergeApplied?.());
+  }, [ready, pendingMergeYaml, mergeYamlText, onMergeApplied]);
 
   useEffect(() => {
     if (!warnOnUnload) return;
@@ -1667,6 +1693,7 @@ export default function BoardApp({
           setDuplicateModal({ value: `${systemName.replace(/\s+copy$/i, "").trim() || systemName} copy` })
         }
         onDownloadYaml={() => void saveYaml()}
+        onDownloadCopy={() => void downloadYamlCopy()}
         onImportYaml={() => fileInputRef.current?.click()}
         onExportSvg={() => {
           const mode = orthogonalEdges ? "orthogonal" : "bezier";

@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `@spherescan/modeler`: `mergeModels` — merges another SCAN document's elements/connections into a model, remapping any colliding ids and offsetting incoming layout so it doesn't overlap existing content. Exposed as `Modeling.mergeYAML` (single undoable step) and `ScanModeler.mergeYAML`.
+- `@spherescan/board`: `BoardAppProps.pendingMergeYaml` / `onMergeApplied` — host slot to merge YAML into the currently-open board (additive, one-shot, apply-once guard mirrors `initialYaml`). No board-side UI; hosts drive it entirely.
+- `@spherescan/modeler`: export `cloneModel` and `createId` from `modeling.ts` (previously private) for reuse by `merge.ts`.
 - VS Code / Cursor extension [`packages/vscode-scan`](packages/vscode-scan) (`spherescan.scan`): read-only `*.scan.yaml` / `*.scan` preview with pan/zoom and detail inspection; see [SHIPPING.md](packages/vscode-scan/SHIPPING.md).
 - `@spherescan/viewer`: SVG export marks nodes/edges with `data-node` / `data-edge` (wider hit target) for preview selection.
 - `@spherescan/model`: element descriptions, notes, typed links, and per-view orthogonal route waypoints.

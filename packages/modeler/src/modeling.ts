@@ -1,15 +1,17 @@
-import type {
-  ConnectionType,
-  ElementLink,
-  LayoutEntry,
-  SphereModel,
-  SphereConnection,
+import {
+  parseSphereYaml,
+  slugifyId,
+  type ConnectionType,
+  type ElementLink,
+  type LayoutEntry,
+  type SphereModel,
+  type SphereConnection,
 } from "@spherescan/model";
-import { slugifyId } from "@spherescan/model";
 import { canConnect, suggestConnectionType } from "@spherescan/rules";
 import type { NodeKind } from "@spherescan/viewer";
 import { CommandStack } from "./command-stack.js";
 import { computeAutoLayout, type AutoLayoutOptions } from "./auto-layout.js";
+import { mergeModels, type MergeOptions } from "./merge.js";
 
 export type CreateKind =
   | "service"
@@ -20,7 +22,7 @@ export type CreateKind =
   | "agent"
   | "repository";
 
-function cloneModel(model: SphereModel): SphereModel {
+export function cloneModel(model: SphereModel): SphereModel {
   return structuredClone(model);
 }
 
@@ -97,7 +99,7 @@ function defaultSize(kind: CreateKind): { w: number; h: number } {
   }
 }
 
-function createId(prefix: string) {
+export function createId(prefix: string) {
   return `${prefix}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
@@ -1188,6 +1190,17 @@ export class Modeling {
       if (c.toPort === portId) delete c.toPort;
     }
     this.replace(next, prev, `Delete port ${portId}`);
+  }
+
+  /** Merges another SCAN document's elements/connections into the current
+   *  model as a single undoable step (id collisions remapped, incoming
+   *  content offset to avoid overlapping existing nodes). */
+  mergeYAML(yaml: string, options?: MergeOptions) {
+    const prev = cloneModel(this.getModel());
+    const incoming = parseSphereYaml(yaml);
+    const next = mergeModels(prev, incoming, this.viewId, options);
+    syncBoundaryMembership(ensureView(next, this.viewId));
+    this.replace(next, prev, "Attach diagram");
   }
 }
 

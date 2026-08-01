@@ -41,6 +41,7 @@ declare const componentSchema: z.ZodObject<{
     type: z.ZodEnum<["service", "datastore", "search", "external-system", "agent", "repository", "event-stream"]>;
     technology: z.ZodOptional<z.ZodString>;
     subtitle: z.ZodOptional<z.ZodString>;
+    /** Longer free-text notes about the element (inspector + agents). */
     description: z.ZodOptional<z.ZodString>;
     notes: z.ZodOptional<z.ZodString>;
     links: z.ZodOptional<z.ZodArray<z.ZodObject<{
@@ -394,6 +395,7 @@ export declare const scanModelSchema: z.ZodEffects<z.ZodObject<{
         type: z.ZodEnum<["service", "datastore", "search", "external-system", "agent", "repository", "event-stream"]>;
         technology: z.ZodOptional<z.ZodString>;
         subtitle: z.ZodOptional<z.ZodString>;
+        /** Longer free-text notes about the element (inspector + agents). */
         description: z.ZodOptional<z.ZodString>;
         notes: z.ZodOptional<z.ZodString>;
         links: z.ZodOptional<z.ZodArray<z.ZodObject<{
@@ -819,14 +821,17 @@ export declare const scanModelSchema: z.ZodEffects<z.ZodObject<{
         id: z.ZodString;
         name: z.ZodString;
         type: z.ZodOptional<z.ZodString>;
+        description: z.ZodOptional<z.ZodString>;
     }, "strip", z.ZodTypeAny, {
         id: string;
         name: string;
         type?: string | undefined;
+        description?: string | undefined;
     }, {
         id: string;
         name: string;
         type?: string | undefined;
+        description?: string | undefined;
     }>, "many">>;
     repositories: z.ZodDefault<z.ZodArray<z.ZodObject<{
         id: z.ZodString;
@@ -834,6 +839,7 @@ export declare const scanModelSchema: z.ZodEffects<z.ZodObject<{
         provider: z.ZodOptional<z.ZodString>;
         path: z.ZodOptional<z.ZodString>;
         subtitle: z.ZodOptional<z.ZodString>;
+        description: z.ZodOptional<z.ZodString>;
         icon: z.ZodOptional<z.ZodString>;
         consumes: z.ZodOptional<z.ZodArray<z.ZodObject<{
             id: z.ZodString;
@@ -867,6 +873,7 @@ export declare const scanModelSchema: z.ZodEffects<z.ZodObject<{
         path?: string | undefined;
         provider?: string | undefined;
         subtitle?: string | undefined;
+        description?: string | undefined;
         icon?: string | undefined;
         consumes?: {
             id: string;
@@ -884,6 +891,7 @@ export declare const scanModelSchema: z.ZodEffects<z.ZodObject<{
         path?: string | undefined;
         provider?: string | undefined;
         subtitle?: string | undefined;
+        description?: string | undefined;
         icon?: string | undefined;
         consumes?: {
             id: string;
@@ -1211,6 +1219,7 @@ export declare const scanModelSchema: z.ZodEffects<z.ZodObject<{
         id: string;
         name: string;
         type?: string | undefined;
+        description?: string | undefined;
     }[];
     repositories: {
         id: string;
@@ -1218,6 +1227,7 @@ export declare const scanModelSchema: z.ZodEffects<z.ZodObject<{
         path?: string | undefined;
         provider?: string | undefined;
         subtitle?: string | undefined;
+        description?: string | undefined;
         icon?: string | undefined;
         consumes?: {
             id: string;
@@ -1428,6 +1438,7 @@ export declare const scanModelSchema: z.ZodEffects<z.ZodObject<{
         id: string;
         name: string;
         type?: string | undefined;
+        description?: string | undefined;
     }[] | undefined;
     repositories?: {
         id: string;
@@ -1435,6 +1446,7 @@ export declare const scanModelSchema: z.ZodEffects<z.ZodObject<{
         path?: string | undefined;
         provider?: string | undefined;
         subtitle?: string | undefined;
+        description?: string | undefined;
         icon?: string | undefined;
         consumes?: {
             id: string;
@@ -1585,6 +1597,7 @@ export declare const scanModelSchema: z.ZodEffects<z.ZodObject<{
         id: string;
         name: string;
         type?: string | undefined;
+        description?: string | undefined;
     }[];
     repositories: {
         id: string;
@@ -1592,6 +1605,7 @@ export declare const scanModelSchema: z.ZodEffects<z.ZodObject<{
         path?: string | undefined;
         provider?: string | undefined;
         subtitle?: string | undefined;
+        description?: string | undefined;
         icon?: string | undefined;
         consumes?: {
             id: string;
@@ -1678,6 +1692,7 @@ export declare const sphereModelSchema: z.ZodEffects<z.ZodObject<{
         type: z.ZodEnum<["service", "datastore", "search", "external-system", "agent", "repository", "event-stream"]>;
         technology: z.ZodOptional<z.ZodString>;
         subtitle: z.ZodOptional<z.ZodString>;
+        /** Longer free-text notes about the element (inspector + agents). */
         description: z.ZodOptional<z.ZodString>;
         notes: z.ZodOptional<z.ZodString>;
         links: z.ZodOptional<z.ZodArray<z.ZodObject<{
@@ -2103,14 +2118,17 @@ export declare const sphereModelSchema: z.ZodEffects<z.ZodObject<{
         id: z.ZodString;
         name: z.ZodString;
         type: z.ZodOptional<z.ZodString>;
+        description: z.ZodOptional<z.ZodString>;
     }, "strip", z.ZodTypeAny, {
         id: string;
         name: string;
         type?: string | undefined;
+        description?: string | undefined;
     }, {
         id: string;
         name: string;
         type?: string | undefined;
+        description?: string | undefined;
     }>, "many">>;
     repositories: z.ZodDefault<z.ZodArray<z.ZodObject<{
         id: z.ZodString;
@@ -2118,6 +2136,7 @@ export declare const sphereModelSchema: z.ZodEffects<z.ZodObject<{
         provider: z.ZodOptional<z.ZodString>;
         path: z.ZodOptional<z.ZodString>;
         subtitle: z.ZodOptional<z.ZodString>;
+        description: z.ZodOptional<z.ZodString>;
         icon: z.ZodOptional<z.ZodString>;
         consumes: z.ZodOptional<z.ZodArray<z.ZodObject<{
             id: z.ZodString;
@@ -2151,6 +2170,7 @@ export declare const sphereModelSchema: z.ZodEffects<z.ZodObject<{
         path?: string | undefined;
         provider?: string | undefined;
         subtitle?: string | undefined;
+        description?: string | undefined;
         icon?: string | undefined;
         consumes?: {
             id: string;
@@ -2168,6 +2188,7 @@ export declare const sphereModelSchema: z.ZodEffects<z.ZodObject<{
         path?: string | undefined;
         provider?: string | undefined;
         subtitle?: string | undefined;
+        description?: string | undefined;
         icon?: string | undefined;
         consumes?: {
             id: string;
@@ -2495,6 +2516,7 @@ export declare const sphereModelSchema: z.ZodEffects<z.ZodObject<{
         id: string;
         name: string;
         type?: string | undefined;
+        description?: string | undefined;
     }[];
     repositories: {
         id: string;
@@ -2502,6 +2524,7 @@ export declare const sphereModelSchema: z.ZodEffects<z.ZodObject<{
         path?: string | undefined;
         provider?: string | undefined;
         subtitle?: string | undefined;
+        description?: string | undefined;
         icon?: string | undefined;
         consumes?: {
             id: string;
@@ -2712,6 +2735,7 @@ export declare const sphereModelSchema: z.ZodEffects<z.ZodObject<{
         id: string;
         name: string;
         type?: string | undefined;
+        description?: string | undefined;
     }[] | undefined;
     repositories?: {
         id: string;
@@ -2719,6 +2743,7 @@ export declare const sphereModelSchema: z.ZodEffects<z.ZodObject<{
         path?: string | undefined;
         provider?: string | undefined;
         subtitle?: string | undefined;
+        description?: string | undefined;
         icon?: string | undefined;
         consumes?: {
             id: string;
@@ -2869,6 +2894,7 @@ export declare const sphereModelSchema: z.ZodEffects<z.ZodObject<{
         id: string;
         name: string;
         type?: string | undefined;
+        description?: string | undefined;
     }[];
     repositories: {
         id: string;
@@ -2876,6 +2902,7 @@ export declare const sphereModelSchema: z.ZodEffects<z.ZodObject<{
         path?: string | undefined;
         provider?: string | undefined;
         subtitle?: string | undefined;
+        description?: string | undefined;
         icon?: string | undefined;
         consumes?: {
             id: string;
