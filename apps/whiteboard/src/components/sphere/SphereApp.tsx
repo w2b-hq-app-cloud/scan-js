@@ -1,9 +1,8 @@
 /**
- * SCAN whiteboard - same interactive board as Sphere (`@spherescan/board`),
- * with OSS chrome only (`shell="scan"`).
+ * SCAN whiteboard - interactive board (`@spherescan/board`) with OSS chrome.
  */
 import BoardApp from "@spherescan/board";
 
 export default function ScanApp() {
-  return <BoardApp shell="scan" />;
+  return <BoardApp />;
 }

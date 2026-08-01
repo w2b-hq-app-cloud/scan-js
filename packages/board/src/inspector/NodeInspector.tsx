@@ -10,7 +10,6 @@ import {
   ExternalLink,
   FileCode2,
   Github,
-  RefreshCw,
 } from "lucide-react";
 import type { SphereNode, SphereEdge } from "@spherescan/viewer";
 import { kindMeta } from "../kinds";
@@ -18,12 +17,10 @@ import { ElementIcon } from "../ElementIcon";
 import { IconPickerModal } from "../IconPickerModal";
 import { openExternal, edgeKindTitle } from "../board-style";
 import { EdgeIcon } from "../icons/EdgeIcon";
-import { AskSphereBody } from "../nodes/NodeAskSphere";
 import { Section } from "./Section";
 import { PortRow } from "./PortRow";
 
 export function NodeInspector({
-  productAi = false,
   node,
   edges,
   nodeById,
@@ -33,12 +30,7 @@ export function NodeInspector({
   onAddPort,
   onUpdatePort,
   onDeletePort,
-  onAskSphere,
-  askChips,
-  askLoading = false,
-  onRequestAskSuggestions,
 }: {
-  productAi?: boolean;
   node: SphereNode;
   edges: SphereEdge[];
   nodeById: Record<string, SphereNode>;
@@ -52,10 +44,6 @@ export function NodeInspector({
     patch: { label?: string | null; protocol?: string | null },
   ) => void;
   onDeletePort: (id: string, portId: string) => void;
-  onAskSphere?: (prompt: string) => void;
-  askChips?: string[];
-  askLoading?: boolean;
-  onRequestAskSuggestions?: () => void;
 }) {
   const meta = kindMeta[node.kind];
   const [iconOpen, setIconOpen] = useState(false);
@@ -81,7 +69,7 @@ export function NodeInspector({
   };
 
   return (
-    <div className="flex-1 overflow-auto">
+    <div>
       <div className="border-b border-border px-4 py-4">
         <div className="flex items-start gap-3">
           <button
@@ -142,19 +130,6 @@ export function NodeInspector({
             <AlertTriangle className="h-3.5 w-3.5" /> Validation
           </div>
           {node.warn}
-          {productAi && onAskSphere && (
-            <button
-              type="button"
-              className="mt-2 text-[11px] font-medium underline"
-              onClick={() =>
-                onAskSphere(
-                  `Fix architecture warning on "${node.title}" (id: ${node.id}): ${node.warn}`,
-                )
-              }
-            >
-              Ask Sphere to fix
-            </button>
-          )}
         </div>
       )}
 
@@ -308,37 +283,6 @@ export function NodeInspector({
         )}
       </Section>
 
-      {productAi && onAskSphere && (
-        <Section
-          title="Ask Sphere"
-          action={
-            onRequestAskSuggestions &&
-            Boolean(askChips?.length) &&
-            !askLoading ? (
-              <button
-                type="button"
-                title="Refresh suggestions"
-                aria-label="Refresh suggestions"
-                onClick={onRequestAskSuggestions}
-                className="rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
-              >
-                <RefreshCw className="h-3.5 w-3.5" />
-              </button>
-            ) : undefined
-          }
-        >
-          <AskSphereBody
-            chips={askChips ?? []}
-            loading={askLoading}
-            onRequestSuggestions={onRequestAskSuggestions}
-            onPick={(chip) =>
-              onAskSphere(`For component "${node.title}" (id: ${node.id}): ${chip}`)
-            }
-            showTitle={false}
-          />
-        </Section>
-      )}
-
       <IconPickerModal
         open={iconOpen}
         onClose={() => setIconOpen(false)}
@@ -352,4 +296,3 @@ export function NodeInspector({
     </div>
   );
 }
-

@@ -9,7 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- (none yet)
+- `@spherescan/board` **0.4.0**: strip Sphere product / AI chrome from `BoardApp`; hosts use extension slots (`onBoardReady`, `renderNodeOverlay`, `renderInspectorExtras`, `renderBottomChrome`, `architectureWarnings`). Removed `shell` / `BoardAiAdapter` / implementation adapter props and related exports.
+- `@spherescan/board`: document-change notifications no longer re-fire when only the host `onDocumentChange` callback identity changes (avoids host update loops).
 
 ## [0.3.0] - 2026-07-31
 

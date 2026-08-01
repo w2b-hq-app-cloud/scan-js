@@ -1,16 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 WABLOO PARTNERS SRL
 
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 import { X } from "lucide-react";
 import type { SphereNode, SphereEdge, SphereGroup, BoundaryColor } from "@spherescan/viewer";
-import type { BoardShell } from "../board-types";
+import type { BoardInspectorExtrasContext } from "../board-types";
 import { BoundaryInspector } from "./BoundaryInspector";
 import { NodeInspector } from "./NodeInspector";
 import { EdgeInspector } from "./EdgeInspector";
 
 export function Inspector({
-  shell,
   node,
   edge,
   group,
@@ -28,12 +27,8 @@ export function Inspector({
   onRenameBoundary,
   onSelectEdge,
   onSelectNode,
-  onAskSphere,
-  askChips,
-  askLoading,
-  onRequestAskSuggestions,
+  renderInspectorExtras,
 }: {
-  shell: BoardShell;
   node: SphereNode | null;
   edge: SphereEdge | null;
   group: SphereGroup | null;
@@ -71,16 +66,21 @@ export function Inspector({
   onRenameBoundary: (id: string) => void;
   onSelectEdge: (id: string) => void;
   onSelectNode: (id: string) => void;
-  onAskSphere?: (prompt: string) => void;
-  askChips?: string[];
-  askLoading?: boolean;
-  onRequestAskSuggestions?: () => void;
+  renderInspectorExtras?: (ctx: BoardInspectorExtrasContext) => ReactNode;
 }) {
   const nodeById = useMemo(() => {
     const map: Record<string, SphereNode> = {};
     for (const n of nodes) map[n.id] = n;
     return map;
   }, [nodes]);
+
+  const extras = renderInspectorExtras?.({
+    node,
+    edge,
+    group,
+    nodes,
+    edges,
+  });
 
   return (
     <div className="absolute right-4 top-4 z-20 flex h-[calc(100%-2rem)] w-[340px] flex-col overflow-hidden rounded-2xl border border-border bg-surface node-shadow-lg">
@@ -93,42 +93,39 @@ export function Inspector({
         </button>
       </div>
 
-      {group && !node && !edge && (
-        <BoundaryInspector
-          group={group}
-          nodes={nodes}
-          onUpdate={onUpdateBoundary}
-          onDelete={onDeleteBoundary}
-          onRename={onRenameBoundary}
-          onSelectNode={onSelectNode}
-        />
-      )}
-      {node && (
-        <NodeInspector
-          productAi={shell === "sphere"}
-          node={node}
-          edges={edges}
-          nodeById={nodeById}
-          onSelectEdge={onSelectEdge}
-          onUpdateIcon={onUpdateElementIcon}
-          onUpdateDescription={onUpdateElementDescription}
-          onAddPort={onAddPort}
-          onUpdatePort={onUpdatePort}
-          onDeletePort={onDeletePort}
-          onAskSphere={onAskSphere}
-          askChips={askChips}
-          askLoading={askLoading}
-          onRequestAskSuggestions={onRequestAskSuggestions}
-        />
-      )}
-      {edge && !node && !group && (
-        <EdgeInspector
-          edge={edge}
-          nodeById={nodeById}
-          onUpdate={onUpdateConnection}
-        />
-      )}
+      <div className="flex-1 overflow-auto">
+        {group && !node && !edge && (
+          <BoundaryInspector
+            group={group}
+            nodes={nodes}
+            onUpdate={onUpdateBoundary}
+            onDelete={onDeleteBoundary}
+            onRename={onRenameBoundary}
+            onSelectNode={onSelectNode}
+          />
+        )}
+        {node && (
+          <NodeInspector
+            node={node}
+            edges={edges}
+            nodeById={nodeById}
+            onSelectEdge={onSelectEdge}
+            onUpdateIcon={onUpdateElementIcon}
+            onUpdateDescription={onUpdateElementDescription}
+            onAddPort={onAddPort}
+            onUpdatePort={onUpdatePort}
+            onDeletePort={onDeletePort}
+          />
+        )}
+        {edge && !node && !group && (
+          <EdgeInspector
+            edge={edge}
+            nodeById={nodeById}
+            onUpdate={onUpdateConnection}
+          />
+        )}
+        {extras}
+      </div>
     </div>
   );
 }
-

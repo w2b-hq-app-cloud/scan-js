@@ -145,7 +145,7 @@ Build in this order. Later layers depend on earlier ones being stable.
 ## Track E - SCAN whiteboard UX (`apps/whiteboard`)
 
 > Prefer agents that only touch `hooks/` or small components - avoid two agents in `packages/board`.  
-> Whiteboard and Sphere share **`@spherescan/board`** (canvas, tools, minimap, view filters). Sphere-only chrome: AI bar / Share / collab / Cmd+K (`shell="sphere"`).
+> Whiteboard and Sphere share **`@spherescan/board`** (canvas, tools, minimap, view filters). Sphere mounts product chrome (AI bar, Ask Sphere, ACP Implementation) via **host slots** — not `shell="sphere"`.
 
 | ID | Status | Item | Acceptance criteria | Primary paths |
 |----|--------|------|---------------------|---------------|

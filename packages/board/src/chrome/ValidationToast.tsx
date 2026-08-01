@@ -1,22 +1,20 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 WABLOO PARTNERS SRL
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { AlertTriangle, Loader2, X } from "lucide-react";
 import type { ArchitectureWarning } from "../board-types";
 
 export function ValidationToast({
   warnings,
-  productAi = false,
   validating = false,
-  onAskFix,
+  renderAction,
   onSelect,
 }: {
   warnings: ArchitectureWarning[];
-  productAi?: boolean;
-  /** True while design fix and/or architect re-check is in flight. */
+  /** True while host architecture re-check is in flight. */
   validating?: boolean;
-  onAskFix?: (warning: ArchitectureWarning) => void;
+  renderAction?: (warning: ArchitectureWarning) => ReactNode;
   onSelect?: (warning: ArchitectureWarning) => void;
 }) {
   const [dismissed, setDismissed] = useState(false);
@@ -65,23 +63,7 @@ export function ValidationToast({
             : `${active.title}: ${active.message}`}
         </div>
       </button>
-      {productAi && onAskFix && (
-        <button
-          type="button"
-          disabled={validating}
-          className="shrink-0 rounded-md bg-primary px-2.5 py-1 text-[10px] font-medium text-primary-foreground disabled:opacity-50"
-          onClick={() => onAskFix(active)}
-        >
-          {validating ? (
-            <span className="inline-flex items-center gap-1.5">
-              <Loader2 className="h-3 w-3 animate-spin" />
-              Working…
-            </span>
-          ) : (
-            "Ask Sphere to fix"
-          )}
-        </button>
-      )}
+      {renderAction?.(active)}
       <button
         type="button"
         onClick={() => setDismissed(true)}

@@ -13,24 +13,17 @@ import {
 } from "react";
 import {
   Cpu,
-  Filter,
   Locate,
   Maximize2,
   PenLine,
   Plus,
   Pointer,
-  Send,
   Shield,
   Square,
   Upload,
   ZoomIn,
   ZoomOut,
 } from "lucide-react";
-import {
-  commandSuggestions,
-  recentPrompts as seedRecentPrompts,
-  previewChanges,
-} from "./chrome-data";
 import type { SphereNode, SphereEdge } from "@spherescan/viewer";
 import {
   LABEL_LOD_ZOOM,
@@ -45,7 +38,6 @@ import {
   resolveLabelOverlaps,
   estimateEdgeLabelSize,
 } from "@spherescan/viewer";
-import { parseScanYaml } from "@spherescan/model";
 import type { CreateKind } from "@spherescan/modeler";
 import { toast } from "sonner";
 import { Modal } from "./Modal";
@@ -58,7 +50,8 @@ import type {
   BoardTool,
   ResizeHandle,
   BoardAppProps,
-  BoardAiAttachment,
+  BoardHostApi,
+  BoardSelection,
   ArchitectureWarning,
 } from "./board-types";
 import {
@@ -72,51 +65,34 @@ import {
   applyBoundaryResize,
 } from "./board-geometry";
 import { createKindHints, edgeKindTitle, edgeStyle } from "./board-style";
-import {
-  isScanFile,
-  isAiAttachmentFile,
-  readFileAsText,
-  readFileAsDataUrl,
-  MAX_VOICE_MS,
-  MAX_VOICE_BYTES,
-} from "./board-files";
-import { readStoredRecentPrompts, rememberRecentPrompt } from "./recent-prompts";
+import { isScanFile } from "./board-files";
 import { IconBtn } from "./ui/IconBtn";
 import { EdgeIcon } from "./icons/EdgeIcon";
 import { ToolRail } from "./tools/ToolRail";
 import { FastDesignLegend } from "./tools/FastDesignLegend";
 import { NodeCard } from "./nodes/NodeCard";
 import { SelectionCheck } from "./nodes/SelectionCheck";
-import {
-  NodeAskSphere,
-  DEFAULT_ASK_SPHERE_CHIPS,
-} from "./nodes/NodeAskSphere";
 import { Inspector } from "./inspector/Inspector";
 import { TopBar } from "./chrome/TopBar";
-import { AIBar } from "./chrome/AIBar";
 import { ViewTabs } from "./chrome/ViewTabs";
-import { CommandPalette } from "./chrome/CommandPalette";
 import { ValidationToast } from "./chrome/ValidationToast";
 import { ContextMenu } from "./chrome/ContextMenu";
 import { Legend } from "./chrome/Legend";
 import { MiniMap } from "./chrome/MiniMap";
-import { PreviewDrawer } from "./preview/PreviewDrawer";
 
 export type {
   Point,
   BoardTool,
   ResizeHandle,
-  BoardShell,
   BoardAppProps,
-  BoardAiChatResult,
-  BoardAiAttachment,
-  BoardAiAdapter,
+  BoardHostApi,
+  BoardSelection,
   ArchitectureWarning,
 } from "./board-types";
 
 export default function BoardApp({
-  shell = "scan",
   fill = "viewport",
+  topBarBrand,
   topBarBeforeTitle,
   topBarAfterStatus,
   topBarAfterBrand,
@@ -126,9 +102,18 @@ export default function BoardApp({
   onDocumentChange,
   initialYaml,
   startEmpty = false,
-  aiAdapter = null,
+  applyYaml = null,
+  applyYamlNonce = 0,
+  readOnly = false,
+  onBoardReady,
+  renderNodeOverlay,
+  renderInspectorExtras,
+  renderBottomChrome,
+  architectureWarnings: architectureWarningsProp,
+  renderValidationAction,
+  architectureValidating = false,
 }: BoardAppProps) {
-  const isSphere = shell === "sphere";
+  void readOnly;
   const board = useScanBoard({
     startEmpty: startEmpty && !initialYaml,
   });
@@ -204,44 +189,15 @@ export default function BoardApp({
   const [view, setView] = useState<"all" | "external" | "contracts" | "agents">("all");
   /** Dim non-neighbors when a node/edge is selected - reading aid for dense boards. */
   const [focusMode, setFocusMode] = useState(true);
-  const [preview, setPreview] = useState(false);
-  const [palette, setPalette] = useState(false);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; nodeId: string } | null>(null);
-  const [prompt, setPrompt] = useState("");
-  const [aiAttachments, setAiAttachments] = useState<BoardAiAttachment[]>([]);
-  const [aiBusy, setAiBusy] = useState(false);
-  const [aiSessionId, setAiSessionId] = useState<string | null>(null);
-  const [recording, setRecording] = useState(false);
-  const [sttBusy, setSttBusy] = useState(false);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const mediaStreamRef = useRef<MediaStream | null>(null);
-  const voiceChunksRef = useRef<BlobPart[]>([]);
-  const voiceMaxTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const submitAiChatRef = useRef<(override?: string) => Promise<void>>(async () => {});
-  const [aiSuggestions, setAiSuggestions] = useState<string[]>(commandSuggestions);
-  const [architectWarnings, setArchitectWarnings] = useState<
-    { elementId: string; message: string }[]
-  >([]);
-  const [architectBusy, setArchitectBusy] = useState(false);
-  const [nodeAskChips, setNodeAskChips] = useState<string[]>([]);
-  const [nodeAskLoading, setNodeAskLoading] = useState(false);
-  const [nodeAskForId, setNodeAskForId] = useState<string | null>(null);
-  const nodeAskGenRef = useRef(0);
-  const architectGenRef = useRef(0);
-  const [aiRecentPrompts, setAiRecentPrompts] = useState<string[]>(seedRecentPrompts);
-  const [aiMenuOpen, setAiMenuOpen] = useState(false);
-  const [pendingAi, setPendingAi] = useState<{
-    title: string;
-    reply: string;
-    yaml: string | null;
-    baseYaml: string | null;
-    /** Original user prompt (for regenerate after truncation/stub). */
-    userMessage?: string;
-    attachments?: BoardAiAttachment[];
-    incomplete?: boolean;
-    /** Generation wall time in seconds. */
-    durationSec?: number;
-  } | null>(null);
+  const selectionListenersRef = useRef(new Set<(selection: BoardSelection) => void>());
+  const documentListenersRef = useRef(new Set<(yaml: string) => void>());
+  const selectionRef = useRef<BoardSelection>({
+    nodeIds: [],
+    edgeId: null,
+    boundaryId: null,
+  });
+  const onBoardReadyCalledRef = useRef(false);
   const [connectFrom, setConnectFrom] = useState<{
     nodeId: string;
     portId?: string;
@@ -348,17 +304,9 @@ export default function BoardApp({
     }
   }, [downloadYaml, onSaveDocument, modeler]);
 
-  useEffect(() => {
-    setAiRecentPrompts(readStoredRecentPrompts());
-  }, []);
-
-  // Keyboard: Cmd+K palette, undo/redo, save, delete
+  // Keyboard: undo/redo, save, delete
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (isSphere && (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
-        e.preventDefault();
-        setPalette((p) => !p);
-      }
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
         e.preventDefault();
         void saveYaml();
@@ -499,7 +447,6 @@ export default function BoardApp({
         }
       }
       if (e.key === "Escape") {
-        setPalette(false);
         setCtxMenu(null);
         if (tool === "connect") {
           setConnectFrom(null);
@@ -548,7 +495,6 @@ export default function BoardApp({
     fastDraft,
     groups,
     nodes,
-    isSphere,
   ]);
 
   useEffect(() => {
@@ -568,33 +514,16 @@ export default function BoardApp({
   // The modeler mutates its model in place, so `model` retains the same object
   // identity across commands. `historyStep` changes for each command and makes
   // this notification fire reliably without inventing another event channel.
+  // Do not depend on `onDocumentChange` identity — hosts often recreate that
+  // callback each render; notifying listeners on identity churn caused update loops.
+  const onDocumentChangeRef = useRef(onDocumentChange);
+  onDocumentChangeRef.current = onDocumentChange;
   useEffect(() => {
-    if (!onDocumentChange || !model || !dirty) return;
-    onDocumentChange(modeler.peekYAML());
-  }, [historyStep, model, dirty, onDocumentChange, modeler]);
-
-  // Enterprise Architect: debounced analyze-only pass after board changes.
-  useEffect(() => {
-    if (!aiAdapter?.architect || !model || !ready) return;
-    setArchitectBusy(true);
-    const gen = ++architectGenRef.current;
-    const handle = window.setTimeout(() => {
-      const yaml = modeler.peekYAML();
-      void aiAdapter
-        .architect!({ yaml })
-        .then((res) => {
-          if (gen !== architectGenRef.current) return;
-          setArchitectWarnings(Array.isArray(res.warnings) ? res.warnings : []);
-        })
-        .catch(() => {
-          /* keep prior warnings on failure */
-        })
-        .finally(() => {
-          if (gen === architectGenRef.current) setArchitectBusy(false);
-        });
-    }, 1000);
-    return () => window.clearTimeout(handle);
-  }, [historyStep, model, ready, aiAdapter, modeler]);
+    if (!model || !ready) return;
+    const yaml = modeler.peekYAML();
+    if (onDocumentChangeRef.current && dirty) onDocumentChangeRef.current(yaml);
+    for (const listener of documentListenersRef.current) listener(yaml);
+  }, [historyStep, model, dirty, ready, modeler]);
 
   const loadedYamlRef = useRef<string | null>(null);
   useEffect(() => {
@@ -603,6 +532,16 @@ export default function BoardApp({
     loadedYamlRef.current = initialYaml;
     void loadYamlText(initialYaml);
   }, [ready, initialYaml, loadYamlText]);
+
+  const appliedYamlNonceRef = useRef(0);
+  useEffect(() => {
+    if (!ready || !applyYaml?.trim()) return;
+    if (applyYamlNonce === appliedYamlNonceRef.current) return;
+    appliedYamlNonceRef.current = applyYamlNonce;
+    void loadYamlText(applyYaml).then(() => {
+      toast.success("SCAN updated from harness");
+    });
+  }, [ready, applyYaml, applyYamlNonce, loadYamlText]);
 
   useEffect(() => {
     if (!warnOnUnload) return;
@@ -629,33 +568,21 @@ export default function BoardApp({
   }, []);
 
   const displayNodes = useMemo(() => {
+    if (architectureWarningsProp === undefined) return nodes;
     const msgById = new Map(
-      architectWarnings.map((w) => [w.elementId, w.message] as const),
+      architectureWarningsProp.map((w) => [w.id, w.message] as const),
     );
-    // Sphere: architect owns warn badges — don't show baked YAML status until live results.
-    if (aiAdapter?.architect) {
-      return nodes.map((n) => {
-        const msg = msgById.get(n.id);
-        if (msg) {
-          return { ...n, status: "warn" as const, warn: msg };
-        }
-        if (n.status === "warn" || n.warn) {
-          return { ...n, status: undefined, warn: undefined };
-        }
-        return n;
-      });
-    }
-    if (msgById.size === 0) return nodes;
     return nodes.map((n) => {
       const msg = msgById.get(n.id);
-      if (!msg) return n;
-      return {
-        ...n,
-        status: "warn" as const,
-        warn: n.warn?.trim() ? n.warn : msg,
-      };
+      if (msg) {
+        return { ...n, status: "warn" as const, warn: msg };
+      }
+      if (n.status === "warn" || n.warn) {
+        return { ...n, status: undefined, warn: undefined };
+      }
+      return n;
     });
-  }, [nodes, architectWarnings, aiAdapter?.architect]);
+  }, [nodes, architectureWarningsProp]);
 
   const nodeById = useMemo(
     () => Object.fromEntries(displayNodes.map((n) => [n.id, n])),
@@ -663,20 +590,7 @@ export default function BoardApp({
   );
 
   const architectureWarnings = useMemo((): ArchitectureWarning[] => {
-    // With Enterprise Architect, toast waits for live analysis — ignore baked YAML mocks.
-    if (aiAdapter?.architect) {
-      const byId = new Map<string, ArchitectureWarning>();
-      for (const w of architectWarnings) {
-        const n = nodeById[w.elementId] ?? nodes.find((x) => x.id === w.elementId);
-        if (!n) continue;
-        byId.set(w.elementId, {
-          id: w.elementId,
-          title: n.title,
-          message: w.message,
-        });
-      }
-      return [...byId.values()];
-    }
+    if (architectureWarningsProp !== undefined) return architectureWarningsProp;
     const byId = new Map<string, ArchitectureWarning>();
     for (const n of displayNodes) {
       if (n.status === "warn" || n.warn) {
@@ -688,7 +602,7 @@ export default function BoardApp({
       }
     }
     return [...byId.values()];
-  }, [aiAdapter?.architect, architectWarnings, displayNodes, nodeById, nodes]);
+  }, [architectureWarningsProp, displayNodes]);
 
   const selectedNodeIds = useMemo(() => {
     const ids = new Set(selectedExtras);
@@ -703,6 +617,40 @@ export default function BoardApp({
   }, [selectedBoundary, selectedBoundaryExtras]);
 
   const selectionCount = selectedNodeIds.length + selectedBoundaryIds.length;
+
+  useEffect(() => {
+    const next: BoardSelection = {
+      nodeIds: selectedNodeIds,
+      edgeId: selectedEdge,
+      boundaryId: selectedBoundary,
+    };
+    selectionRef.current = next;
+    for (const listener of selectionListenersRef.current) listener(next);
+  }, [selectedNodeIds, selectedEdge, selectedBoundary]);
+
+  useEffect(() => {
+    if (!ready || onBoardReadyCalledRef.current) return;
+    onBoardReadyCalledRef.current = true;
+    const api: BoardHostApi = {
+      peekYaml: () => modeler.peekYAML(),
+      loadYaml: (yaml) => loadYamlText(yaml),
+      getSelection: () => selectionRef.current,
+      subscribeSelection: (listener) => {
+        selectionListenersRef.current.add(listener);
+        listener(selectionRef.current);
+        return () => {
+          selectionListenersRef.current.delete(listener);
+        };
+      },
+      subscribeDocument: (listener) => {
+        documentListenersRef.current.add(listener);
+        return () => {
+          documentListenersRef.current.delete(listener);
+        };
+      },
+    };
+    onBoardReady?.(api);
+  }, [ready, onBoardReady, modeler, loadYamlText]);
 
   const focusIds = useMemo(() => {
     if (!focusMode) return null;
@@ -1437,41 +1385,7 @@ export default function BoardApp({
     applyViewport(nextZoom, nextPan);
   }, [applyViewport, board.modeler]);
 
-  const runAutoLayout = useCallback(async () => {
-    if (aiAdapter?.layout) {
-      setAiBusy(true);
-      const startedAt = performance.now();
-      try {
-        const yaml = modeler.peekYAML();
-        const result = await aiAdapter.layout({ yaml });
-        if (!result.yaml?.trim()) {
-          toast.error("Layout agent returned no YAML");
-          return;
-        }
-        const durationSec = Math.round((performance.now() - startedAt) / 100) / 10;
-        setPendingAi({
-          title: "Sphere layout proposal",
-          reply: result.reply || "Repositioned diagram elements for readability.",
-          yaml: result.yaml,
-          baseYaml: yaml,
-          durationSec,
-        });
-        setAiMenuOpen(false);
-        setPreview(true);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : "Layout agent failed";
-        toast.error("Auto-layout failed", {
-          description: message.slice(0, 200),
-          action: {
-            label: "Copy error",
-            onClick: () => void navigator.clipboard.writeText(message),
-          },
-        });
-      } finally {
-        setAiBusy(false);
-      }
-      return;
-    }
+  const runAutoLayout = useCallback(() => {
     try {
       autoLayout();
       requestAnimationFrame(() => fitContent());
@@ -1482,435 +1396,7 @@ export default function BoardApp({
       const message = err instanceof Error ? err.message : "Layout failed";
       toast.error("Auto-layout failed", { description: message });
     }
-  }, [aiAdapter, autoLayout, fitContent, modeler]);
-
-  const attachAiFiles = useCallback(async (files: FileList | null) => {
-    if (!files?.length) return;
-    const selected = Array.from(files);
-    const unsupported = selected.filter((file) => !isAiAttachmentFile(file));
-    if (unsupported.length) {
-      toast.error("Unsupported attachment type", {
-        description: "Supported: .txt, .md, .jpg, .jpeg, .png",
-      });
-    }
-    const accepted = selected.filter(isAiAttachmentFile).slice(0, 6);
-    if (!accepted.length) return;
-    const nextAttachments: BoardAiAttachment[] = [];
-    for (const file of accepted) {
-      const textLike =
-        file.type === "text/plain" || file.type === "text/markdown" || /\.(txt|md)$/i.test(file.name);
-      const imageLike =
-        file.type === "image/png" || file.type === "image/jpeg" || /\.(png|jpe?g)$/i.test(file.name);
-      if (!textLike && !imageLike) continue;
-      if (textLike) {
-        const text = (await readFileAsText(file)).slice(0, 40000);
-        nextAttachments.push({
-          name: file.name,
-          mimeType: file.type || (file.name.toLowerCase().endsWith(".md") ? "text/markdown" : "text/plain"),
-          kind: "text",
-          content: text,
-        });
-        continue;
-      }
-      const dataUrl = await readFileAsDataUrl(file);
-      const base64 = dataUrl.includes(",") ? dataUrl.slice(dataUrl.indexOf(",") + 1) : "";
-      if (!base64) continue;
-      nextAttachments.push({
-        name: file.name,
-        mimeType: file.type || "image/png",
-        kind: "image",
-        content: base64,
-      });
-    }
-    if (!nextAttachments.length) return;
-    setAiAttachments((prev) => {
-      const merged = [...prev];
-      for (const attachment of nextAttachments) {
-        const already = merged.some((item) => item.name === attachment.name && item.content === attachment.content);
-        if (!already) merged.push(attachment);
-      }
-      return merged.slice(0, 6);
-    });
-  }, []);
-
-  const removeAiAttachment = useCallback((name: string) => {
-    setAiAttachments((prev) => prev.filter((item) => item.name !== name));
-  }, []);
-
-  const submitAiChat = useCallback(async (overrideMessage?: string) => {
-    const message = (overrideMessage ?? prompt).trim();
-    // Voice auto-submit passes overrideMessage while sttBusy/recording may still
-    // be true in this closure — only gate those for manual Send.
-    if (!message || aiBusy) return;
-    if (overrideMessage === undefined && (sttBusy || recording)) return;
-    setAiRecentPrompts((prev) => rememberRecentPrompt(prev, message));
-    if (!aiAdapter?.chat) {
-      setPendingAi({
-        title: previewChanges.title,
-        reply: "Mock preview (no AI adapter). Wire Sphere agents to apply real changes.",
-        yaml: null,
-        baseYaml: modeler.peekYAML(),
-      });
-      setPreview(true);
-      return;
-    }
-    setAiBusy(true);
-    const startedAt = performance.now();
-    try {
-      const yaml = modeler.peekYAML();
-      const selection = selected ? [selected] : undefined;
-      const result = await aiAdapter.chat({
-        message,
-        yaml,
-        selection,
-        sessionId: aiSessionId,
-        attachments: aiAttachments,
-      });
-      if (result.sessionId) setAiSessionId(result.sessionId);
-      // Stick to the latest turn's chips until the next user prompt.
-      if (result.suggestions?.length) setAiSuggestions(result.suggestions);
-      const incomplete =
-        !result.yaml &&
-        /truncated|incomplete stub|incomplete SCAN|starting point|Regenerate/i.test(
-          result.reply || "",
-        );
-      const durationSec =
-        typeof result.durationSec === "number" && Number.isFinite(result.durationSec)
-          ? result.durationSec
-          : Math.round((performance.now() - startedAt) / 100) / 10;
-      setPendingAi({
-        title: result.yaml
-          ? "Sphere proposes diagram changes"
-          : incomplete
-            ? "Incomplete agent response"
-            : "Sphere reply",
-        reply: result.reply || "Done.",
-        yaml: result.yaml ?? null,
-        baseYaml: yaml,
-        userMessage: message,
-        attachments: [...aiAttachments],
-        incomplete,
-        durationSec,
-      });
-      // Keep attachments when incomplete so Regenerate can resend the image.
-      if (!incomplete) setAiAttachments([]);
-      setPrompt("");
-      setAiMenuOpen(false);
-      setPreview(true);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Agent request failed";
-      toast.error("Sphere AI failed", {
-        description: msg.slice(0, 200),
-        action: {
-          label: "Copy error",
-          onClick: () => void navigator.clipboard.writeText(msg),
-        },
-      });
-    } finally {
-      setAiBusy(false);
-    }
-  }, [aiAdapter, aiAttachments, aiBusy, aiSessionId, modeler, prompt, recording, selected, sttBusy]);
-
-  submitAiChatRef.current = submitAiChat;
-
-  const askSphereAbout = useCallback((message: string) => {
-    setPrompt(message);
-    void submitAiChatRef.current(message);
-  }, []);
-
-  // Clear stale chips when selection changes (do not auto-fetch).
-  useEffect(() => {
-    setNodeAskChips([]);
-    setNodeAskLoading(false);
-    setNodeAskForId(null);
-    nodeAskGenRef.current += 1;
-  }, [selected]);
-
-  const loadNodeAskSuggestions = useCallback(() => {
-    if (!isSphere || !selected || !model) return;
-    const title = nodeById[selected]?.title ?? selected;
-    const gen = ++nodeAskGenRef.current;
-    setNodeAskLoading(true);
-    setNodeAskForId(selected);
-    setNodeAskChips([]);
-
-    const finish = (chips: string[]) => {
-      if (gen !== nodeAskGenRef.current) return;
-      setNodeAskChips(chips);
-      setNodeAskLoading(false);
-    };
-
-    if (!aiAdapter?.suggest) {
-      finish([...DEFAULT_ASK_SPHERE_CHIPS]);
-      return;
-    }
-
-    const yaml = modeler.peekYAML();
-    void aiAdapter
-      .suggest({
-        message: `Suggest next diagram actions for component "${title}" (id: ${selected})`,
-        yaml,
-        selection: [selected],
-      })
-      .then((chips) => {
-        finish(chips?.length ? chips.slice(0, 6) : [...DEFAULT_ASK_SPHERE_CHIPS]);
-      })
-      .catch(() => {
-        finish([...DEFAULT_ASK_SPHERE_CHIPS]);
-      });
-  }, [isSphere, selected, model, nodeById, aiAdapter, modeler]);
-
-  const stopVoiceCapture = useCallback(() => {
-    if (voiceMaxTimerRef.current) {
-      clearTimeout(voiceMaxTimerRef.current);
-      voiceMaxTimerRef.current = null;
-    }
-    const stream = mediaStreamRef.current;
-    mediaStreamRef.current = null;
-    stream?.getTracks().forEach((t) => t.stop());
-    mediaRecorderRef.current = null;
-    setRecording(false);
-  }, []);
-
-  const handleVoiceBlob = useCallback(
-    async (blob: Blob, mimeType: string) => {
-      const transcribe = aiAdapter?.transcribeAudio;
-      if (!transcribe) return;
-      if (blob.size <= 0) {
-        toast.error("Empty recording", { description: "Hold the mic a bit longer and try again." });
-        return;
-      }
-      if (blob.size > MAX_VOICE_BYTES) {
-        toast.error("Recording too large", {
-          description: `Keep clips under ${Math.round(MAX_VOICE_BYTES / (1024 * 1024))} MB.`,
-        });
-        return;
-      }
-      setSttBusy(true);
-      try {
-        const text = await transcribe({ blob, mimeType: mimeType || blob.type || "audio/webm" });
-        const trimmed = text.trim();
-        if (!trimmed) {
-          toast.error("Couldn't hear anything", {
-            description: "Try again closer to the microphone.",
-          });
-          return;
-        }
-        // Show transcript in the input for context, then kick off the agent.
-        setPrompt(trimmed);
-        setSttBusy(false);
-        await submitAiChatRef.current(trimmed);
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : "Transcription failed";
-        toast.error("Voice input failed", {
-          description: msg.slice(0, 200),
-          action: {
-            label: "Copy error",
-            onClick: () => void navigator.clipboard.writeText(msg),
-          },
-        });
-      } finally {
-        setSttBusy(false);
-      }
-    },
-    [aiAdapter],
-  );
-
-  const toggleVoiceInput = useCallback(async () => {
-    if (!aiAdapter?.transcribeAudio || aiBusy || sttBusy) return;
-
-    const active = mediaRecorderRef.current;
-    if (active && active.state !== "inactive") {
-      active.stop();
-      return;
-    }
-
-    if (typeof MediaRecorder === "undefined" || !navigator.mediaDevices?.getUserMedia) {
-      toast.error("Microphone not supported in this browser");
-      return;
-    }
-
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      mediaStreamRef.current = stream;
-      voiceChunksRef.current = [];
-
-      const preferred = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"];
-      const mimeType = preferred.find((t) => MediaRecorder.isTypeSupported(t)) ?? "";
-      const recorder = mimeType
-        ? new MediaRecorder(stream, { mimeType })
-        : new MediaRecorder(stream);
-      mediaRecorderRef.current = recorder;
-
-      recorder.ondataavailable = (ev) => {
-        if (ev.data.size > 0) voiceChunksRef.current.push(ev.data);
-      };
-      recorder.onerror = () => {
-        stopVoiceCapture();
-        toast.error("Recording failed");
-      };
-      recorder.onstop = () => {
-        const type = recorder.mimeType || mimeType || "audio/webm";
-        const blob = new Blob(voiceChunksRef.current, { type });
-        voiceChunksRef.current = [];
-        stopVoiceCapture();
-        void handleVoiceBlob(blob, type);
-      };
-
-      recorder.start();
-      setRecording(true);
-      voiceMaxTimerRef.current = setTimeout(() => {
-        if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
-          mediaRecorderRef.current.stop();
-        }
-      }, MAX_VOICE_MS);
-    } catch (err) {
-      stopVoiceCapture();
-      const msg = err instanceof Error ? err.message : "Microphone permission denied";
-      toast.error("Microphone unavailable", { description: msg.slice(0, 160) });
-    }
-  }, [aiAdapter, aiBusy, handleVoiceBlob, stopVoiceCapture, sttBusy]);
-
-  useEffect(() => {
-    return () => {
-      if (voiceMaxTimerRef.current) clearTimeout(voiceMaxTimerRef.current);
-      const recorder = mediaRecorderRef.current;
-      if (recorder) {
-        recorder.ondataavailable = null;
-        recorder.onerror = null;
-        recorder.onstop = null;
-        if (recorder.state !== "inactive") {
-          try {
-            recorder.stop();
-          } catch {
-            /* ignore */
-          }
-        }
-      }
-      mediaStreamRef.current?.getTracks().forEach((t) => t.stop());
-      mediaRecorderRef.current = null;
-      mediaStreamRef.current = null;
-    };
-  }, []);
-
-  const applyPendingAi = useCallback(async () => {
-    const yaml = pendingAi?.yaml;
-    if (!yaml?.trim()) {
-      setPreview(false);
-      setPendingAi(null);
-      setAiMenuOpen(false);
-      return;
-    }
-    try {
-      // Fail fast with the same checks as the diagram preview.
-      parseScanYaml(yaml);
-      await loadYamlText(yaml);
-      requestAnimationFrame(() => fitContent());
-      setPreview(false);
-      setPendingAi(null);
-      setPrompt("");
-      setAiMenuOpen(false);
-      toast.success("Applied Sphere changes");
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Could not load YAML";
-      toast.error("Apply failed", {
-        description: message,
-        action: {
-          label: "Copy error",
-          onClick: () => void navigator.clipboard.writeText(message),
-        },
-      });
-    }
-  }, [fitContent, loadYamlText, pendingAi]);
-
-  const regenerateAiFix = useCallback(
-    async (validationError: string) => {
-      if (aiBusy) return;
-      if (!aiAdapter?.chat) {
-        toast.error("AI adapter unavailable");
-        return;
-      }
-      const baseYaml = pendingAi?.baseYaml ?? modeler.peekYAML();
-      const brokenYaml = pendingAi?.yaml?.trim() ?? "";
-      const prior = (pendingAi?.userMessage ?? "").trim();
-      const attachments = pendingAi?.attachments?.length
-        ? pendingAi.attachments
-        : aiAttachments;
-      const message = brokenYaml
-        ? [
-            "The SCAN YAML you proposed failed validation and cannot be previewed or applied.",
-            `Validation errors: ${validationError}`,
-            "",
-            "Return a corrected **complete** document. Prefer JSON with `yaml: null` plus a separate ```yaml fence.",
-            "Fix schema issues; preserve intended architecture and ids when possible.",
-            "Every component/external_system/channel/agent/repository needs a string `name`.",
-            "",
-            "Invalid YAML to fix:",
-            "```yaml",
-            brokenYaml.slice(0, 14000),
-            "```",
-          ].join("\n")
-        : [
-            "Your previous response was incomplete or truncated. Return the **full** SCAN diagram now.",
-            prior ? `Original user request:\n${prior}` : "",
-            validationError ? `Context: ${validationError}` : "",
-            "Prefer JSON metadata (`yaml: null`) plus a separate ```yaml fence with the complete document.",
-            "Include all boundaries, components, and main connections from any attached image. No stubs.",
-          ]
-            .filter(Boolean)
-            .join("\n\n");
-
-      setAiBusy(true);
-      const startedAt = performance.now();
-      try {
-        const result = await aiAdapter.chat({
-          message,
-          yaml: baseYaml,
-          sessionId: aiSessionId,
-          attachments,
-        });
-        if (result.sessionId) setAiSessionId(result.sessionId);
-        if (result.suggestions?.length) setAiSuggestions(result.suggestions);
-        const incomplete =
-          !result.yaml &&
-          /truncated|incomplete stub|incomplete SCAN|starting point|Regenerate/i.test(
-            result.reply || "",
-          );
-        const durationSec =
-          typeof result.durationSec === "number" && Number.isFinite(result.durationSec)
-            ? result.durationSec
-            : Math.round((performance.now() - startedAt) / 100) / 10;
-        setPendingAi({
-          title: result.yaml
-            ? "Sphere proposes diagram changes"
-            : incomplete
-              ? "Incomplete agent response"
-              : "Sphere reply",
-          reply: result.reply || "Regenerated.",
-          yaml: result.yaml ?? null,
-          baseYaml,
-          userMessage: prior || pendingAi?.userMessage,
-          attachments,
-          incomplete,
-          durationSec,
-        });
-        if (!incomplete) setAiAttachments([]);
-        setPreview(true);
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : "Agent request failed";
-        toast.error("Regenerate failed", {
-          description: msg.slice(0, 200),
-          action: {
-            label: "Copy error",
-            onClick: () => void navigator.clipboard.writeText(msg),
-          },
-        });
-      } finally {
-        setAiBusy(false);
-      }
-    },
-    [aiAdapter, aiAttachments, aiBusy, aiSessionId, modeler, pendingAi],
-  );
+  }, [autoLayout, fitContent]);
 
   const zoomIn = () => zoomAt(zoomRef.current + 0.15, lastPointerOnCanvas.current);
   const zoomOut = () => zoomAt(zoomRef.current - 0.15, lastPointerOnCanvas.current);
@@ -1967,8 +1453,8 @@ export default function BoardApp({
     >
       {/* TOP BAR */}
       <TopBar
-        shell={shell}
         systemName={systemName}
+        topBarBrand={topBarBrand}
         topBarBeforeTitle={topBarBeforeTitle}
         topBarAfterStatus={topBarAfterStatus}
         topBarAfterBrand={topBarAfterBrand}
@@ -1979,7 +1465,6 @@ export default function BoardApp({
         onRedo={redo}
         onNewBoard={() => handleNewBoard()}
         onRenameDiagram={() => setDiagramNameModal({ value: systemName })}
-        onPalette={() => setPalette(true)}
         onDownloadYaml={() => void saveYaml()}
         onImportYaml={() => fileInputRef.current?.click()}
         onExportSvg={() => {
@@ -2015,30 +1500,13 @@ export default function BoardApp({
         }}
       />
 
-      {isSphere && (
-        <AIBar
-          prompt={prompt}
-          setPrompt={setPrompt}
-          busy={aiBusy || sttBusy}
-          recording={recording}
-          voiceEnabled={Boolean(aiAdapter?.transcribeAudio)}
-          suggestions={aiSuggestions}
-          recent={aiRecentPrompts}
-          attachments={aiAttachments}
-          menuOpen={aiMenuOpen}
-          onMenuOpenChange={setAiMenuOpen}
-          onSubmit={() => void submitAiChat()}
-          onToggleVoice={() => void toggleVoiceInput()}
-          onAttachFiles={(files) => void attachAiFiles(files)}
-          onRemoveAttachment={removeAiAttachment}
-        />
-      )}
+      {renderBottomChrome?.()}
 
       {/* VIEW TABS - shared SCAN board chrome */}
       <ViewTabs
         view={view}
         setView={setView}
-        onAutoLayout={() => void runAutoLayout()}
+        onAutoLayout={() => runAutoLayout()}
         focusMode={focusMode}
         onToggleFocusMode={() => setFocusMode((v) => !v)}
         nodes={displayNodes}
@@ -2493,27 +1961,17 @@ export default function BoardApp({
                 }}
               />
             ))}
-            {isSphere &&
-              aiAdapter?.chat &&
-              selected &&
+            {selected &&
               selNode &&
               tool === "select" &&
-              selectedNodeIds.length === 1 && (
-                <NodeAskSphere
-                  x={selNode.x}
-                  y={selNode.y}
-                  w={selNode.w}
-                  chips={nodeAskForId === selected ? nodeAskChips : []}
-                  loading={nodeAskLoading && nodeAskForId === selected}
-                  chatBusy={aiBusy}
-                  onRequestSuggestions={loadNodeAskSuggestions}
-                  onPick={(chip) =>
-                    askSphereAbout(
-                      `For component "${selNode.title}" (id: ${selNode.id}): ${chip}`,
-                    )
-                  }
-                />
-              )}
+              selectedNodeIds.length === 1 &&
+              renderNodeOverlay?.({
+                node: selNode,
+                x: selNode.x,
+                y: selNode.y,
+                w: selNode.w,
+                h: selNode.h,
+              })}
             {/* Fast design rubber-band preview */}
             {fastDraft && (() => {
               const r = normalizeDraftRect(fastDraft);
@@ -2716,36 +2174,24 @@ export default function BoardApp({
         {/* VALIDATION TOAST */}
         <ValidationToast
           warnings={architectureWarnings}
-          productAi={isSphere}
-          validating={aiBusy || architectBusy}
+          validating={architectureValidating}
+          renderAction={renderValidationAction}
           onSelect={(w) => {
             setSelected(w.id);
             setSelectedEdge(null);
             setSelectedBoundary(null);
-          }}
-          onAskFix={(w) => {
-            setSelected(w.id);
-            setSelectedEdge(null);
-            setSelectedBoundary(null);
-            askSphereAbout(
-              `Fix architecture warning on "${w.title}" (id: ${w.id}): ${w.message}`,
-            );
           }}
         />
 
         {/* INSPECTOR */}
         {(selNode || selEdge || selBoundary) && (
           <Inspector
-            shell={shell}
             node={selNode ?? null}
             edge={selEdge ?? null}
             group={selBoundary}
             nodes={displayNodes}
             edges={edges}
-            onAskSphere={isSphere ? askSphereAbout : undefined}
-            askChips={nodeAskForId === selected ? nodeAskChips : []}
-            askLoading={nodeAskLoading && nodeAskForId === selected}
-            onRequestAskSuggestions={isSphere ? loadNodeAskSuggestions : undefined}
+            renderInspectorExtras={renderInspectorExtras}
             onClose={() => {
               setSelected(null);
               setSelectedEdge(null);
@@ -3128,55 +2574,6 @@ export default function BoardApp({
           />
         </Modal>
 
-        {/* PREVIEW DRAWER / COMMAND PALETTE - Sphere product chrome */}
-        {isSphere && preview && (
-          <PreviewDrawer
-            title={pendingAi?.title ?? previewChanges.title}
-            reply={pendingAi?.reply ?? ""}
-            yaml={pendingAi?.yaml ?? null}
-            baseYaml={pendingAi?.baseYaml ?? null}
-            hasYaml={Boolean(pendingAi?.yaml)}
-            incomplete={Boolean(pendingAi?.incomplete)}
-            durationSec={pendingAi?.durationSec}
-            busy={aiBusy}
-            onCancel={() => {
-              if (aiBusy) return;
-              setPreview(false);
-              setPendingAi(null);
-              setAiMenuOpen(false);
-            }}
-            onApply={() => void applyPendingAi()}
-            onRegenerate={(error) => void regenerateAiFix(error)}
-          />
-        )}
-        {isSphere && palette && (
-          <CommandPalette
-            onClose={() => setPalette(false)}
-            onCreateComponent={(kind) => {
-              try {
-                const worldCenter = {
-                  x: (canvasSize.w / 2 - panRef.current.x) / zoomRef.current,
-                  y: (canvasSize.h / 2 - panRef.current.y) / zoomRef.current,
-                };
-                const id = createElement(
-                  kind,
-                  Math.round(worldCenter.x / 4) * 4,
-                  Math.round(worldCenter.y / 4) * 4,
-                );
-                setSelected(id);
-                setSelectedEdge(null);
-                setSelectedBoundary(null);
-                setPalette(false);
-                toast.success(`${createKindHints[kind].label} added`, {
-                  description: "Placed at canvas center. Drag to reposition.",
-                });
-              } catch (err) {
-                const message = err instanceof Error ? err.message : "Could not add component";
-                toast.error("Create failed", { description: message });
-              }
-            }}
-          />
-        )}
       </div>
     </div>
     </TooltipProvider>

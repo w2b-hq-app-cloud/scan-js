@@ -1,6 +1,6 @@
 {
   "name": "@spherescan/board",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "SCAN interactive React board \u2014 shared canvas for the reference whiteboard and host apps",
   "type": "module",
   "license": "Apache-2.0",

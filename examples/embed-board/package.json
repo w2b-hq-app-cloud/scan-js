@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@spherescan/board": "0.3.0",
+    "@spherescan/board": "0.4.0",
     "@spherescan/model": "0.3.0",
     "@spherescan/modeler": "0.3.0",
     "@spherescan/rules": "0.3.0",
