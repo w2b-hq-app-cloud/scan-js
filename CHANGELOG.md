@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `@spherescan/modeler`: `mergeModels` — merges another SCAN document's elements/connections into a model, remapping any colliding ids and offsetting incoming layout so it doesn't overlap existing content. Exposed as `Modeling.mergeYAML` (single undoable step) and `ScanModeler.mergeYAML`.
+- `@spherescan/board`: `BoardAppProps.pendingMergeYaml` / `onMergeApplied` — host slot to merge YAML into the currently-open board (additive, one-shot, apply-once guard mirrors `initialYaml`). No board-side UI; hosts drive it entirely.
+- `@spherescan/modeler`: export `cloneModel` and `createId` from `modeling.ts` (previously private) for reuse by `merge.ts`.
+
 ### Changed
 
 - (none yet)

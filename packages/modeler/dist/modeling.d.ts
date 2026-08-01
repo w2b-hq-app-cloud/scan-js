@@ -1,8 +1,11 @@
-import type { ConnectionType, LayoutEntry, SphereModel, SphereConnection } from "@spherescan/model";
+import { type ConnectionType, type LayoutEntry, type SphereModel, type SphereConnection } from "@spherescan/model";
 import type { NodeKind } from "@spherescan/viewer";
 import { CommandStack } from "./command-stack.js";
 import { type AutoLayoutOptions } from "./auto-layout.js";
+import { type MergeOptions } from "./merge.js";
 export type CreateKind = "service" | "datastore" | "search" | "event-stream" | "external-system" | "agent" | "repository";
+export declare function cloneModel(model: SphereModel): SphereModel;
+export declare function createId(prefix: string): string;
 type BoundaryRect = {
     x: number;
     y: number;
@@ -121,6 +124,10 @@ export declare class Modeling {
         protocol?: string | null;
     }): void;
     deletePort(elementId: string, portId: string): void;
+    /** Merges another SCAN document's elements/connections into the current
+     *  model as a single undoable step (id collisions remapped, incoming
+     *  content offset to avoid overlapping existing nodes). */
+    mergeYAML(yaml: string, options?: MergeOptions): void;
 }
 export declare function nodeKindToCreateKind(kind: NodeKind): CreateKind | null;
 export {};

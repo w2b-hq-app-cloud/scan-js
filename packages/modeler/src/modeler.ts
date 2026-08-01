@@ -78,6 +78,11 @@ export class ScanModeler {
     await this.importYAML(await file.text());
   }
 
+  /** Merges another SCAN document into the current model (additive, undoable). */
+  mergeYAML(yaml: string): void {
+    this.modeling.mergeYAML(yaml);
+  }
+
   /**
    * Replace the board with a new empty SCAN model (clears undo history).
    * Marks the board dirty until the user saves/downloads YAML.

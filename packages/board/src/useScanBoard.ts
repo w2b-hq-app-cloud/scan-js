@@ -495,6 +495,13 @@ export function useScanBoard(options: UseScanBoardOptions | string = {}) {
     [modeler],
   );
 
+  const mergeYamlText = useCallback(
+    async (yaml: string) => {
+      await modeler.mergeYAML(yaml);
+    },
+    [modeler],
+  );
+
   const newBoard = useCallback(
     async (systemName?: string) => {
       yamlHandleRef.current = null;
@@ -549,6 +556,7 @@ export function useScanBoard(options: UseScanBoardOptions | string = {}) {
       exportSvg,
       exportPng,
       loadYamlText,
+      mergeYamlText,
       newBoard,
       modeler,
     }),
@@ -597,6 +605,7 @@ export function useScanBoard(options: UseScanBoardOptions | string = {}) {
       exportSvg,
       exportPng,
       loadYamlText,
+      mergeYamlText,
       newBoard,
       modeler,
     ],

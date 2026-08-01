@@ -43,6 +43,7 @@ export function TopBar({
   onRenameDiagram,
   onPalette,
   onDownloadYaml,
+  onDownloadCopy,
   onImportYaml,
   onExportSvg,
   onExportPng,
@@ -60,7 +61,10 @@ export function TopBar({
   onNewBoard: () => void;
   onRenameDiagram: () => void;
   onPalette: () => void;
+  /** Save — goes to the host (cloud / local-store) when persistence is configured, otherwise downloads. */
   onDownloadYaml: () => void;
+  /** Download copy — always writes a local .scan.yaml file, independent of host persistence. */
+  onDownloadCopy: () => void;
   onImportYaml: () => void;
   onExportSvg: () => void;
   onExportPng: () => void;
@@ -154,8 +158,12 @@ export function TopBar({
               </DropdownMenuItem>
               <DropdownMenuItem onSelect={onDownloadYaml}>
                 <Download className="h-4 w-4" />
-                Save YAML
+                Save
                 <span className="ml-auto text-[10px] text-muted-foreground">Ctrl+S</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={onDownloadCopy}>
+                <Download className="h-4 w-4" />
+                Download copy
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onSelect={onExportSvg}>

@@ -1,5 +1,6 @@
 export { CommandStack, type Command } from "./command-stack.js";
 export { Modeling, syncBoundaryMembership, type CreateKind, nodeKindToCreateKind, } from "./modeling.js";
 export { computeAutoLayout, type AutoLayoutOptions, } from "./auto-layout.js";
+export { mergeModels, type MergeOptions } from "./merge.js";
 export { ScanModeler, SphereModeler } from "./modeler.js";
 export { default } from "./modeler.js";
