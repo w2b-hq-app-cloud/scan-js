@@ -10,11 +10,11 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@spherescan/board": "0.2.0",
-    "@spherescan/model": "0.2.0",
-    "@spherescan/modeler": "0.2.0",
-    "@spherescan/rules": "0.2.0",
-    "@spherescan/viewer": "0.2.0",
+    "@spherescan/board": "0.3.0",
+    "@spherescan/model": "0.3.0",
+    "@spherescan/modeler": "0.3.0",
+    "@spherescan/rules": "0.3.0",
+    "@spherescan/viewer": "0.3.0",
     "lucide-react": "^0.575.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",

@@ -1,6 +1,6 @@
 {
   "name": "@spherescan/modeler",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "SCAN modeler - edit System & Component Architecture Notation with a command stack",
   "type": "module",
   "license": "Apache-2.0",
@@ -23,9 +23,9 @@
     "test": "npm run build && node --test dist/**/*.test.js"
   },
   "dependencies": {
-    "@spherescan/model": "0.2.0",
-    "@spherescan/rules": "0.2.0",
-    "@spherescan/viewer": "0.2.0"
+    "@spherescan/model": "0.3.0",
+    "@spherescan/rules": "0.3.0",
+    "@spherescan/viewer": "0.3.0"
   },
   "devDependencies": {
     "@types/node": "^22.16.5",
