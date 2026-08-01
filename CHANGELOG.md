@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- (none yet)
+
+## [0.3.2] - 2026-08-01
+
+### Changed
+
+- (none yet)
+
+## [0.3.1] - 2026-08-01
+
 ### Added
 
 - `@spherescan/modeler`: `mergeModels` — merges another SCAN document's elements/connections into a model, remapping any colliding ids and offsetting incoming layout so it doesn't overlap existing content. Exposed as `Modeling.mergeYAML` (single undoable step) and `ScanModeler.mergeYAML`.

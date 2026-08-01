@@ -65,7 +65,7 @@ npm publish -w @spherescan/cli --access public
 # optional:
 # npm publish -w @spherescan/board --access public
 
-git tag -a v0.3.0 -m "SCAN v0.3.0"
+git tag -a v0.3.2 -m "SCAN v0.3.2"
 git push origin main
-git push origin v0.3.0
+git push origin v0.3.2
 ```
