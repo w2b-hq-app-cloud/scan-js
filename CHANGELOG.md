@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `@spherescan/board`: Duplicate diagram control + `onSystemIdentityChange` so hosts can relocate workspaces on rename and treat duplicate as a fresh identity.
+- `@spherescan/modeler`: `renameSystem` keeps `system.id` slugified in sync with the display name.
+
 ### Changed
 
 - (none yet)
