@@ -1,3 +1,4 @@
+import { slugifyId } from "@spherescan/model";
 import { canConnect, suggestConnectionType } from "@spherescan/rules";
 import { computeAutoLayout } from "./auto-layout.js";
 function cloneModel(model) {
@@ -222,6 +223,9 @@ export class Modeling {
         const prev = cloneModel(this.getModel());
         const next = cloneModel(prev);
         next.system.name = trimmed;
+        // Keep system.id in sync with the display name (same as newBoard) so
+        // workspace paths / GitHub slugs follow a rename immediately.
+        next.system.id = slugifyId(trimmed);
         this.replace(next, prev, `Rename system to ${trimmed}`);
     }
     deleteElement(id) {

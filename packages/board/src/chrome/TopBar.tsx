@@ -5,6 +5,7 @@ import { type ReactNode } from "react";
 import {
   Check,
   Circle,
+  Copy,
   Download,
   FileCode2,
   FilePlus2,
@@ -36,6 +37,7 @@ export function TopBar({
   onRedo,
   onNewBoard,
   onRenameDiagram,
+  onDuplicateDiagram,
   onDownloadYaml,
   onImportYaml,
   onExportSvg,
@@ -53,6 +55,7 @@ export function TopBar({
   onRedo: () => void;
   onNewBoard: () => void;
   onRenameDiagram: () => void;
+  onDuplicateDiagram: () => void;
   onDownloadYaml: () => void;
   onImportYaml: () => void;
   onExportSvg: () => void;
@@ -83,6 +86,15 @@ export function TopBar({
             className="rounded-md px-2 py-1 font-medium text-foreground hover:bg-muted"
           >
             {systemName}
+          </button>
+          <button
+            type="button"
+            onClick={onDuplicateDiagram}
+            title="Duplicate diagram — same architecture under a new name"
+            className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[10px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            <Copy className="h-3 w-3" />
+            Duplicate
           </button>
           <span
             className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${

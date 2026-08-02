@@ -24,6 +24,14 @@ export type BoardHostApi = {
   subscribeDocument: (listener: (yaml: string) => void) => () => void;
 };
 
+/** System rename vs duplicate — hosts map this to workspace relocate vs fresh seed. */
+export type SystemIdentityChange = {
+  reason: "rename" | "duplicate";
+  fromSystemId: string | null;
+  toSystemId: string;
+  yaml: string;
+};
+
 export type BoardSelection = {
   nodeIds: string[];
   edgeId: string | null;
@@ -79,6 +87,11 @@ export type BoardAppProps = {
   onSaveDocument?: (yaml: string) => Promise<boolean>;
   /** Called after a model command changes the document, for host-driven autosave. */
   onDocumentChange?: (yaml: string) => void;
+  /**
+   * Fired when the system name/id changes via Rename or Duplicate.
+   * Hosts with per-system workspaces should relocate on rename and seed fresh on duplicate.
+   */
+  onSystemIdentityChange?: (change: SystemIdentityChange) => void;
   /** YAML supplied by a host to replace the built-in sample document. */
   initialYaml?: string | null;
   /**

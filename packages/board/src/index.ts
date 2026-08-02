@@ -13,6 +13,7 @@ export type {
   BoardNodeOverlayContext,
   BoardInspectorExtrasContext,
   ArchitectureWarning,
+  SystemIdentityChange,
 } from "./board-types";
 export { Modal, type ModalAction, type ModalTone } from "./Modal";
 export { kindMeta } from "./kinds";

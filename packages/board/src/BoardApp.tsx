@@ -39,6 +39,11 @@ import {
   estimateEdgeLabelSize,
 } from "@spherescan/viewer";
 import type { CreateKind } from "@spherescan/modeler";
+import {
+  parseScanYaml,
+  serializeSphereYaml,
+  slugifyId,
+} from "@spherescan/model";
 import { toast } from "sonner";
 import { Modal } from "./Modal";
 import { useScanBoard } from "./useScanBoard";
@@ -53,6 +58,7 @@ import type {
   BoardHostApi,
   BoardSelection,
   ArchitectureWarning,
+  SystemIdentityChange,
 } from "./board-types";
 import {
   FAST_CLICK_SLOP,
@@ -88,6 +94,7 @@ export type {
   BoardHostApi,
   BoardSelection,
   ArchitectureWarning,
+  SystemIdentityChange,
 } from "./board-types";
 
 export default function BoardApp({
@@ -100,6 +107,7 @@ export default function BoardApp({
   warnOnUnload = true,
   onSaveDocument,
   onDocumentChange,
+  onSystemIdentityChange,
   initialYaml,
   startEmpty = false,
   applyYaml = null,
@@ -217,6 +225,7 @@ export default function BoardApp({
   } | null>(null);
   const [deleteModal, setDeleteModal] = useState<{ nodeId: string } | null>(null);
   const [diagramNameModal, setDiagramNameModal] = useState<{ value: string } | null>(null);
+  const [duplicateModal, setDuplicateModal] = useState<{ value: string } | null>(null);
   const [newBoardModal, setNewBoardModal] = useState<"confirm" | "name" | null>(null);
   const [newBoardName, setNewBoardName] = useState("Untitled System");
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -518,6 +527,53 @@ export default function BoardApp({
   // callback each render; notifying listeners on identity churn caused update loops.
   const onDocumentChangeRef = useRef(onDocumentChange);
   onDocumentChangeRef.current = onDocumentChange;
+  const onSystemIdentityChangeRef = useRef(onSystemIdentityChange);
+  onSystemIdentityChangeRef.current = onSystemIdentityChange;
+
+  const emitSystemIdentityChange = useCallback((change: SystemIdentityChange) => {
+    onSystemIdentityChangeRef.current?.(change);
+  }, []);
+
+  const commitRenameDiagram = useCallback(
+    (name: string) => {
+      const fromSystemId = modeler.getModel()?.system.id ?? null;
+      renameSystem(name);
+      const yaml = modeler.peekYAML();
+      const toSystemId = modeler.getModel()?.system.id ?? "";
+      emitSystemIdentityChange({
+        reason: "rename",
+        fromSystemId,
+        toSystemId,
+        yaml,
+      });
+    },
+    [emitSystemIdentityChange, modeler, renameSystem],
+  );
+
+  const commitDuplicateDiagram = useCallback(
+    async (name: string) => {
+      const trimmed = name.trim();
+      if (!trimmed) throw new Error("System name cannot be empty");
+      const fromSystemId = modeler.getModel()?.system.id ?? null;
+      const model = parseScanYaml(modeler.peekYAML());
+      let toSystemId = slugifyId(trimmed);
+      if (fromSystemId && toSystemId === fromSystemId) {
+        toSystemId = `${toSystemId}-copy`;
+      }
+      model.system.name = trimmed;
+      model.system.id = toSystemId;
+      const yaml = serializeSphereYaml(model);
+      await loadYamlText(yaml);
+      emitSystemIdentityChange({
+        reason: "duplicate",
+        fromSystemId,
+        toSystemId,
+        yaml,
+      });
+    },
+    [emitSystemIdentityChange, loadYamlText, modeler],
+  );
+
   useEffect(() => {
     if (!model || !ready) return;
     const yaml = modeler.peekYAML();
@@ -1465,6 +1521,9 @@ export default function BoardApp({
         onRedo={redo}
         onNewBoard={() => handleNewBoard()}
         onRenameDiagram={() => setDiagramNameModal({ value: systemName })}
+        onDuplicateDiagram={() =>
+          setDuplicateModal({ value: `${systemName.replace(/\s+copy$/i, "").trim() || systemName} copy` })
+        }
         onDownloadYaml={() => void saveYaml()}
         onImportYaml={() => fileInputRef.current?.click()}
         onExportSvg={() => {
@@ -2477,7 +2536,7 @@ export default function BoardApp({
           open={!!diagramNameModal}
           onClose={() => setDiagramNameModal(null)}
           title="Diagram name"
-          description="This name is stored on the system and used for SCAN / SVG / PNG exports."
+          description="This name is stored on the system and used for SCAN / SVG / PNG exports. Renaming also updates system.id."
           tone="info"
           actions={[
             { label: "Cancel", variant: "ghost", onClick: () => setDiagramNameModal(null) },
@@ -2488,7 +2547,7 @@ export default function BoardApp({
               onClick: () => {
                 if (!diagramNameModal?.value.trim()) return;
                 try {
-                  renameSystem(diagramNameModal.value.trim());
+                  commitRenameDiagram(diagramNameModal.value.trim());
                   setDiagramNameModal(null);
                   toast.success("Diagram renamed");
                 } catch (err) {
@@ -2510,7 +2569,7 @@ export default function BoardApp({
             onKeyDown={(e) => {
               if (e.key === "Enter" && diagramNameModal?.value.trim()) {
                 try {
-                  renameSystem(diagramNameModal.value.trim());
+                  commitRenameDiagram(diagramNameModal.value.trim());
                   setDiagramNameModal(null);
                   toast.success("Diagram renamed");
                 } catch (err) {
@@ -2522,6 +2581,62 @@ export default function BoardApp({
             }}
             className="mt-1.5 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
             placeholder="e.g. Order Platform"
+          />
+        </Modal>
+
+        <Modal
+          open={!!duplicateModal}
+          onClose={() => setDuplicateModal(null)}
+          title="Duplicate diagram"
+          description="Copies this architecture under a new system name. Plans and builds on disk stay with the original."
+          tone="info"
+          actions={[
+            { label: "Cancel", variant: "ghost", onClick: () => setDuplicateModal(null) },
+            {
+              label: "Duplicate",
+              variant: "primary",
+              disabled: !duplicateModal?.value.trim(),
+              onClick: () => {
+                if (!duplicateModal?.value.trim()) return;
+                void (async () => {
+                  try {
+                    await commitDuplicateDiagram(duplicateModal.value.trim());
+                    setDuplicateModal(null);
+                    toast.success("Diagram duplicated");
+                  } catch (err) {
+                    toast.error("Could not duplicate", {
+                      description: err instanceof Error ? err.message : "Duplicate failed",
+                    });
+                  }
+                })();
+              },
+            },
+          ]}
+        >
+          <label className="block text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+            New name
+          </label>
+          <input
+            autoFocus
+            value={duplicateModal?.value ?? ""}
+            onChange={(e) => setDuplicateModal({ value: e.target.value })}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && duplicateModal?.value.trim()) {
+                void (async () => {
+                  try {
+                    await commitDuplicateDiagram(duplicateModal.value.trim());
+                    setDuplicateModal(null);
+                    toast.success("Diagram duplicated");
+                  } catch (err) {
+                    toast.error("Could not duplicate", {
+                      description: err instanceof Error ? err.message : "Duplicate failed",
+                    });
+                  }
+                })();
+              }
+            }}
+            className="mt-1.5 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+            placeholder="e.g. Order Platform copy"
           />
         </Modal>
 

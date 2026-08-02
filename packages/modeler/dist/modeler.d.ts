@@ -33,6 +33,15 @@ export declare class ScanModeler {
      * Marks the board dirty until the user saves/downloads YAML.
      */
     newBoard(systemName?: string): Promise<void>;
+    /**
+     * Clone the current board under a new system name/id (clears undo history).
+     * Hosts that keep per-system workspaces should treat this as a fresh tree
+     * (do not relocate the previous platform folder).
+     */
+    duplicateBoard(systemName: string): Promise<{
+        fromSystemId: string;
+        toSystemId: string;
+    }>;
     getModel(): SphereModel | null;
     getGraph(): BoardGraph | null;
     saveYAML(): string;

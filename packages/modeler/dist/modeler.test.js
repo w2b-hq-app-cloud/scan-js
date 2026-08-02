@@ -113,6 +113,32 @@ test("newBoard starts empty and dirty", async () => {
     assert.equal(modeler.isDirty(), true);
     assert.equal(modeler.commandStack.canUndo(), false);
 });
+test("renameSystem updates name and id", async () => {
+    const modeler = new SphereModeler({ viewId: "architecture-board" });
+    await modeler.importYAML(fixture);
+    assert.equal(modeler.getModel().system.id, "order-platform");
+    modeler.modeling.renameSystem("Payments Hub");
+    const model = modeler.getModel();
+    assert.equal(model.system.name, "Payments Hub");
+    assert.equal(model.system.id, "payments-hub");
+    modeler.undo();
+    assert.equal(modeler.getModel().system.id, "order-platform");
+    assert.equal(modeler.getModel().system.name, "Order Platform");
+});
+test("duplicateBoard clones under a new system id", async () => {
+    const modeler = new SphereModeler({ viewId: "architecture-board" });
+    await modeler.importYAML(fixture);
+    const beforeCount = modeler.getModel().components.length;
+    const result = await modeler.duplicateBoard("My Amazing Project");
+    assert.equal(result.fromSystemId, "order-platform");
+    assert.equal(result.toSystemId, "my-amazing-project");
+    const model = modeler.getModel();
+    assert.equal(model.system.name, "My Amazing Project");
+    assert.equal(model.system.id, "my-amazing-project");
+    assert.equal(model.components.length, beforeCount);
+    assert.equal(modeler.isDirty(), true);
+    assert.equal(modeler.commandStack.canUndo(), false);
+});
 test("updateConnection label/contract + undo", async () => {
     const modeler = new SphereModeler();
     await modeler.importYAML(fixture);
