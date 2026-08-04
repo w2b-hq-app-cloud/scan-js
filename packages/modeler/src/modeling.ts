@@ -203,6 +203,48 @@ export class Modeling {
     throw new Error(`Element not found: ${id}`);
   }
 
+  /** Set or clear free-text `description` on a diagram element. */
+  updateElementDescription(id: string, description: string | null) {
+    const prev = cloneModel(this.getModel());
+    const next = cloneModel(prev);
+    const trimmed = description?.trim() || null;
+    const apply = (el: { description?: string }) => {
+      if (!trimmed) delete el.description;
+      else el.description = trimmed;
+    };
+    const component = next.components.find((c) => c.id === id);
+    if (component) {
+      apply(component);
+      this.replace(next, prev, `Update description ${id}`);
+      return;
+    }
+    const channel = next.channels.find((c) => c.id === id);
+    if (channel) {
+      apply(channel);
+      this.replace(next, prev, `Update description ${id}`);
+      return;
+    }
+    const ext = next.external_systems.find((c) => c.id === id);
+    if (ext) {
+      apply(ext);
+      this.replace(next, prev, `Update description ${id}`);
+      return;
+    }
+    const agent = next.agents.find((c) => c.id === id);
+    if (agent) {
+      apply(agent);
+      this.replace(next, prev, `Update description ${id}`);
+      return;
+    }
+    const repo = next.repositories.find((c) => c.id === id);
+    if (repo) {
+      apply(repo);
+      this.replace(next, prev, `Update description ${id}`);
+      return;
+    }
+    throw new Error(`Element not found: ${id}`);
+  }
+
   renameSystem(name: string) {
     const trimmed = name.trim();
     if (!trimmed) throw new Error("System name cannot be empty");

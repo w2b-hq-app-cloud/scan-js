@@ -303,6 +303,29 @@ test("updateElementIcon + boundary icon + undo", async () => {
   );
 });
 
+test("updateElementDescription + undo", async () => {
+  const modeler = new SphereModeler({ viewId: "architecture-board" });
+  await modeler.importYAML(fixture);
+  modeler.modeling.updateElementDescription(
+    "order-api",
+    "Handles order intake and validation.",
+  );
+  assert.equal(
+    modeler.getModel()!.components.find((c) => c.id === "order-api")!.description,
+    "Handles order intake and validation.",
+  );
+  modeler.undo();
+  assert.equal(
+    modeler.getModel()!.components.find((c) => c.id === "order-api")!.description,
+    undefined,
+  );
+  modeler.modeling.updateElementDescription("order-api", "  ");
+  assert.equal(
+    modeler.getModel()!.components.find((c) => c.id === "order-api")!.description,
+    undefined,
+  );
+});
+
 test("port-to-port connect stores fromPort/toPort", async () => {
   const modeler = new SphereModeler();
   await modeler.importYAML(fixture);

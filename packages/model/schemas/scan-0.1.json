@@ -122,6 +122,10 @@
           "description": "Implementation stack; keep separate from type (role)."
         },
         "subtitle": { "type": "string" },
+        "description": {
+          "type": "string",
+          "description": "Free-text notes about the component (role, ownership, constraints)."
+        },
         "icon": { "$ref": "#/$defs/Icon" },
         "repository": { "$ref": "#/$defs/RepositoryRef" },
         "consumes": {
@@ -144,6 +148,10 @@
         "name": { "type": "string" },
         "type": { "type": "string", "const": "event-stream", "default": "event-stream" },
         "technology": { "type": "string" },
+        "description": {
+          "type": "string",
+          "description": "Free-text notes about the channel."
+        },
         "icon": { "$ref": "#/$defs/Icon" },
         "consumes": {
           "type": "array",
@@ -163,6 +171,10 @@
         "name": { "type": "string" },
         "type": { "type": "string", "const": "external-system" },
         "technology": { "type": "string" },
+        "description": {
+          "type": "string",
+          "description": "Free-text notes about the external system."
+        },
         "icon": { "$ref": "#/$defs/Icon" },
         "repository": { "$ref": "#/$defs/RepositoryRef" },
         "consumes": {
@@ -183,6 +195,10 @@
         "name": { "type": "string" },
         "purpose": { "type": "string" },
         "subtitle": { "type": "string" },
+        "description": {
+          "type": "string",
+          "description": "Free-text notes about the agent."
+        },
         "icon": { "$ref": "#/$defs/Icon" },
         "runtime": {
           "type": "string",
@@ -204,7 +220,11 @@
       "properties": {
         "id": { "type": "string" },
         "name": { "type": "string" },
-        "type": { "type": "string" }
+        "type": { "type": "string" },
+        "description": {
+          "type": "string",
+          "description": "Free-text notes about the agent runtime."
+        }
       }
     },
     "Repository": {
@@ -216,6 +236,10 @@
         "provider": { "type": "string" },
         "path": { "type": "string" },
         "subtitle": { "type": "string" },
+        "description": {
+          "type": "string",
+          "description": "Free-text notes about the repository."
+        },
         "icon": { "$ref": "#/$defs/Icon" },
         "consumes": {
           "type": "array",
