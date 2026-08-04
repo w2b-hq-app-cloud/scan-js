@@ -172,6 +172,70 @@ test("updateConnection operations + undo", async () => {
     const restored = modeler.getModel().connections.find((c) => c.id === "e2");
     assert.deepEqual(restored.operations, before);
 });
+test("metadata, repository, and links are undoable", async () => {
+    const modeler = new SphereModeler({ viewId: "architecture-board" });
+    await modeler.importYAML(fixture);
+    modeler.modeling.updateElementMeta("order-api", {
+        description: "Accepts orders",
+        notes: "Owned by checkout",
+        technology: "Spring Boot 4",
+        subtitle: "Orders",
+    });
+    modeler.modeling.setElementRepository("order-api", { provider: "github", path: "acme/orders" });
+    modeler.modeling.addElementLink("order-api", {
+        kind: "openapi",
+        href: "contracts/orders.openapi.yaml",
+        title: "Orders API",
+    });
+    const component = modeler.getModel().components.find((c) => c.id === "order-api");
+    assert.equal(component.description, "Accepts orders");
+    assert.deepEqual(component.repository, { provider: "github", path: "acme/orders" });
+    assert.equal(component.links?.[0]?.kind, "openapi");
+    modeler.modeling.updateElementLink("order-api", 0, { kind: "doc", href: "docs/orders" });
+    assert.equal(modeler.getModel().components.find((c) => c.id === "order-api").links?.[0]?.kind, "doc");
+    modeler.modeling.removeElementLink("order-api", 0);
+    assert.equal(modeler.getModel().components.find((c) => c.id === "order-api").links, undefined);
+    modeler.undo();
+    assert.equal(modeler.getModel().components.find((c) => c.id === "order-api").links?.[0]?.href, "docs/orders");
+});
+test("boundary layer order and connection routes are undoable", async () => {
+    const modeler = new SphereModeler({ viewId: "architecture-board" });
+    await modeler.importYAML(fixture);
+    const view = modeler.getModel().views[0];
+    const first = view.boundaries[0];
+    const second = modeler.modeling.createBoundary("runtime", { x: 0, y: 0, w: 200, h: 160 }, "Runtime");
+    modeler.modeling.sendBoundaryToBack(second);
+    assert.equal(modeler.getModel().views[0].boundaries[0]?.id, second);
+    modeler.modeling.bringBoundaryForward(second);
+    assert.equal(modeler.getModel().views[0].boundaries[1]?.id, second);
+    modeler.modeling.bringBoundaryToFront(first.id);
+    const afterFront = modeler.getModel().views[0].boundaries;
+    assert.equal(afterFront[afterFront.length - 1]?.id, first.id);
+    modeler.modeling.sendBoundaryBackward(first.id);
+    const afterBackward = modeler.getModel().views[0].boundaries;
+    assert.equal(afterBackward[afterBackward.length - 2]?.id, first.id);
+    modeler.modeling.updateConnectionRoute("e1", [{ x: 300, y: 200 }, { x: 300, y: 400 }]);
+    assert.deepEqual(modeler.getModel().views[0].routes?.e1?.waypoints, [
+        { x: 300, y: 200 },
+        { x: 300, y: 400 },
+    ]);
+    modeler.modeling.updateConnectionRoute("e1", null);
+    assert.equal(modeler.getModel().views[0].routes, undefined);
+    modeler.undo();
+    assert.equal(modeler.getModel().views[0].routes?.e1?.waypoints.length, 2);
+});
+test("stored routes clear on move and auto-layout", async () => {
+    const modeler = new SphereModeler({ viewId: "architecture-board" });
+    await modeler.importYAML(fixture);
+    modeler.modeling.updateConnectionRoute("e1", [{ x: 300, y: 200 }, { x: 300, y: 400 }]);
+    assert.ok(modeler.getModel().views[0].routes?.e1);
+    const layout = modeler.getModel().views[0].layout["order-api"];
+    modeler.modeling.moveElement("order-api", layout.x + 40, layout.y);
+    assert.equal(modeler.getModel().views[0].routes?.e1, undefined);
+    modeler.modeling.updateConnectionRoute("e1", [{ x: 310, y: 210 }]);
+    modeler.modeling.autoLayout();
+    assert.equal(modeler.getModel().views[0].routes, undefined);
+});
 test("resizeBoundary + membership sync on create inside", async () => {
     const modeler = new SphereModeler({ viewId: "architecture-board" });
     await modeler.importYAML(fixture);

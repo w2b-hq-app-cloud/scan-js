@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  clampOrthogonalRouteEnds,
   computeLabelStagger,
   edgeControls,
   edgePath,
@@ -8,9 +9,11 @@ import {
   pickEdgeSides,
   placeEdgeLabel,
   pointOnCubic,
+  resolveAnchorsFromWaypoints,
   resolveEdgeAnchors,
   resolveLabelOverlaps,
   routeOrthogonalEdges,
+  routeOrthogonalPolylines,
 } from "./edge-geometry.js";
 
 test("edgePath is a cubic bezier matching control points", () => {
@@ -208,4 +211,48 @@ test("resolveLabelOverlaps stacks overlapping chips with a gap", () => {
       `labels still overlap: (${p.x},${p.y}) vs (${q.x},${q.y})`,
     );
   }
+});
+
+test("waypoint routes keep orthogonal stubs by sliding attachments", () => {
+  const from = { x: 0, y: 0, w: 100, h: 100 };
+  const to = { x: 300, y: 0, w: 100, h: 100 };
+  // First interior point is below the default mid-side anchor (y=50).
+  const waypoints = [
+    { x: 200, y: 80 },
+    { x: 200, y: 20 },
+  ];
+  const resolved = resolveAnchorsFromWaypoints(from, to, waypoints, "r", "l");
+  assert.equal(resolved.fromSide, "r");
+  assert.equal(resolved.a.x, 100);
+  assert.equal(resolved.a.y, 80);
+  assert.equal(resolved.b.x, 300);
+  assert.equal(resolved.b.y, 20);
+
+  const paths = routeOrthogonalPolylines([
+    { id: "e1", from, to, waypoints, aSide: "r", bSide: "l" },
+  ]);
+  const pts = paths.get("e1")!;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const sameX = Math.abs(pts[i]!.x - pts[i + 1]!.x) < 0.5;
+    const sameY = Math.abs(pts[i]!.y - pts[i + 1]!.y) < 0.5;
+    assert.ok(sameX || sameY, `diagonal at segment ${i}`);
+  }
+});
+
+test("clampOrthogonalRouteEnds slides attachment with segment move", () => {
+  const from = { x: 0, y: 0, w: 100, h: 100 };
+  const to = { x: 300, y: 0, w: 100, h: 100 };
+  const points = [
+    { x: 100, y: 50 },
+    { x: 200, y: 50 },
+    { x: 200, y: 50 },
+    { x: 300, y: 50 },
+  ];
+  // Simulate dragging the first horizontal stub upward.
+  points[0] = { ...points[0]!, y: 20 };
+  points[1] = { ...points[1]!, y: 20 };
+  const clamped = clampOrthogonalRouteEnds(points, from, to, "r", "l");
+  assert.equal(clamped[0]!.x, 100);
+  assert.equal(clamped[0]!.y, 20);
+  assert.equal(clamped[1]!.y, 20);
 });

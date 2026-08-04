@@ -40,8 +40,16 @@ export class ScanModeler {
         await this.syncViewer();
         this.emit();
     }
+    /**
+     * Replace the board from a user-picked file. Marks dirty so hosts persist a
+     * draft / cloud save — unlike `importYAML` used for boot/load (clean).
+     */
     async importYAMLFile(file) {
-        await this.importYAML(await file.text());
+        this.model = parseSphereYaml(await file.text());
+        this.savedYaml = null;
+        this.commandStack.clear();
+        await this.syncViewer();
+        this.emit();
     }
     /**
      * Replace the board with a new empty SCAN model (clears undo history).

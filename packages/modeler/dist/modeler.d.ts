@@ -27,6 +27,10 @@ export declare class ScanModeler {
     private viewer;
     constructor(options?: ModelerOptions);
     importYAML(yaml: string): Promise<void>;
+    /**
+     * Replace the board from a user-picked file. Marks dirty so hosts persist a
+     * draft / cloud save — unlike `importYAML` used for boot/load (clean).
+     */
     importYAMLFile(file: File): Promise<void>;
     /**
      * Replace the board with a new empty SCAN model (clears undo history).

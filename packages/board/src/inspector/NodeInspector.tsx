@@ -1,15 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 WABLOO PARTNERS SRL
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import {
   AlertTriangle,
+  Anchor,
   ArrowLeft,
   ArrowRight,
   ChevronRight,
   ExternalLink,
   FileCode2,
-  Github,
+  Plus,
+  Trash2,
 } from "lucide-react";
 import type { SphereNode, SphereEdge } from "@spherescan/viewer";
 import { kindMeta } from "../kinds";
@@ -19,6 +21,252 @@ import { openExternal, edgeKindTitle } from "../board-style";
 import { EdgeIcon } from "../icons/EdgeIcon";
 import { Section } from "./Section";
 import { PortRow } from "./PortRow";
+
+function MetaPlus({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      title={label}
+      onClick={onClick}
+      className="grid h-6 w-6 place-items-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+    >
+      <Plus className="h-3.5 w-3.5" />
+    </button>
+  );
+}
+
+/** Section with + until a value exists; then a compact directly editable field. */
+function OptionalMetaSection({
+  title,
+  value,
+  placeholder,
+  multiline,
+  onCommit,
+  onOpen,
+  resetKey,
+}: {
+  title: string;
+  value: string;
+  placeholder: string;
+  multiline?: boolean;
+  onCommit: (next: string | null) => void;
+  /** When set, show an open icon on the field row (same row as the input). */
+  onOpen?: () => void;
+  /** Reset drafting when selection changes (e.g. node id). */
+  resetKey: string;
+}) {
+  const hasValue = Boolean(value.trim());
+  const [drafting, setDrafting] = useState(false);
+  const [draft, setDraft] = useState(value);
+  const inputRef = useRef<HTMLTextAreaElement | HTMLInputElement | null>(null);
+  const open = drafting || hasValue;
+
+  useEffect(() => {
+    setDrafting(false);
+    setDraft(value);
+  }, [resetKey]);
+
+  useEffect(() => {
+    setDraft(value);
+  }, [value]);
+
+  useEffect(() => {
+    if (drafting) inputRef.current?.focus();
+  }, [drafting]);
+
+  const commit = () => {
+    const next = draft.trim();
+    if (next === (value.trim() || "")) {
+      if (!next) setDrafting(false);
+      return;
+    }
+    onCommit(next || null);
+    if (!next) setDrafting(false);
+  };
+
+  const clear = () => {
+    setDraft("");
+    setDrafting(false);
+    if (hasValue) onCommit(null);
+  };
+
+  const fieldClass =
+    "min-w-0 flex-1 bg-transparent text-xs outline-none placeholder:text-muted-foreground/50";
+
+  return (
+    <Section
+      title={title}
+      action={
+        !open ? <MetaPlus label={`Add ${title.toLowerCase()}`} onClick={() => setDrafting(true)} /> : undefined
+      }
+    >
+      {open ? (
+        <div className="flex items-center gap-1.5 rounded-md border border-border bg-background px-2 py-1.5">
+          {multiline ? (
+            <textarea
+              ref={(el) => {
+                inputRef.current = el;
+              }}
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onBlur={commit}
+              rows={2}
+              placeholder={placeholder}
+              className={`${fieldClass} resize-none`}
+              aria-label={placeholder}
+            />
+          ) : (
+            <input
+              ref={(el) => {
+                inputRef.current = el;
+              }}
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onBlur={commit}
+              onKeyDown={(e: KeyboardEvent<HTMLInputElement>) => {
+                if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                if (e.key === "Escape") {
+                  setDraft(value);
+                  setDrafting(false);
+                }
+              }}
+              placeholder={placeholder}
+              className={fieldClass}
+              aria-label={placeholder}
+            />
+          )}
+          {onOpen && hasValue ? (
+            <button
+              type="button"
+              title="Open"
+              onClick={onOpen}
+              className="shrink-0 rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+            </button>
+          ) : null}
+          <button
+            type="button"
+            title="Remove"
+            onClick={clear}
+            className="shrink-0 rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-destructive"
+          >
+            <Trash2 className="h-3 w-3" />
+          </button>
+        </div>
+      ) : null}
+    </Section>
+  );
+}
+
+function LinksSection({
+  links,
+  resetKey,
+  onAdd,
+  onRemove,
+}: {
+  links: NonNullable<SphereNode["links"]>;
+  resetKey: string;
+  onAdd: (link: { kind: "doc" | "repo" | "openapi" | "other"; href: string; title?: string }) => void;
+  onRemove: (index: number) => void;
+}) {
+  const [adding, setAdding] = useState(false);
+  const [href, setHref] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setAdding(false);
+    setHref("");
+  }, [resetKey]);
+
+  useEffect(() => {
+    if (adding) {
+      setHref("");
+      queueMicrotask(() => inputRef.current?.focus());
+    }
+  }, [adding]);
+
+  const commitAdd = () => {
+    const next = href.trim();
+    if (!next) {
+      setAdding(false);
+      setHref("");
+      return;
+    }
+    const kind =
+      /\.ya?ml$/i.test(next) || /openapi/i.test(next)
+        ? "openapi"
+        : /^https?:\/\/(www\.)?github\.com\//i.test(next)
+          ? "repo"
+          : "doc";
+    onAdd({ kind, href: next });
+    setHref("");
+    setAdding(false);
+  };
+
+  return (
+    <Section
+      title="Links"
+      action={!adding ? <MetaPlus label="Add link" onClick={() => setAdding(true)} /> : undefined}
+    >
+      <div className="space-y-1.5">
+        {links.length > 0 ? (
+          <div className="flex flex-wrap items-center gap-1.5">
+            {links.map((link, index) => (
+              <div
+                key={`${link.href}-${index}`}
+                className="flex items-center gap-0.5 rounded-md border border-border bg-background px-1 py-0.5"
+              >
+                <a
+                  href={link.href}
+                  target="_blank"
+                  rel="noreferrer"
+                  title={link.title ? `${link.title}\n${link.href}` : link.href}
+                  className="grid h-6 w-6 place-items-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
+                >
+                  <Anchor className="h-3.5 w-3.5" />
+                </a>
+                <button
+                  type="button"
+                  title="Remove link"
+                  onClick={() => onRemove(index)}
+                  className="grid h-6 w-6 place-items-center rounded text-muted-foreground hover:bg-muted hover:text-destructive"
+                >
+                  <Trash2 className="h-3 w-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : null}
+
+        {adding ? (
+          <div className="flex items-center gap-1.5 rounded-md border border-border bg-background px-2 py-1.5">
+            <Anchor className="h-3 w-3 shrink-0 text-muted-foreground" />
+            <input
+              ref={inputRef}
+              value={href}
+              onChange={(e) => setHref(e.target.value)}
+              onBlur={commitAdd}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  commitAdd();
+                }
+                if (e.key === "Escape") {
+                  setHref("");
+                  setAdding(false);
+                }
+              }}
+              placeholder="https://…"
+              className="min-w-0 flex-1 bg-transparent text-xs outline-none placeholder:text-muted-foreground/50"
+              aria-label="Link URL"
+            />
+          </div>
+        ) : null}
+      </div>
+    </Section>
+  );
+}
 
 export function NodeInspector({
   node,
@@ -30,6 +278,10 @@ export function NodeInspector({
   onAddPort,
   onUpdatePort,
   onDeletePort,
+  onUpdateMeta,
+  onSetRepository,
+  onAddLink,
+  onRemoveLink,
 }: {
   node: SphereNode;
   edges: SphereEdge[];
@@ -44,6 +296,10 @@ export function NodeInspector({
     patch: { label?: string | null; protocol?: string | null },
   ) => void;
   onDeletePort: (id: string, portId: string) => void;
+  onUpdateMeta: (id: string, patch: { description?: string | null; notes?: string | null }) => void;
+  onSetRepository: (id: string, repository: string | null) => void;
+  onAddLink: (id: string, link: { kind: "doc" | "repo" | "openapi" | "other"; href: string; title?: string }) => void;
+  onRemoveLink: (id: string, index: number) => void;
 }) {
   const meta = kindMeta[node.kind];
   const [iconOpen, setIconOpen] = useState(false);
@@ -132,6 +388,15 @@ export function NodeInspector({
           {node.warn}
         </div>
       )}
+
+      <OptionalMetaSection
+        title="Notes"
+        value={node.notes ?? ""}
+        placeholder="Authoring notes"
+        multiline
+        resetKey={node.id}
+        onCommit={(next) => onUpdateMeta(node.id, { notes: next })}
+      />
 
       <Section title="API Surface">
         <div className="mb-2 flex gap-1.5">
@@ -232,35 +497,21 @@ export function NodeInspector({
         )}
       </Section>
 
-      <Section title="Repository">
-        {node.repo ? (
-          <button
-            type="button"
-            disabled={!node.repoUrl}
-            onClick={() => {
-              if (node.repoUrl) openExternal(node.repoUrl);
-            }}
-            className="flex w-full items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-left text-xs hover:bg-muted disabled:cursor-default disabled:opacity-70"
-          >
-            <Github className="h-4 w-4 shrink-0" />
-            <div className="min-w-0 flex-1">
-              <div className="truncate font-medium">{node.repo}</div>
-              <div className="text-[10px] text-muted-foreground">
-                {node.repoUrl ? "Open in new tab" : "Path only - no browse URL"}
-              </div>
-            </div>
-            {node.repoUrl ? (
-              <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
-            ) : (
-              <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
-            )}
-          </button>
-        ) : (
-          <div className="rounded-lg border border-dashed border-border px-3 py-2 text-[11px] text-muted-foreground">
-            No repository linked in the SCAN model yet.
-          </div>
-        )}
-      </Section>
+      <OptionalMetaSection
+        title="Repository"
+        value={node.repo ?? ""}
+        placeholder="github-org/repository or URL"
+        resetKey={node.id}
+        onCommit={(next) => onSetRepository(node.id, next)}
+        onOpen={node.repoUrl ? () => openExternal(node.repoUrl!) : undefined}
+      />
+
+      <LinksSection
+        links={node.links ?? []}
+        resetKey={node.id}
+        onAdd={(link) => onAddLink(node.id, link)}
+        onRemove={(index) => onRemoveLink(node.id, index)}
+      />
 
       <Section title="Contracts">
         {protocols.length ? (

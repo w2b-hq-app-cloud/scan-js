@@ -15,6 +15,7 @@ export {
   type SphereComponent,
   type SphereConnection,
   type SpherePort,
+  type ElementLink,
   type ConnectionType,
   type LayoutEntry,
 } from "./schema.js";

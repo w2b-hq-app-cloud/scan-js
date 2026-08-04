@@ -1,4 +1,4 @@
-import type { ConnectionType, LayoutEntry, SphereModel, SphereConnection } from "@spherescan/model";
+import type { ConnectionType, ElementLink, LayoutEntry, SphereModel, SphereConnection } from "@spherescan/model";
 import type { NodeKind } from "@spherescan/viewer";
 import { CommandStack } from "./command-stack.js";
 import { type AutoLayoutOptions } from "./auto-layout.js";
@@ -43,6 +43,21 @@ export declare class Modeling {
     updateElementIcon(id: string, icon: string | null): void;
     /** Set or clear free-text `description` on a diagram element. */
     updateElementDescription(id: string, description: string | null): void;
+    /** Update author-facing metadata on a component, external system, or agent. */
+    updateElementMeta(id: string, patch: {
+        description?: string | null;
+        notes?: string | null;
+        technology?: string | null;
+        subtitle?: string | null;
+    }): void;
+    /** Set or clear an inline source repository reference. */
+    setElementRepository(id: string, repository: string | {
+        provider?: string;
+        path: string;
+    } | null): void;
+    addElementLink(id: string, link: ElementLink): void;
+    removeElementLink(id: string, index: number): void;
+    updateElementLink(id: string, index: number, link: ElementLink): void;
     renameSystem(name: string): void;
     deleteElement(id: string): void;
     /**
@@ -82,6 +97,19 @@ export declare class Modeling {
         color?: "svc" | "ext" | "data" | "event" | "search" | "agent" | "repo" | "warn" | null;
     }): void;
     deleteBoundary(id: string): void;
+    bringBoundaryForward(id: string): void;
+    sendBoundaryBackward(id: string): void;
+    bringBoundaryToFront(id: string): void;
+    sendBoundaryToBack(id: string): void;
+    private reorderBoundary;
+    /** Set an active-view orthogonal route, or clear it to restore auto-routing. */
+    updateConnectionRoute(id: string, waypoints: Array<{
+        x: number;
+        y: number;
+    }> | null, sides?: {
+        fromSide: NonNullable<SphereConnection["fromSide"]>;
+        toSide: NonNullable<SphereConnection["toSide"]>;
+    }): void;
     /** Live move while dragging; commit with moveBoundary on pointer up. Moves members with the box. */
     previewMoveBoundary(id: string, x: number, y: number): void;
     /** Translate a boundary and all of its members by the same delta. Undoable. */

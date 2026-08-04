@@ -5,6 +5,11 @@ export type Port = {
     label: string;
     protocol?: string;
 };
+export type ElementLink = {
+    kind: "doc" | "repo" | "openapi" | "other";
+    href: string;
+    title?: string;
+};
 export type SphereNode = {
     id: string;
     kind: NodeKind;
@@ -25,6 +30,9 @@ export type SphereNode = {
     repo?: string;
     /** Resolved browse URL for `repo` when known (e.g. GitHub). */
     repoUrl?: string;
+    description?: string;
+    notes?: string;
+    links?: ElementLink[];
     status?: "ok" | "warn";
     warn?: string;
 };
@@ -41,6 +49,11 @@ export type SphereEdge = {
     toPort?: string;
     /** Endpoints / RPCs / topics shown on hover and in the inspector */
     operations?: string[];
+    /** Presentation-only intermediate orthogonal points from the active view. */
+    waypoints?: {
+        x: number;
+        y: number;
+    }[];
 };
 export type BoundaryColor = "svc" | "ext" | "data" | "event" | "search" | "agent" | "repo" | "warn";
 export type SphereGroup = {

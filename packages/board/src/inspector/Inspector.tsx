@@ -23,8 +23,14 @@ export function Inspector({
   onAddPort,
   onUpdatePort,
   onDeletePort,
+  onUpdateElementMeta,
+  onSetElementRepository,
+  onAddElementLink,
+  onRemoveElementLink,
   onDeleteBoundary,
   onRenameBoundary,
+  onBringBoundaryForward,
+  onSendBoundaryBackward,
   onSelectEdge,
   onSelectNode,
   renderInspectorExtras,
@@ -62,8 +68,14 @@ export function Inspector({
     patch: { label?: string | null; protocol?: string | null },
   ) => void;
   onDeletePort: (id: string, portId: string) => void;
+  onUpdateElementMeta: (id: string, patch: { description?: string | null; notes?: string | null }) => void;
+  onSetElementRepository: (id: string, repository: string | null) => void;
+  onAddElementLink: (id: string, link: { kind: "doc" | "repo" | "openapi" | "other"; href: string; title?: string }) => void;
+  onRemoveElementLink: (id: string, index: number) => void;
   onDeleteBoundary: (id: string) => void;
   onRenameBoundary: (id: string) => void;
+  onBringBoundaryForward: (id: string) => void;
+  onSendBoundaryBackward: (id: string) => void;
   onSelectEdge: (id: string) => void;
   onSelectNode: (id: string) => void;
   renderInspectorExtras?: (ctx: BoardInspectorExtrasContext) => ReactNode;
@@ -101,6 +113,8 @@ export function Inspector({
             onUpdate={onUpdateBoundary}
             onDelete={onDeleteBoundary}
             onRename={onRenameBoundary}
+            onBringForward={onBringBoundaryForward}
+            onSendBackward={onSendBoundaryBackward}
             onSelectNode={onSelectNode}
           />
         )}
@@ -115,6 +129,10 @@ export function Inspector({
             onAddPort={onAddPort}
             onUpdatePort={onUpdatePort}
             onDeletePort={onDeletePort}
+            onUpdateMeta={onUpdateElementMeta}
+            onSetRepository={onSetElementRepository}
+            onAddLink={onAddElementLink}
+            onRemoveLink={onRemoveElementLink}
           />
         )}
         {edge && !node && !group && (

@@ -62,7 +62,7 @@ export function ToolRail({
         );
       })}
       <IconBtn
-        label="Fast design"
+        label="Fast design (F)"
         tooltipSide="right"
         onClick={() => setTool(tool === "fast" ? "select" : "fast")}
         active={tool === "fast"}

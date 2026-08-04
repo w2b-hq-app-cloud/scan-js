@@ -10,11 +10,14 @@ export function Section({
 }: {
   title: string;
   action?: ReactNode;
-  children: ReactNode;
+  children?: ReactNode;
 }) {
+  const hasBody = children != null && children !== false;
   return (
     <div className="border-b border-border px-4 py-3">
-      <div className="mb-2 flex items-center justify-between gap-2">
+      <div
+        className={`flex items-center justify-between gap-2 ${hasBody ? "mb-2" : ""}`}
+      >
         <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
           {title}
         </div>

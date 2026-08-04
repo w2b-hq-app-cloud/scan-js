@@ -21,6 +21,11 @@ const repositoryRefSchema = z.union([
     }),
     z.string(),
 ]);
+export const elementLinkSchema = z.object({
+    kind: z.enum(["doc", "repo", "openapi", "other"]),
+    href: z.string(),
+    title: z.string().optional(),
+});
 const componentSchema = z.object({
     id: z.string(),
     name: z.string(),
@@ -35,8 +40,9 @@ const componentSchema = z.object({
     ]),
     technology: z.string().optional(),
     subtitle: z.string().optional(),
-    /** Longer free-text notes about the element (inspector + agents). */
     description: z.string().optional(),
+    notes: z.string().optional(),
+    links: z.array(elementLinkSchema).optional(),
     icon: iconSchema,
     repository: repositoryRefSchema.optional(),
     consumes: z.array(portSchema).optional(),
@@ -50,6 +56,8 @@ const channelSchema = z.object({
     type: z.literal("event-stream").default("event-stream"),
     technology: z.string().optional(),
     description: z.string().optional(),
+    notes: z.string().optional(),
+    links: z.array(elementLinkSchema).optional(),
     icon: iconSchema,
     consumes: z.array(portSchema).optional(),
     exposes: z.array(portSchema).optional(),
@@ -60,6 +68,8 @@ const externalSystemSchema = z.object({
     type: z.literal("external-system").optional(),
     technology: z.string().optional(),
     description: z.string().optional(),
+    notes: z.string().optional(),
+    links: z.array(elementLinkSchema).optional(),
     icon: iconSchema,
     repository: repositoryRefSchema.optional(),
     consumes: z.array(portSchema).optional(),
@@ -69,8 +79,11 @@ const agentSchema = z.object({
     id: z.string(),
     name: z.string(),
     purpose: z.string().optional(),
+    technology: z.string().optional(),
     subtitle: z.string().optional(),
     description: z.string().optional(),
+    notes: z.string().optional(),
+    links: z.array(elementLinkSchema).optional(),
     icon: iconSchema,
     runtime: z.string().optional(),
     consumes: z.array(portSchema).optional(),
@@ -80,7 +93,6 @@ const agentRuntimeSchema = z.object({
     id: z.string(),
     name: z.string(),
     type: z.string().optional(),
-    description: z.string().optional(),
 });
 const repositorySchema = z.object({
     id: z.string(),
@@ -88,7 +100,6 @@ const repositorySchema = z.object({
     provider: z.string().optional(),
     path: z.string().optional(),
     subtitle: z.string().optional(),
-    description: z.string().optional(),
     icon: iconSchema,
     consumes: z.array(portSchema).optional(),
     exposes: z.array(portSchema).optional(),
@@ -164,6 +175,9 @@ const viewSchema = z.object({
     type: z.string().default("service-architecture"),
     boundaries: z.array(boundarySchema).default([]),
     layout: z.record(layoutEntrySchema),
+    routes: z.record(z.object({
+        waypoints: z.array(z.object({ x: z.number(), y: z.number() })).default([]),
+    })).optional(),
 });
 /** YAML/JSON agents often emit `key: null` for cleared optionals; Zod `.optional()` rejects null. */
 function stripNulls(value) {

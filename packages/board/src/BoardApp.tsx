@@ -33,7 +33,11 @@ import {
   boundaryFillMix,
   boundaryStroke,
   resolveEdgeAnchors,
+  resolveAnchorsFromWaypoints,
+  clampOrthogonalRouteEnds,
+  sideFacingPoint,
   routeOrthogonalEdges,
+  routeOrthogonalPolylines,
   assignOrthogonalLanes,
   resolveLabelOverlaps,
   estimateEdgeLabelSize,
@@ -154,6 +158,8 @@ export default function BoardApp({
     renameBoundary,
     updateBoundary,
     deleteBoundary,
+    bringBoundaryForward,
+    sendBoundaryBackward,
     downloadYaml,
     importYamlFile,
     exportSvg,
@@ -162,6 +168,10 @@ export default function BoardApp({
     renameElement,
     updateElementIcon,
     updateElementDescription,
+    updateElementMeta,
+    setElementRepository,
+    addElementLink,
+    removeElementLink,
     addPort,
     updatePort,
     deletePort,
@@ -455,6 +465,29 @@ export default function BoardApp({
           setRenameModal({ nodeId: selected, value: current });
         }
       }
+      if (
+        !e.metaKey &&
+        !e.ctrlKey &&
+        !e.altKey &&
+        e.key.toLowerCase() === "f"
+      ) {
+        const tag = (e.target as HTMLElement)?.tagName;
+        if (tag === "INPUT" || tag === "TEXTAREA" || (e.target as HTMLElement)?.isContentEditable) {
+          return;
+        }
+        e.preventDefault();
+        setTool((current) => {
+          if (current === "fast") {
+            setFastDraft(null);
+            setConnectFrom(null);
+            setConnectCursor(null);
+            toast.message("Fast design off");
+            return "select";
+          }
+          toast.message("Fast design on — see legend (left)");
+          return "fast";
+        });
+      }
       if (e.key === "Escape") {
         setCtxMenu(null);
         if (tool === "connect") {
@@ -577,7 +610,9 @@ export default function BoardApp({
   useEffect(() => {
     if (!model || !ready) return;
     const yaml = modeler.peekYAML();
-    if (onDocumentChangeRef.current && dirty) onDocumentChangeRef.current(yaml);
+    // Always notify the host (Sphere draft / autosave), including clean imports —
+    // gating on `dirty` left localStorage on the previous document after Import YAML.
+    onDocumentChangeRef.current?.(yaml);
     for (const listener of documentListenersRef.current) listener(yaml);
   }, [historyStep, model, dirty, ready, modeler]);
 
@@ -766,19 +801,32 @@ export default function BoardApp({
       const from = nodeById[e.from];
       const to = nodeById[e.to];
       if (!from || !to) continue;
+      const fromBox = { x: from.x, y: from.y, w: from.w, h: from.h };
+      const toBox = { x: to.x, y: to.y, w: to.w, h: to.h };
+      if (orthogonalEdges && e.waypoints?.length) {
+        const resolved = resolveAnchorsFromWaypoints(
+          fromBox,
+          toBox,
+          e.waypoints,
+          e.fromSide,
+          e.toSide,
+        );
+        out.set(e.id, {
+          a: resolved.a,
+          b: resolved.b,
+          fromSide: resolved.fromSide,
+          toSide: resolved.toSide,
+        });
+        continue;
+      }
       const fan = edgeFanById.get(e.id);
       out.set(
         e.id,
-        resolveEdgeAnchors(
-          { x: from.x, y: from.y, w: from.w, h: from.h },
-          { x: to.x, y: to.y, w: to.w, h: to.h },
-          fan?.index ?? 0,
-          fan?.count ?? 1,
-        ),
+        resolveEdgeAnchors(fromBox, toBox, fan?.index ?? 0, fan?.count ?? 1),
       );
     }
     return out;
-  }, [edges, nodeById, edgeFanById]);
+  }, [edges, nodeById, edgeFanById, orthogonalEdges]);
 
   const edgeLabelPositions = useMemo(() => {
     const boxes = nodes.map((n) => ({ x: n.x, y: n.y, w: n.w, h: n.h }));
@@ -842,13 +890,50 @@ export default function BoardApp({
           to: { x: to.x, y: to.y, w: to.w, h: to.h },
           fanIndex: fan?.index ?? 0,
           fanCount: fan?.count ?? 1,
+          waypoints: e.waypoints,
+          aSide: e.fromSide,
+          bSide: e.toSide,
         };
       })
       .filter((e): e is NonNullable<typeof e> => Boolean(e));
     return routeOrthogonalEdges(routed);
   }, [orthogonalEdges, edges, nodeById, edgeFanById]);
 
-  // Filter based on view + optional focus neighborhood
+  const orthogonalPolylines = useMemo(() => {
+    if (!orthogonalEdges) return null;
+    const routed = edges
+      .map((e) => {
+        const from = nodeById[e.from];
+        const to = nodeById[e.to];
+        if (!from || !to) return null;
+        const fan = edgeFanById.get(e.id);
+        return {
+          id: e.id,
+          from: { x: from.x, y: from.y, w: from.w, h: from.h },
+          to: { x: to.x, y: to.y, w: to.w, h: to.h },
+          fanIndex: fan?.index ?? 0,
+          fanCount: fan?.count ?? 1,
+          waypoints: e.waypoints,
+          aSide: e.fromSide,
+          bSide: e.toSide,
+        };
+      })
+      .filter((e): e is NonNullable<typeof e> => Boolean(e));
+    return routeOrthogonalPolylines(routed);
+  }, [orthogonalEdges, edges, nodeById, edgeFanById]);
+
+  const [routeDrag, setRouteDrag] = useState<{
+    edgeId: string;
+    /** Segment start index: handle sits on points[i]→points[i+1]. */
+    segmentIndex: number;
+    /** `x` = vertical segment (drag left/right); `y` = horizontal (drag up/down). */
+    axis: "x" | "y";
+    points: Array<{ x: number; y: number }>;
+    fromBox: { x: number; y: number; w: number; h: number };
+    toBox: { x: number; y: number; w: number; h: number };
+    fromSide?: "l" | "r" | "t" | "b";
+    toSide?: "l" | "r" | "t" | "b";
+  } | null>(null);
   const dimmed = useCallback(
     (n: SphereNode) => {
       if (view === "external" && n.kind !== "external" && n.kind !== "service") return true;
@@ -1152,6 +1237,34 @@ export default function BoardApp({
       );
       return;
     }
+    if (routeDrag) {
+      const w = clientToWorld(e.clientX, e.clientY);
+      setRouteDrag((prev) => {
+        if (!prev) return null;
+        const points = prev.points.map((p) => ({ x: p.x, y: p.y }));
+        const i = prev.segmentIndex;
+        if (i < 0 || i >= points.length - 1) return prev;
+        if (prev.axis === "x") {
+          const x = Math.round(w.x / 4) * 4;
+          points[i] = { ...points[i]!, x };
+          points[i + 1] = { ...points[i + 1]!, x };
+        } else {
+          const y = Math.round(w.y / 4) * 4;
+          points[i] = { ...points[i]!, y };
+          points[i + 1] = { ...points[i + 1]!, y };
+        }
+        // Slide node attachments so stubs stay horizontal/vertical only.
+        const clamped = clampOrthogonalRouteEnds(
+          points,
+          prev.fromBox,
+          prev.toBox,
+          prev.fromSide,
+          prev.toSide,
+        );
+        return { ...prev, points: clamped };
+      });
+      return;
+    }
     if (dragging.current) {
       const d = dragging.current;
       const w = clientToWorld(e.clientX, e.clientY);
@@ -1247,6 +1360,31 @@ export default function BoardApp({
     if (movingBoundary.current) {
       endBoundaryMove();
       movingBoundary.current = null;
+    }
+    if (routeDrag) {
+      const pts = routeDrag.points;
+      const waypoints = pts.slice(1, -1).map((p) => ({
+        x: Math.round(p.x),
+        y: Math.round(p.y),
+      }));
+      const fromSide = sideFacingPoint(routeDrag.fromBox, pts[1] ?? pts[0]!, routeDrag.fromSide);
+      const toSide = sideFacingPoint(
+        routeDrag.toBox,
+        pts[pts.length - 2] ?? pts[pts.length - 1]!,
+        routeDrag.toSide,
+      );
+      try {
+        board.updateConnectionRoute(
+          routeDrag.edgeId,
+          waypoints.length ? waypoints : null,
+          { fromSide, toSide },
+        );
+      } catch (err) {
+        toast.error("Could not update route", {
+          description: err instanceof Error ? err.message : "Update failed",
+        });
+      }
+      setRouteDrag(null);
     }
     if (dragging.current) {
       endDrag();
@@ -1811,8 +1949,12 @@ export default function BoardApp({
                       ? "url(#arrow-event)"
                       : "url(#arrow)";
                 const d =
-                  orthogonalEdgePaths?.get(e.id) ??
-                  edgePath(a, b, fromSide, toSide);
+                  routeDrag?.edgeId === e.id
+                    ? routeDrag.points
+                        .map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`)
+                        .join(" ")
+                    : orthogonalEdgePaths?.get(e.id) ??
+                      edgePath(a, b, fromSide, toSide);
                 return (
                   <g key={e.id} className="pointer-events-auto">
                     <path
@@ -1859,6 +2001,85 @@ export default function BoardApp({
                 })()}
             </svg>
 
+            {/* Orthogonal route handles: mid-segment (incl. stubs — slides attachment). */}
+            {orthogonalEdges &&
+              selectedEdge &&
+              (() => {
+                const edge = edges.find((x) => x.id === selectedEdge);
+                const fromNode = edge ? nodeById[edge.from] : undefined;
+                const toNode = edge ? nodeById[edge.to] : undefined;
+                const pts =
+                  routeDrag?.edgeId === selectedEdge
+                    ? routeDrag.points
+                    : orthogonalPolylines?.get(selectedEdge);
+                if (!pts || pts.length < 2 || !fromNode || !toNode) return null;
+                const handles: Array<{
+                  key: string;
+                  x: number;
+                  y: number;
+                  segmentIndex: number;
+                  axis: "x" | "y";
+                  cursor: string;
+                }> = [];
+                for (let i = 0; i < pts.length - 1; i++) {
+                  const a = pts[i]!;
+                  const b = pts[i + 1]!;
+                  const dx = Math.abs(b.x - a.x);
+                  const dy = Math.abs(b.y - a.y);
+                  if (dx < 1 && dy < 1) continue;
+                  const horizontal = dy <= dx;
+                  const axis: "x" | "y" = horizontal ? "y" : "x";
+                  handles.push({
+                    key: `seg-${selectedEdge}-${i}`,
+                    x: (a.x + b.x) / 2,
+                    y: (a.y + b.y) / 2,
+                    segmentIndex: i,
+                    axis,
+                    cursor: horizontal ? "ns-resize" : "ew-resize",
+                  });
+                }
+                return handles.map((h) => (
+                  <div
+                    key={h.key}
+                    className="absolute z-[1] h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-sm border-2 border-primary bg-background shadow active:cursor-grabbing"
+                    style={{ left: h.x, top: h.y, cursor: h.cursor }}
+                    title={
+                      h.axis === "y"
+                        ? "Drag up/down to move this segment"
+                        : "Drag left/right to move this segment"
+                    }
+                    onPointerDown={(ev) => {
+                      ev.stopPropagation();
+                      ev.preventDefault();
+                      (ev.currentTarget as Element).setPointerCapture(ev.pointerId);
+                      setRouteDrag({
+                        edgeId: selectedEdge,
+                        segmentIndex: h.segmentIndex,
+                        axis: h.axis,
+                        points: pts.map((q: { x: number; y: number }) => ({
+                          x: q.x,
+                          y: q.y,
+                        })),
+                        fromBox: {
+                          x: fromNode.x,
+                          y: fromNode.y,
+                          w: fromNode.w,
+                          h: fromNode.h,
+                        },
+                        toBox: {
+                          x: toNode.x,
+                          y: toNode.y,
+                          w: toNode.w,
+                          h: toNode.h,
+                        },
+                        fromSide: edge?.fromSide,
+                        toSide: edge?.toSide,
+                      });
+                    }}
+                  />
+                ));
+              })()}
+
             {/* EDGE LABELS */}
             {edges.map((e) => {
               const from = nodeById[e.from];
@@ -1878,7 +2099,7 @@ export default function BoardApp({
               return (
                 <div
                   key={`lbl-${e.id}`}
-                  className={`absolute z-[2] flex -translate-x-1/2 -translate-y-1/2 cursor-pointer flex-col items-stretch gap-1 ${
+                  className={`absolute z-[4] flex -translate-x-1/2 -translate-y-1/2 cursor-pointer flex-col items-stretch gap-1 ${
                     showOps ? "z-[5]" : ""
                   } ${faded ? "opacity-25" : ""}`}
                   style={{ left: m.x, top: m.y }}
@@ -2291,6 +2512,42 @@ export default function BoardApp({
                 toast.error("Could not update description", { description: message });
               }
             }}
+            onUpdateElementMeta={(id, patch) => {
+              try {
+                updateElementMeta(id, patch);
+              } catch (err) {
+                toast.error("Could not update metadata", {
+                  description: err instanceof Error ? err.message : "Update failed",
+                });
+              }
+            }}
+            onSetElementRepository={(id, repository) => {
+              try {
+                setElementRepository(id, repository);
+              } catch (err) {
+                toast.error("Could not set repository", {
+                  description: err instanceof Error ? err.message : "Update failed",
+                });
+              }
+            }}
+            onAddElementLink={(id, link) => {
+              try {
+                addElementLink(id, link);
+              } catch (err) {
+                toast.error("Could not add link", {
+                  description: err instanceof Error ? err.message : "Update failed",
+                });
+              }
+            }}
+            onRemoveElementLink={(id, index) => {
+              try {
+                removeElementLink(id, index);
+              } catch (err) {
+                toast.error("Could not remove link", {
+                  description: err instanceof Error ? err.message : "Update failed",
+                });
+              }
+            }}
             onAddPort={(id, role) => {
               try {
                 addPort(id, role);
@@ -2331,6 +2588,8 @@ export default function BoardApp({
               const g = groups.find((x) => x.id === id);
               if (g) setBoundaryRenameModal({ id: g.id, value: g.title });
             }}
+            onBringBoundaryForward={bringBoundaryForward}
+            onSendBoundaryBackward={sendBoundaryBackward}
             onSelectEdge={(id) => {
               setSelectedEdge(id);
               setSelected(null);
@@ -2411,6 +2670,12 @@ export default function BoardApp({
                 const message = err instanceof Error ? err.message : "Could not create boundary";
                 toast.error("Boundary failed", { description: message });
               }
+            }}
+            onAttachRepository={() => {
+              setSelected(ctxMenu.nodeId);
+              setSelectedEdge(null);
+              setSelectedBoundary(null);
+              setCtxMenu(null);
             }}
           />
         )}

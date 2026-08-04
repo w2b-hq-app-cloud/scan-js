@@ -176,6 +176,9 @@ function projectNodes(model, view) {
             exposes: mapPorts(ext.exposes, "out"),
             repo: repoPath(ext.repository),
             repoUrl: repoUrl(ext.repository),
+            description: ext.description,
+            notes: ext.notes,
+            links: ext.links?.map((link) => ({ ...link })),
         });
     }
     for (const c of model.components) {
@@ -201,6 +204,9 @@ function projectNodes(model, view) {
             exposes: mapPorts(c.exposes, "out"),
             repo: repoPath(c.repository),
             repoUrl: repoUrl(c.repository),
+            description: c.description,
+            notes: c.notes,
+            links: c.links?.map((link) => ({ ...link })),
             status: c.status,
             warn: c.warn,
         });
@@ -245,6 +251,9 @@ function projectNodes(model, view) {
             group: memberGroupId(view, a.id),
             consumes: mapPorts(a.consumes, "in"),
             exposes: mapPorts(a.exposes, "out"),
+            description: a.description,
+            notes: a.notes,
+            links: a.links?.map((link) => ({ ...link })),
         });
     }
     for (const r of model.repositories) {
@@ -272,7 +281,7 @@ function projectNodes(model, view) {
     }
     return nodes;
 }
-function projectEdges(model) {
+function projectEdges(model, view) {
     return model.connections.map((c, index) => {
         const kind = connectionEdgeKind(c.type);
         return {
@@ -287,6 +296,7 @@ function projectEdges(model) {
             fromPort: c.fromPort,
             toPort: c.toPort,
             operations: c.operations?.length ? [...c.operations] : undefined,
+            waypoints: view.routes?.[c.id ?? `e${index + 1}`]?.waypoints.map((point) => ({ ...point })),
         };
     });
 }
@@ -299,6 +309,6 @@ export function projectToGraph(model, viewId) {
     return {
         groups: projectGroups(view),
         nodes: projectNodes(model, view),
-        edges: projectEdges(model),
+        edges: projectEdges(model, view),
     };
 }

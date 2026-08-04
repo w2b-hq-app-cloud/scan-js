@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `@spherescan/model`: element descriptions, notes, typed links, and per-view orthogonal route waypoints.
+- `@spherescan/modeler` / `@spherescan/board`: undoable metadata, repository, link, boundary-layer, and route editing APIs with inspector controls.
+- `@spherescan/viewer`: graph metadata projection and persisted-waypoint orthogonal routing.
 - `@spherescan/board`: Duplicate diagram control + `onSystemIdentityChange` so hosts can relocate workspaces on rename and treat duplicate as a fresh identity.
 - `@spherescan/modeler`: `renameSystem` keeps `system.id` slugified in sync with the display name.
 

@@ -204,6 +204,9 @@ function projectNodes(model: SphereModel, view: SphereView): SphereNode[] {
       exposes: mapPorts(ext.exposes, "out"),
       repo: repoPath(ext.repository),
       repoUrl: repoUrl(ext.repository),
+      description: ext.description,
+      notes: ext.notes,
+      links: ext.links?.map((link) => ({ ...link })),
     });
   }
 
@@ -230,6 +233,9 @@ function projectNodes(model: SphereModel, view: SphereView): SphereNode[] {
       exposes: mapPorts(c.exposes, "out"),
       repo: repoPath(c.repository),
       repoUrl: repoUrl(c.repository),
+      description: c.description,
+      notes: c.notes,
+      links: c.links?.map((link) => ({ ...link })),
       status: c.status,
       warn: c.warn,
     });
@@ -276,6 +282,9 @@ function projectNodes(model: SphereModel, view: SphereView): SphereNode[] {
       group: memberGroupId(view, a.id),
       consumes: mapPorts(a.consumes, "in"),
       exposes: mapPorts(a.exposes, "out"),
+      description: a.description,
+      notes: a.notes,
+      links: a.links?.map((link) => ({ ...link })),
     });
   }
 
@@ -309,7 +318,7 @@ function projectNodes(model: SphereModel, view: SphereView): SphereNode[] {
   return nodes;
 }
 
-function projectEdges(model: SphereModel): SphereEdge[] {
+function projectEdges(model: SphereModel, view: SphereView): SphereEdge[] {
   return model.connections.map((c, index) => {
     const kind = connectionEdgeKind(c.type);
     return {
@@ -324,6 +333,7 @@ function projectEdges(model: SphereModel): SphereEdge[] {
       fromPort: c.fromPort,
       toPort: c.toPort,
       operations: c.operations?.length ? [...c.operations] : undefined,
+      waypoints: view.routes?.[c.id ?? `e${index + 1}`]?.waypoints.map((point) => ({ ...point })),
     };
   });
 }
@@ -340,6 +350,6 @@ export function projectToGraph(model: SphereModel, viewId?: string): BoardGraph 
   return {
     groups: projectGroups(view),
     nodes: projectNodes(model, view),
-    edges: projectEdges(model),
+    edges: projectEdges(model, view),
   };
 }

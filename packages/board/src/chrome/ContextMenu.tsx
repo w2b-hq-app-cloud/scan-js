@@ -11,6 +11,8 @@ export function ContextMenu({
   onDuplicate,
   onConnect,
   onGroupBoundary,
+  onAttachRepository,
+  onAddLink,
 }: {
   x: number;
   y: number;
@@ -21,14 +23,16 @@ export function ContextMenu({
   onDuplicate: () => void;
   onConnect: () => void;
   onGroupBoundary: () => void;
+  onAttachRepository?: () => void;
+  onAddLink?: () => void;
 }) {
   const items: { label: string; danger?: boolean; shortcut?: string; action?: () => void }[] = [
     { label: "Connect", action: onConnect },
     { label: "Rename", shortcut: "F2", action: onRename },
     { label: "Duplicate", shortcut: "Cmd+D", action: onDuplicate },
     { label: "Group into boundary", action: onGroupBoundary },
-    { label: "Attach repository" },
-    { label: "Add API contract" },
+    ...(onAttachRepository ? [{ label: "Attach repository", action: onAttachRepository }] : []),
+    ...(onAddLink ? [{ label: "Add link", action: onAddLink }] : []),
     { label: "Delete", danger: true, shortcut: "Backspace", action: onDelete },
   ];
   return (
