@@ -85,6 +85,11 @@ export type BoardAppProps = {
    * Return true only after the host has persisted the document successfully.
    */
   onSaveDocument?: (yaml: string) => Promise<boolean>;
+  /**
+   * Fired after a successful local Save / download when `onSaveDocument` is
+   * not set (e.g. anonymous hosts that fall back to .scan.yaml on disk).
+   */
+  onLocalSave?: (info: { filename: string; connected: boolean }) => void;
   /** Called after a model command changes the document, for host-driven autosave. */
   onDocumentChange?: (yaml: string) => void;
   /**

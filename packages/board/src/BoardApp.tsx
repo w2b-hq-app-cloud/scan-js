@@ -110,6 +110,7 @@ export default function BoardApp({
   onDirtyChange,
   warnOnUnload = true,
   onSaveDocument,
+  onLocalSave,
   onDocumentChange,
   onSystemIdentityChange,
   initialYaml,
@@ -320,6 +321,7 @@ export default function BoardApp({
     try {
       const result = await downloadYaml();
       if (!result) return;
+      onLocalSave?.(result);
       toast.success("Board saved", {
         description: result.connected
           ? `Saved to disk as ${result.filename}`
@@ -329,7 +331,7 @@ export default function BoardApp({
       const message = err instanceof Error ? err.message : "Save failed";
       toast.error("Could not save YAML", { description: message });
     }
-  }, [downloadYaml, onSaveDocument, modeler]);
+  }, [downloadYaml, onLocalSave, onSaveDocument, modeler]);
 
   // Always writes a local .scan.yaml file, regardless of host persistence —
   // distinct from Save, which goes to the host (cloud/local-store) when configured.

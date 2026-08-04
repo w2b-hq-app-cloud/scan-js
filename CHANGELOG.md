@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- VS Code / Cursor extension [`packages/vscode-scan`](packages/vscode-scan) (`spherescan.scan`): read-only `*.scan.yaml` / `*.scan` preview with pan/zoom and detail inspection; see [SHIPPING.md](packages/vscode-scan/SHIPPING.md).
+- `@spherescan/viewer`: SVG export marks nodes/edges with `data-node` / `data-edge` (wider hit target) for preview selection.
 - `@spherescan/model`: element descriptions, notes, typed links, and per-view orthogonal route waypoints.
 - `@spherescan/modeler` / `@spherescan/board`: undoable metadata, repository, link, boundary-layer, and route editing APIs with inspector controls.
 - `@spherescan/viewer`: graph metadata projection and persisted-waypoint orthogonal routing.
