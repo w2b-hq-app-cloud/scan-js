@@ -204,7 +204,6 @@ function projectNodes(model: SphereModel, view: SphereView): SphereNode[] {
       exposes: mapPorts(ext.exposes, "out"),
       repo: repoPath(ext.repository),
       repoUrl: repoUrl(ext.repository),
-      description: ext.description,
       notes: ext.notes,
       links: ext.links?.map((link) => ({ ...link })),
     });
@@ -233,7 +232,6 @@ function projectNodes(model: SphereModel, view: SphereView): SphereNode[] {
       exposes: mapPorts(c.exposes, "out"),
       repo: repoPath(c.repository),
       repoUrl: repoUrl(c.repository),
-      description: c.description,
       notes: c.notes,
       links: c.links?.map((link) => ({ ...link })),
       status: c.status,
@@ -282,7 +280,6 @@ function projectNodes(model: SphereModel, view: SphereView): SphereNode[] {
       group: memberGroupId(view, a.id),
       consumes: mapPorts(a.consumes, "in"),
       exposes: mapPorts(a.exposes, "out"),
-      description: a.description,
       notes: a.notes,
       links: a.links?.map((link) => ({ ...link })),
     });
@@ -297,7 +294,6 @@ function projectNodes(model: SphereModel, view: SphereView): SphereNode[] {
       kind,
       title: r.name,
       subtitle: kindSubtitle(kind, undefined, r.subtitle ?? r.path),
-      description: r.description,
       icon: r.icon,
       tech: kindTechLabel(kind),
       x: layout.x,

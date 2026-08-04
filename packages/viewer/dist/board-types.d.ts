@@ -16,8 +16,6 @@ export type SphereNode = {
     title: string;
     subtitle?: string;
     tech?: string;
-    /** Free-text notes from SCAN `description` (inspector). */
-    description?: string;
     /** Optional icon override: Lucide name, https URL, or data:image URL. */
     icon?: string;
     x: number;
@@ -30,6 +28,7 @@ export type SphereNode = {
     repo?: string;
     /** Resolved browse URL for `repo` when known (e.g. GitHub). */
     repoUrl?: string;
+    /** Free-text from SCAN `description` (inspector). */
     description?: string;
     notes?: string;
     links?: ElementLink[];

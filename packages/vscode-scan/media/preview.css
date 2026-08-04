@@ -1,0 +1,203 @@
+/* SPDX-License-Identifier: Apache-2.0
+ * Copyright 2026 WABLOO PARTNERS SRL
+ */
+
+:root {
+  --bg: var(--vscode-editor-background, #f8fafc);
+  --fg: var(--vscode-editor-foreground, #0f172a);
+  --muted: var(--vscode-descriptionForeground, #64748b);
+  --border: var(--vscode-panel-border, #e2e8f0);
+  --panel: var(--vscode-sideBar-background, #ffffff);
+  --btn: var(--vscode-button-secondaryBackground, #e2e8f0);
+  --btn-fg: var(--vscode-button-secondaryForeground, #0f172a);
+  --accent: var(--vscode-focusBorder, #3b82f6);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  font-family: var(--vscode-font-family, system-ui, sans-serif);
+  font-size: 13px;
+  color: var(--fg);
+  background: var(--bg);
+  overflow: hidden;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+  user-select: none;
+}
+
+.system-label {
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.toolbar-right {
+  display: flex;
+  gap: 4px;
+}
+
+.toolbar button {
+  min-width: 32px;
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--btn);
+  color: var(--btn-fg);
+  cursor: pointer;
+  font: inherit;
+}
+
+.toolbar button:hover {
+  outline: 1px solid var(--accent);
+}
+
+.main {
+  display: grid;
+  grid-template-columns: 1fr minmax(220px, 280px);
+  height: calc(100% - 39px);
+}
+
+.viewport {
+  position: relative;
+  overflow: hidden;
+  cursor: grab;
+  outline: none;
+  background:
+    radial-gradient(circle at 1px 1px, color-mix(in srgb, var(--border) 70%, transparent) 1px, transparent 0) 0 0 / 16px 16px;
+}
+
+.viewport.panning {
+  cursor: grabbing;
+}
+
+.canvas {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
+  will-change: transform;
+}
+
+.canvas svg {
+  display: block;
+  max-width: none;
+}
+
+.canvas svg [data-node],
+.canvas svg [data-edge] {
+  cursor: pointer;
+}
+
+.canvas svg [data-node].selected rect:first-of-type,
+.canvas svg [data-node].selected > rect:nth-of-type(1) {
+  stroke-width: 3;
+}
+
+.canvas svg g.selected {
+  filter: drop-shadow(0 0 2px var(--accent));
+}
+
+.error {
+  position: absolute;
+  inset: 16px;
+  margin: 0;
+  padding: 16px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, #ef4444 40%, var(--border));
+  background: color-mix(in srgb, #ef4444 8%, var(--panel));
+  color: var(--fg);
+  white-space: pre-wrap;
+  overflow: auto;
+  font-family: var(--vscode-editor-font-family, ui-monospace, monospace);
+  font-size: 12px;
+}
+
+.hint {
+  position: absolute;
+  left: 12px;
+  bottom: 10px;
+  margin: 0;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--panel) 85%, transparent);
+  color: var(--muted);
+  font-size: 11px;
+  pointer-events: none;
+}
+
+.details {
+  border-left: 1px solid var(--border);
+  background: var(--panel);
+  padding: 12px 14px;
+  overflow: auto;
+}
+
+.details h2 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.muted {
+  color: var(--muted);
+  margin: 0;
+}
+
+.hidden {
+  display: none !important;
+}
+
+.details dl {
+  margin: 0;
+}
+
+.details dt {
+  margin-top: 10px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+
+.details dd {
+  margin: 2px 0 0;
+  word-break: break-word;
+}
+
+.details .chip {
+  display: inline-block;
+  margin: 2px 4px 2px 0;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 12%, var(--panel));
+  border: 1px solid var(--border);
+  font-size: 11px;
+}
+
+@media (max-width: 720px) {
+  .main {
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr 40%;
+  }
+  .details {
+    border-left: none;
+    border-top: 1px solid var(--border);
+  }
+}

@@ -121,6 +121,9 @@ export default function BoardApp({
   renderNodeOverlay,
   renderInspectorExtras,
   renderBottomChrome,
+  renderLeftPanel,
+  renderViewTabsEnd,
+  renderCanvasOverlay,
   architectureWarnings: architectureWarningsProp,
   renderValidationAction,
   architectureValidating = false,
@@ -216,6 +219,8 @@ export default function BoardApp({
     boundaryId: null,
   });
   const onBoardReadyCalledRef = useRef(false);
+  const loadYamlTextRef = useRef(loadYamlText);
+  loadYamlTextRef.current = loadYamlText;
   const [connectFrom, setConnectFrom] = useState<{
     nodeId: string;
     portId?: string;
@@ -629,9 +634,7 @@ export default function BoardApp({
     if (!ready || !applyYaml?.trim()) return;
     if (applyYamlNonce === appliedYamlNonceRef.current) return;
     appliedYamlNonceRef.current = applyYamlNonce;
-    void loadYamlText(applyYaml).then(() => {
-      toast.success("SCAN updated from harness");
-    });
+    void loadYamlText(applyYaml);
   }, [ready, applyYaml, applyYamlNonce, loadYamlText]);
 
   useEffect(() => {
@@ -724,7 +727,8 @@ export default function BoardApp({
     onBoardReadyCalledRef.current = true;
     const api: BoardHostApi = {
       peekYaml: () => modeler.peekYAML(),
-      loadYaml: (yaml) => loadYamlText(yaml),
+      // Always call through the latest loadYamlText (avoids stale closures after HMR / modeler swap).
+      loadYaml: (yaml) => loadYamlTextRef.current(yaml),
       getSelection: () => selectionRef.current,
       subscribeSelection: (listener) => {
         selectionListenersRef.current.add(listener);
@@ -1708,10 +1712,15 @@ export default function BoardApp({
         onToggleFocusMode={() => setFocusMode((v) => !v)}
         nodes={displayNodes}
         groups={groups}
+        endSlot={renderViewTabsEnd?.()}
       />
 
+      <div className="flex min-h-0 flex-1">
+      {renderLeftPanel?.()}
+
       {/* MAIN CANVAS */}
-      <div className="relative flex-1 overflow-hidden">
+      <div className="relative min-h-0 flex-1 overflow-hidden">
+        {renderCanvasOverlay?.()}
         <div
           ref={canvasRef}
           className={`absolute inset-0 ${showGrid ? "dot-grid" : "bg-canvas"} ${
@@ -2954,6 +2963,7 @@ export default function BoardApp({
           />
         </Modal>
 
+      </div>
       </div>
     </div>
     </TooltipProvider>

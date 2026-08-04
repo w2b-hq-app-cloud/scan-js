@@ -194,7 +194,7 @@ function renderNode(n: SphereNode): string {
     : `<rect x="${n.x}" y="${n.y}" width="${n.w}" height="${n.h}" rx="12" fill="white" stroke="${border}" stroke-width="2"/>`;
 
   return (
-    `<g data-node="${escapeXml(n.id)}" data-kind="${n.kind}">` +
+    `<g data-node="${escapeXml(n.id)}" data-kind="${n.kind}" style="cursor:pointer">` +
     shell +
     `<rect x="${chipX}" y="${chipY}" width="${chip}" height="${chip}" rx="6" fill="${visual.soft}"/>` +
     renderLucideIcon(visual.icon, iconX, iconY, iconSize, stroke) +
@@ -369,8 +369,11 @@ export function graphToSvg(graph: BoardGraph, options: GraphToSvgOptions = {}): 
             : "");
       }
       return (
+        `<g data-edge="${escapeXml(e.id)}" data-kind="${escapeXml(e.kind)}" style="cursor:pointer">` +
         `<path d="${d}" stroke="${style.stroke}" stroke-width="1.5" fill="none"${dashed} marker-end="${marker}" opacity="0.9"/>` +
-        labelSvg
+        `<path d="${d}" stroke="transparent" stroke-width="12" fill="none"/>` +
+        labelSvg +
+        `</g>`
       );
     })
     .join("\n");

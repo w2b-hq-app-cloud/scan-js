@@ -114,6 +114,12 @@ export type BoardAppProps = {
   renderInspectorExtras?: (ctx: BoardInspectorExtrasContext) => ReactNode;
   /** Chrome under the top bar (e.g. product AI prompt bar). */
   renderBottomChrome?: () => ReactNode;
+  /** Host left panel beside the canvas (e.g. product chat sidebar). */
+  renderLeftPanel?: () => ReactNode;
+  /** Host controls on the right side of the view-tabs row. */
+  renderViewTabsEnd?: () => ReactNode;
+  /** Absolute overlay over the canvas (e.g. YAML / Code surface). */
+  renderCanvasOverlay?: () => ReactNode;
   /** Host-owned architecture warnings (badges + toast). */
   architectureWarnings?: ArchitectureWarning[];
   /** Optional CTA next to the validation toast (host-owned label/action). */

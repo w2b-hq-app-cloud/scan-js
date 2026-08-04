@@ -12,6 +12,7 @@ system and component architecture diagrams - not a full product platform.
 | **Notation** | YAML/JSON metamodel (`scan: "0.1"`) - elements, ports, typed connections, views |
 | **Libraries** | [`@spherescan/model`](https://www.npmjs.com/package/@spherescan/model), [`rules`](https://www.npmjs.com/package/@spherescan/rules), [`viewer`](https://www.npmjs.com/package/@spherescan/viewer), [`modeler`](https://www.npmjs.com/package/@spherescan/modeler), [`cli`](https://www.npmjs.com/package/@spherescan/cli) on [npm](https://www.npmjs.com/org/spherescan) |
 | **Reference app** | `apps/whiteboard` - minimal modeler to exercise the toolkit |
+| **Editor preview** | [`packages/vscode-scan`](packages/vscode-scan) — read-only VS Code / Cursor diagram preview (`spherescan.scan`) |
 
 ```bash
 npm i @spherescan/model @spherescan/viewer
@@ -209,6 +210,7 @@ Published on npm under [`@spherescan`](https://www.npmjs.com/org/spherescan) (`0
 | [`@spherescan/viewer`](https://www.npmjs.com/package/@spherescan/viewer) | Project model -> board graph; SVG/PNG export |
 | [`@spherescan/modeler`](https://www.npmjs.com/package/@spherescan/modeler) | Command stack: move, connect, create, auto-layout, undo |
 | [`@spherescan/cli`](https://www.npmjs.com/package/@spherescan/cli) | `validate`, `export svg`, ... |
+| [`packages/vscode-scan`](packages/vscode-scan) | VS Code / Cursor read-only diagram preview (VSIX; not on npm) |
 | `@spherescan/board` | Shared React canvas (**private** — not on npm in v0.1; used by the whiteboard) |
 
 ### Install
