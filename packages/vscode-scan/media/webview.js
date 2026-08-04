@@ -9,15 +9,12 @@
   const errorEl = document.getElementById("error");
   const hintEl = document.getElementById("hint");
   const systemLabel = document.getElementById("system-label");
-  const detailsEmpty = document.getElementById("details-empty");
-  const detailsBody = document.getElementById("details-body");
   const btnZoomIn = document.getElementById("btn-zoom-in");
   const btnZoomOut = document.getElementById("btn-zoom-out");
   const btnZoomReset = document.getElementById("btn-zoom-reset");
   const btnFit = document.getElementById("btn-fit");
+  const btnShowSource = document.getElementById("btn-show-source");
 
-  /** @type {{ nodes: any[], edges: any[] }} */
-  let graph = { nodes: [], edges: [] };
   let scale = 1;
   let tx = 24;
   let ty = 24;
@@ -35,96 +32,6 @@
     errorEl.classList.toggle("hidden", !message);
     canvas.classList.toggle("hidden", !!message);
     hintEl.classList.toggle("hidden", !!message);
-  }
-
-  function clearSelection() {
-    canvas.querySelectorAll(".selected").forEach((el) => el.classList.remove("selected"));
-  }
-
-  function showEmptyDetails() {
-    detailsEmpty.classList.remove("hidden");
-    detailsBody.classList.add("hidden");
-    detailsBody.innerHTML = "";
-  }
-
-  function row(label, value) {
-    if (value == null || value === "") return "";
-    return `<dt>${escapeHtml(label)}</dt><dd>${value}</dd>`;
-  }
-
-  function chips(items) {
-    if (!items || !items.length) return "<span class=\"muted\">—</span>";
-    return items
-      .map((t) => `<span class="chip">${escapeHtml(t)}</span>`)
-      .join("");
-  }
-
-  function escapeHtml(s) {
-    return String(s)
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;");
-  }
-
-  function showNode(node) {
-    detailsEmpty.classList.add("hidden");
-    detailsBody.classList.remove("hidden");
-    const consumes = (node.consumes || []).map(
-      (p) => `${p.label}${p.protocol ? ` (${p.protocol})` : ""}`,
-    );
-    const exposes = (node.exposes || []).map(
-      (p) => `${p.label}${p.protocol ? ` (${p.protocol})` : ""}`,
-    );
-    detailsBody.innerHTML = `<dl>
-      ${row("Name", escapeHtml(node.title))}
-      ${row("Id", `<code>${escapeHtml(node.id)}</code>`)}
-      ${row("Kind", escapeHtml(node.kind))}
-      ${row("Technology", escapeHtml(node.tech || ""))}
-      ${row("Subtitle", escapeHtml(node.subtitle || ""))}
-      ${row("Description", escapeHtml(node.description || ""))}
-      ${row("Notes", escapeHtml(node.notes || ""))}
-      ${row("Status", escapeHtml(node.status || ""))}
-      ${row("Warning", escapeHtml(node.warn || ""))}
-      ${row("Consumes", chips(consumes))}
-      ${row("Exposes", chips(exposes))}
-    </dl>`;
-  }
-
-  function showEdge(edge) {
-    detailsEmpty.classList.add("hidden");
-    detailsBody.classList.remove("hidden");
-    const fromNode = graph.nodes.find((n) => n.id === edge.from);
-    const toNode = graph.nodes.find((n) => n.id === edge.to);
-    detailsBody.innerHTML = `<dl>
-      ${row("Connection", escapeHtml(edge.label || edge.id))}
-      ${row("Id", `<code>${escapeHtml(edge.id)}</code>`)}
-      ${row("Type", escapeHtml(edge.kind))}
-      ${row("From", escapeHtml(fromNode ? `${fromNode.title} (${edge.from})` : edge.from))}
-      ${row("To", escapeHtml(toNode ? `${toNode.title} (${edge.to})` : edge.to))}
-      ${row("From port", escapeHtml(edge.fromPort || ""))}
-      ${row("To port", escapeHtml(edge.toPort || ""))}
-      ${row("Contract", escapeHtml(edge.contract || ""))}
-      ${row("Operations", chips(edge.operations || []))}
-    </dl>`;
-  }
-
-  function selectById(kind, id) {
-    clearSelection();
-    const sel =
-      kind === "node"
-        ? canvas.querySelector(`[data-node="${CSS.escape(id)}"]`)
-        : canvas.querySelector(`[data-edge="${CSS.escape(id)}"]`);
-    if (sel) sel.classList.add("selected");
-    if (kind === "node") {
-      const node = graph.nodes.find((n) => n.id === id);
-      if (node) showNode(node);
-      else showEmptyDetails();
-    } else {
-      const edge = graph.edges.find((e) => e.id === id);
-      if (edge) showEdge(edge);
-      else showEmptyDetails();
-    }
   }
 
   function fitView() {
@@ -145,18 +52,13 @@
 
   function onRender(msg) {
     setError("");
-    graph = { nodes: msg.nodes || [], edges: msg.edges || [] };
     systemLabel.textContent = msg.system
       ? `${msg.system.name} · ${msg.system.id}`
       : "SCAN";
     canvas.innerHTML = msg.svg || "";
-    // Strip XML declaration if present for innerHTML safety
-    const svg = canvas.querySelector("svg");
-    if (!svg && msg.svg) {
+    if (!canvas.querySelector("svg") && msg.svg) {
       canvas.innerHTML = msg.svg.replace(/^<\?xml[^>]*>\s*/i, "");
     }
-    showEmptyDetails();
-    clearSelection();
     requestAnimationFrame(fitView);
   }
 
@@ -167,7 +69,6 @@
     if (msg.type === "error") {
       setError(msg.message || "Preview failed");
       systemLabel.textContent = "SCAN";
-      showEmptyDetails();
     }
   });
 
@@ -220,32 +121,6 @@
     { passive: false },
   );
 
-  canvas.addEventListener("click", (e) => {
-    const node = e.target.closest("[data-node]");
-    if (node) {
-      e.stopPropagation();
-      selectById("node", node.getAttribute("data-node"));
-      return;
-    }
-    const edge = e.target.closest("[data-edge]");
-    if (edge) {
-      e.stopPropagation();
-      selectById("edge", edge.getAttribute("data-edge"));
-      return;
-    }
-    clearSelection();
-    showEmptyDetails();
-  });
-
-  // Avoid treating a click as a pan selection clear fighting with click
-  let moved = false;
-  viewport.addEventListener("pointerdown", () => {
-    moved = false;
-  });
-  viewport.addEventListener("pointermove", () => {
-    if (panning) moved = true;
-  });
-
   btnZoomIn.addEventListener("click", () => {
     scale = Math.min(4, scale * 1.15);
     applyTransform();
@@ -261,6 +136,12 @@
     applyTransform();
   });
   btnFit.addEventListener("click", fitView);
+
+  if (btnShowSource) {
+    btnShowSource.addEventListener("click", () => {
+      vscode.postMessage({ type: "showSource" });
+    });
+  }
 
   applyTransform();
   vscode.postMessage({ type: "ready" });

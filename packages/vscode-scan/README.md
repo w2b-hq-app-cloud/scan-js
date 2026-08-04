@@ -2,9 +2,11 @@
 
 Read-only preview for **System & Component Architecture Notation** (`*.scan.yaml`).
 
-Open a diagram beside the editor (like Markdown preview), **pan / zoom / fit**, and **click** a component or connection to inspect details. No editing tools — YAML stays the source of truth.
+Toggle the same editor between **YAML source** and **diagram preview** (like Markdown), then **pan / zoom / fit**. No editing tools — YAML stays the source of truth.
 
 Part of the open-source [scan-js](https://github.com/w2b-hq-app-cloud/scan-js) toolkit (`@spherescan/model` + `@spherescan/viewer`).
+
+![SCAN architecture diagram](https://raw.githubusercontent.com/w2b-hq-app-cloud/scan-js/main/docs/screenshot.png)
 
 ## Install
 
@@ -21,9 +23,9 @@ npm run package -w scan
 Then:
 
 ```bash
-code --install-extension packages/vscode-scan/scan-*.vsix
+code --install-extension packages/vscode-scan/scan-*.vsix --force
 # Cursor:
-cursor --install-extension packages/vscode-scan/scan-*.vsix
+cursor --install-extension packages/vscode-scan/scan-*.vsix --force
 ```
 
 ### From the Marketplace
@@ -38,12 +40,16 @@ See [SHIPPING.md](./SHIPPING.md) to publish.
 
 ## Usage
 
-1. Open a `*.scan.yaml` file (e.g. `packages/model/fixtures/order-platform.yaml` renamed or any SCAN document).
-2. **SCAN: Open Preview to the Side** (editor title icon, or `Ctrl+K V` / `Cmd+K V`).
-3. Drag to pan, scroll to zoom, use **Fit** / **±**.
-4. Click a box or wire — details appear in the side panel.
+1. Open a `*.scan.yaml` file.
+2. Toggle preview in the **same tab** (like Markdown):
+   - Editor title **Open Preview** icon (top-right of the editor)
+   - Shortcut `Ctrl+Shift+V` / `Cmd+Shift+V`
+   - Status bar **SCAN Preview**
+3. In preview, use **Preview | SCAN** (or title **Show Source** / the same shortcut) to return to YAML.
+4. Optional: **Open Preview to the Side** (`Ctrl+K V`) for a side-by-side layout.
+5. Drag to pan, scroll to zoom, use **Fit** / **±**.
 
-Preview refreshes automatically when you edit the YAML.
+Preview refreshes automatically when you edit the YAML (keep the source editor open in another group, or toggle back to edit).
 
 ## Development
 
