@@ -7,7 +7,6 @@ import {
   type SphereModel,
   type SphereConnection,
 } from "@spherescan/model";
-import { slugifyId } from "@spherescan/model";
 import { canConnect, suggestConnectionType } from "@spherescan/rules";
 import type { NodeKind } from "@spherescan/viewer";
 import { CommandStack } from "./command-stack.js";
