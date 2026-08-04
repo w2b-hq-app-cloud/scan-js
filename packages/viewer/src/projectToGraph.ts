@@ -204,6 +204,8 @@ function projectNodes(model: SphereModel, view: SphereView): SphereNode[] {
       exposes: mapPorts(ext.exposes, "out"),
       repo: repoPath(ext.repository),
       repoUrl: repoUrl(ext.repository),
+      notes: ext.notes,
+      links: ext.links?.map((link) => ({ ...link })),
     });
   }
 
@@ -230,6 +232,8 @@ function projectNodes(model: SphereModel, view: SphereView): SphereNode[] {
       exposes: mapPorts(c.exposes, "out"),
       repo: repoPath(c.repository),
       repoUrl: repoUrl(c.repository),
+      notes: c.notes,
+      links: c.links?.map((link) => ({ ...link })),
       status: c.status,
       warn: c.warn,
     });
@@ -276,6 +280,8 @@ function projectNodes(model: SphereModel, view: SphereView): SphereNode[] {
       group: memberGroupId(view, a.id),
       consumes: mapPorts(a.consumes, "in"),
       exposes: mapPorts(a.exposes, "out"),
+      notes: a.notes,
+      links: a.links?.map((link) => ({ ...link })),
     });
   }
 
@@ -288,7 +294,6 @@ function projectNodes(model: SphereModel, view: SphereView): SphereNode[] {
       kind,
       title: r.name,
       subtitle: kindSubtitle(kind, undefined, r.subtitle ?? r.path),
-      description: r.description,
       icon: r.icon,
       tech: kindTechLabel(kind),
       x: layout.x,
@@ -309,7 +314,7 @@ function projectNodes(model: SphereModel, view: SphereView): SphereNode[] {
   return nodes;
 }
 
-function projectEdges(model: SphereModel): SphereEdge[] {
+function projectEdges(model: SphereModel, view: SphereView): SphereEdge[] {
   return model.connections.map((c, index) => {
     const kind = connectionEdgeKind(c.type);
     return {
@@ -324,6 +329,7 @@ function projectEdges(model: SphereModel): SphereEdge[] {
       fromPort: c.fromPort,
       toPort: c.toPort,
       operations: c.operations?.length ? [...c.operations] : undefined,
+      waypoints: view.routes?.[c.id ?? `e${index + 1}`]?.waypoints.map((point) => ({ ...point })),
     };
   });
 }
@@ -340,6 +346,6 @@ export function projectToGraph(model: SphereModel, viewId?: string): BoardGraph 
   return {
     groups: projectGroups(view),
     nodes: projectNodes(model, view),
-    edges: projectEdges(model),
+    edges: projectEdges(model, view),
   };
 }

@@ -31,6 +31,17 @@ Workspaces under `packages/*` and `apps/*`. Build order is handled by the root `
 
 `@spherescan/board` is a **private** workspace package (source consumed by the whiteboard). It is not published to npm in v0.1 - see README.
 
+## VS Code / Cursor preview
+
+Read-only diagram preview for `*.scan.yaml`:
+
+```bash
+npm run ext:package
+code --install-extension packages/vscode-scan/scan-*.vsix
+```
+
+Docs: [`packages/vscode-scan/README.md`](../packages/vscode-scan/README.md), publish steps in [`SHIPPING.md`](../packages/vscode-scan/SHIPPING.md).
+
 ## Skill sync (when nested under sphere-io)
 
 Canonical skill: [`skills/scan-notation/`](../skills/scan-notation/).  

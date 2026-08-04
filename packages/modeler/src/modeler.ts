@@ -2,6 +2,7 @@ import {
   createEmptyModel,
   parseSphereYaml,
   serializeSphereYaml,
+  slugifyId,
   type SphereModel,
 } from "@spherescan/model";
 import {
@@ -74,8 +75,16 @@ export class ScanModeler {
     this.emit();
   }
 
+  /**
+   * Replace the board from a user-picked file. Marks dirty so hosts persist a
+   * draft / cloud save — unlike `importYAML` used for boot/load (clean).
+   */
   async importYAMLFile(file: File): Promise<void> {
-    await this.importYAML(await file.text());
+    this.model = parseSphereYaml(await file.text());
+    this.savedYaml = null;
+    this.commandStack.clear();
+    await this.syncViewer();
+    this.emit();
   }
 
   /**
@@ -91,6 +100,34 @@ export class ScanModeler {
     this.commandStack.clear();
     await this.syncViewer();
     this.emit();
+  }
+
+  /**
+   * Clone the current board under a new system name/id (clears undo history).
+   * Hosts that keep per-system workspaces should treat this as a fresh tree
+   * (do not relocate the previous platform folder).
+   */
+  async duplicateBoard(systemName: string): Promise<{
+    fromSystemId: string;
+    toSystemId: string;
+  }> {
+    if (!this.model) throw new Error("No model loaded");
+    const trimmed = systemName.trim();
+    if (!trimmed) throw new Error("System name cannot be empty");
+    const fromSystemId = this.model.system.id;
+    let toSystemId = slugifyId(trimmed);
+    if (toSystemId === fromSystemId) {
+      toSystemId = `${toSystemId}-copy`;
+    }
+    const next = structuredClone(this.model) as SphereModel;
+    next.system.name = trimmed;
+    next.system.id = toSystemId;
+    this.model = next;
+    this.savedYaml = null;
+    this.commandStack.clear();
+    await this.syncViewer();
+    this.emit();
+    return { fromSystemId, toSystemId };
   }
 
   getModel(): SphereModel | null {

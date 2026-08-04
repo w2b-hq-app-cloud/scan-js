@@ -24,7 +24,9 @@
     "validate": "node packages/cli/dist/cli.js validate packages/model/fixtures/order-platform.yaml",
     "export:svg": "node packages/cli/dist/cli.js export svg packages/model/fixtures/order-platform.yaml -o order-platform.svg",
     "check-link": "node scripts/check-scan-link.mjs",
-    "smoke": "node scripts/scan-smoke.mjs"
+    "smoke": "node scripts/scan-smoke.mjs",
+    "ext:build": "npm run build -w @spherescan/model && npm run build -w @spherescan/viewer && npm run build -w scan",
+    "ext:package": "npm run ext:build && npm run package -w scan"
   },
   "dependencies": {
     "@spherescan/model": "^0.3.0",

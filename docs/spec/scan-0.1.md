@@ -93,6 +93,11 @@ components:
     type: service
     technology: Spring Boot
     description: Accepts and validates customer orders; owns the order aggregate.
+    notes: Managed by the checkout team.
+    links:
+      - kind: doc              # doc | repo | openapi | other
+        href: https://docs.example.com/order-api
+        title: API guide
     repository:
       provider: github
       path: company/order-api
@@ -122,6 +127,8 @@ components:
 | `technology` | no | Implementation hint |
 | `subtitle` | no | Secondary line under the title |
 | `description` | no | Free-text notes (role, ownership, constraints); Sphere inspector + design agent |
+| `notes` | no | Freeform authoring notes |
+| `links` | no | Typed references: `{ kind, href, title? }`; `kind` is `doc`, `repo`, `openapi`, or `other` |
 | `icon` | no | Diagram icon override: Lucide name (`shield`), `https://...`, or `data:image/...` |
 | `repository` | no | String path **or** `{ provider?, path }` |
 | `consumes` / `exposes` | no | Port lists |
@@ -315,6 +322,11 @@ views:
         h: 620
     layout:
       order-api: { x: 480, y: 180, w: 260, h: 190 }
+    routes:
+      e-order-payment:
+        waypoints:
+          - { x: 840, y: 275 }
+          - { x: 840, y: 420 }
 ```
 
 ### View
@@ -325,6 +337,7 @@ views:
 | `layout` | yes | Map of element id -> box |
 | `type` | no | Default `service-architecture` |
 | `boundaries` | no | Default `[]` |
+| `routes` | no | Map of connection id to DI route with intermediate `{ x, y }` orthogonal waypoints |
 
 ### Layout entry (DI box)
 
@@ -345,6 +358,7 @@ views:
 | `icon` | no | Same as element `icon` (Lucide name / URL / data URL) |
 
 `fromSide` / `toSide` on connections are also DI (edge routing), co-located with connection semantics for authoring convenience.
+`routes` is view-specific DI: omit a connection route to use automatic routing; stored waypoints are intermediate points only, with anchors derived from the endpoint boxes.
 
 ---
 

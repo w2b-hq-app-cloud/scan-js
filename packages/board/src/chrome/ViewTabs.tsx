@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 WABLOO PARTNERS SRL
 
+import type { ReactNode } from "react";
 import {
   AlertTriangle,
   Bot,
@@ -21,6 +22,7 @@ export function ViewTabs({
   onToggleFocusMode,
   nodes,
   groups,
+  endSlot,
 }: {
   view: "all" | "external" | "contracts" | "agents";
   setView: (v: "all" | "external" | "contracts" | "agents") => void;
@@ -29,6 +31,8 @@ export function ViewTabs({
   onToggleFocusMode: () => void;
   nodes: SphereNode[];
   groups: SphereGroup[];
+  /** Host chrome to the right of Filters / Focus / Auto-layout. */
+  endSlot?: ReactNode;
 }) {
   const externalCount = nodes.filter((n) => n.kind === "external").length;
   const agentCount = nodes.filter((n) => n.kind === "agent").length;
@@ -107,8 +111,8 @@ export function ViewTabs({
         >
           <Grid3x3 className="h-3.5 w-3.5" /> Auto-layout
         </button>
+        {endSlot}
       </div>
     </div>
   );
 }
-

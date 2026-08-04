@@ -192,6 +192,146 @@ function dedupePoints(points: Point[]): Point[] {
   return out;
 }
 
+function clampCoord(n: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, n));
+}
+
+/** Project a point onto a box side (attachment slides along that face). */
+export function projectOntoSide(box: Box, p: Point, side: Side): Point {
+  switch (side) {
+    case "l":
+      return { x: box.x, y: clampCoord(p.y, box.y, box.y + box.h) };
+    case "r":
+      return { x: box.x + box.w, y: clampCoord(p.y, box.y, box.y + box.h) };
+    case "t":
+      return { x: clampCoord(p.x, box.x, box.x + box.w), y: box.y };
+    case "b":
+      return { x: clampCoord(p.x, box.x, box.x + box.w), y: box.y + box.h };
+  }
+}
+
+/**
+ * Side of `box` that best faces `p` so a stub to `p` can stay axis-aligned.
+ * Prefers an outside face; uses `hint` when several faces are plausible.
+ */
+export function sideFacingPoint(box: Box, p: Point, hint?: Side): Side {
+  const left = box.x;
+  const right = box.x + box.w;
+  const top = box.y;
+  const bottom = box.y + box.h;
+  const outside: Side[] = [];
+  if (p.x >= right - EPS) outside.push("r");
+  if (p.x <= left + EPS) outside.push("l");
+  if (p.y >= bottom - EPS) outside.push("b");
+  if (p.y <= top + EPS) outside.push("t");
+  if (outside.length === 1) return outside[0]!;
+  if (outside.length > 1) {
+    if (hint && outside.includes(hint)) return hint;
+    let best = outside[0]!;
+    let bestDist = Infinity;
+    for (const side of outside) {
+      const q = projectOntoSide(box, p, side);
+      const d = Math.hypot(p.x - q.x, p.y - q.y);
+      if (d < bestDist) {
+        bestDist = d;
+        best = side;
+      }
+    }
+    return best;
+  }
+  const dists: Array<[Side, number]> = [
+    ["l", Math.abs(p.x - left)],
+    ["r", Math.abs(p.x - right)],
+    ["t", Math.abs(p.y - top)],
+    ["b", Math.abs(p.y - bottom)],
+  ];
+  if (hint) {
+    const hinted = dists.find(([s]) => s === hint);
+    if (hinted && hinted[1] <= Math.min(...dists.map((d) => d[1])) + 1) return hint;
+  }
+  dists.sort((a, b) => a[1] - b[1]);
+  return dists[0]![0];
+}
+
+function sideAllowsOrthogonalStub(box: Box, p: Point, side: Side): boolean {
+  const a = projectOntoSide(box, p, side);
+  return almostEq(a.x, p.x) || almostEq(a.y, p.y);
+}
+
+/**
+ * Anchors for a stored orthogonal route: slide attachments so the first/last
+ * stubs stay horizontal or vertical (no diagonal into the node).
+ */
+export function resolveAnchorsFromWaypoints(
+  from: Box,
+  to: Box,
+  waypoints: Point[],
+  hintFrom?: Side,
+  hintTo?: Side,
+): { a: Point; b: Point; fromSide: Side; toSide: Side } {
+  const w0 = waypoints[0] ?? { x: from.x + from.w, y: from.y + from.h / 2 };
+  const wN =
+    waypoints[waypoints.length - 1] ?? {
+      x: to.x,
+      y: to.y + to.h / 2,
+    };
+  const fromSide =
+    hintFrom && sideAllowsOrthogonalStub(from, w0, hintFrom)
+      ? hintFrom
+      : sideFacingPoint(from, w0, hintFrom);
+  const toSide =
+    hintTo && sideAllowsOrthogonalStub(to, wN, hintTo)
+      ? hintTo
+      : sideFacingPoint(to, wN, hintTo);
+  return {
+    fromSide,
+    toSide,
+    a: projectOntoSide(from, w0, fromSide),
+    b: projectOntoSide(to, wN, toSide),
+  };
+}
+
+/**
+ * Force every step to be purely horizontal or vertical by inserting elbows
+ * when a diagonal would otherwise appear.
+ */
+export function normalizeOrthogonalPolyline(points: Point[]): Point[] {
+  if (points.length < 2) return points.map((p) => ({ x: p.x, y: p.y }));
+  const out: Point[] = [{ x: points[0]!.x, y: points[0]!.y }];
+  for (let i = 1; i < points.length; i++) {
+    const prev = out[out.length - 1]!;
+    const cur = points[i]!;
+    const dx = Math.abs(cur.x - prev.x);
+    const dy = Math.abs(cur.y - prev.y);
+    if (dx < EPS && dy < EPS) continue;
+    if (dx >= EPS && dy >= EPS) {
+      out.push({ x: cur.x, y: prev.y });
+    }
+    out.push({ x: cur.x, y: cur.y });
+  }
+  return dedupePoints(out);
+}
+
+/**
+ * Keep route endpoints glued to node faces and matching the adjacent waypoint
+ * so stub segments stay axis-aligned while dragging segment handles.
+ */
+export function clampOrthogonalRouteEnds(
+  points: Point[],
+  from: Box,
+  to: Box,
+  hintFrom?: Side,
+  hintTo?: Side,
+): Point[] {
+  if (points.length < 2) return points.map((p) => ({ x: p.x, y: p.y }));
+  const out = points.map((p) => ({ x: p.x, y: p.y }));
+  const fromSide = sideFacingPoint(from, out[1]!, hintFrom);
+  const toSide = sideFacingPoint(to, out[out.length - 2]!, hintTo);
+  out[0] = projectOntoSide(from, out[1]!, fromSide);
+  out[out.length - 1] = projectOntoSide(to, out[out.length - 2]!, toSide);
+  return out;
+}
+
 /** Manhattan waypoints: exit stubs + elbows, 90° only. */
 export function orthogonalWaypoints(
   a: Point,
@@ -390,6 +530,8 @@ export type RoutedEdgeInput = {
   bSide?: string;
   fanIndex?: number;
   fanCount?: number;
+  /** Persisted intermediate orthogonal points from the active view. */
+  waypoints?: Point[];
 };
 
 type ResolvedRoute = {
@@ -401,6 +543,22 @@ type ResolvedRoute = {
 };
 
 function resolveRoutedEdge(e: RoutedEdgeInput): ResolvedRoute {
+  if (e.from && e.to && e.waypoints?.length) {
+    const resolved = resolveAnchorsFromWaypoints(
+      e.from,
+      e.to,
+      e.waypoints,
+      e.aSide ? asSide(e.aSide) : undefined,
+      e.bSide ? asSide(e.bSide) : undefined,
+    );
+    return {
+      id: e.id,
+      a: resolved.a,
+      b: resolved.b,
+      aSide: resolved.fromSide,
+      bSide: resolved.toSide,
+    };
+  }
   if (e.from && e.to) {
     const resolved = resolveEdgeAnchors(
       e.from,
@@ -493,9 +651,28 @@ export function routeOrthogonalEdges(
   for (const e of edges) {
     const r = resolveRoutedEdge(e);
     const lane = lanes.get(e.id) ?? 0;
-    const pts = orthogonalWaypoints(r.a, r.b, r.aSide, r.bSide, ORTHO_STUB, lane);
+    const pts = e.waypoints?.length
+      ? normalizeOrthogonalPolyline(dedupePoints([r.a, ...e.waypoints, r.b]))
+      : orthogonalWaypoints(r.a, r.b, r.aSide, r.bSide, ORTHO_STUB, lane);
     out.set(e.id, orthogonalPathWithHops(pts, earlier, hopRadius));
     earlier.push(...pointsToSegments(pts));
+  }
+  return out;
+}
+
+/** Same routing as `routeOrthogonalEdges`, but returns polylines (for handles / labels). */
+export function routeOrthogonalPolylines(
+  edges: RoutedEdgeInput[],
+): Map<string, Point[]> {
+  const out = new Map<string, Point[]>();
+  const lanes = assignOrthogonalLanes(edges);
+  for (const e of edges) {
+    const r = resolveRoutedEdge(e);
+    const lane = lanes.get(e.id) ?? 0;
+    const pts = e.waypoints?.length
+      ? normalizeOrthogonalPolyline(dedupePoints([r.a, ...e.waypoints, r.b]))
+      : orthogonalWaypoints(r.a, r.b, r.aSide, r.bSide, ORTHO_STUB, lane);
+    out.set(e.id, pts);
   }
   return out;
 }

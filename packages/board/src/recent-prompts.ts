@@ -3,7 +3,7 @@
 
 import { recentPrompts as seedRecentPrompts } from "./chrome-data";
 
-export const RECENT_PROMPTS_KEY = "sphere.board.recentPrompts";
+export const RECENT_PROMPTS_KEY = "scan.board.recentPrompts";
 export const MAX_RECENT_PROMPTS = 8;
 
 export function readStoredRecentPrompts(): string[] {

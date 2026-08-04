@@ -16,6 +16,8 @@ export function BoundaryInspector({
   onUpdate,
   onDelete,
   onRename,
+  onBringForward,
+  onSendBackward,
   onSelectNode,
 }: {
   group: SphereGroup;
@@ -32,6 +34,8 @@ export function BoundaryInspector({
   ) => void;
   onDelete: (id: string) => void;
   onRename: (id: string) => void;
+  onBringForward: (id: string) => void;
+  onSendBackward: (id: string) => void;
   onSelectNode: (id: string) => void;
 }) {
   const [label, setLabel] = useState(group.title);
@@ -155,6 +159,13 @@ export function BoundaryInspector({
             className="w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-xs outline-none focus:border-primary"
             placeholder="e.g. Trust Boundary"
           />
+        </Section>
+
+        <Section title="Layer">
+          <div className="flex gap-2">
+            <button type="button" onClick={() => onSendBackward(group.id)} className="flex-1 rounded-md border border-border px-2 py-1.5 text-[11px] hover:bg-muted">Send backward</button>
+            <button type="button" onClick={() => onBringForward(group.id)} className="flex-1 rounded-md border border-border px-2 py-1.5 text-[11px] hover:bg-muted">Bring forward</button>
+          </div>
         </Section>
 
         <Section title={`Members (${members.length})`}>

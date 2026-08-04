@@ -83,6 +83,15 @@
         }
       ]
     },
+    "ElementLink": {
+      "type": "object",
+      "required": ["kind", "href"],
+      "properties": {
+        "kind": { "type": "string", "enum": ["doc", "repo", "openapi", "other"] },
+        "href": { "type": "string" },
+        "title": { "type": "string" }
+      }
+    },
     "System": {
       "type": "object",
       "required": ["id", "name"],
@@ -126,6 +135,8 @@
           "type": "string",
           "description": "Free-text notes about the component (role, ownership, constraints)."
         },
+        "notes": { "type": "string" },
+        "links": { "type": "array", "items": { "$ref": "#/$defs/ElementLink" } },
         "icon": { "$ref": "#/$defs/Icon" },
         "repository": { "$ref": "#/$defs/RepositoryRef" },
         "consumes": {
@@ -152,6 +163,8 @@
           "type": "string",
           "description": "Free-text notes about the channel."
         },
+        "notes": { "type": "string" },
+        "links": { "type": "array", "items": { "$ref": "#/$defs/ElementLink" } },
         "icon": { "$ref": "#/$defs/Icon" },
         "consumes": {
           "type": "array",
@@ -175,6 +188,8 @@
           "type": "string",
           "description": "Free-text notes about the external system."
         },
+        "notes": { "type": "string" },
+        "links": { "type": "array", "items": { "$ref": "#/$defs/ElementLink" } },
         "icon": { "$ref": "#/$defs/Icon" },
         "repository": { "$ref": "#/$defs/RepositoryRef" },
         "consumes": {
@@ -194,11 +209,14 @@
         "id": { "type": "string" },
         "name": { "type": "string" },
         "purpose": { "type": "string" },
+        "technology": { "type": "string" },
         "subtitle": { "type": "string" },
         "description": {
           "type": "string",
           "description": "Free-text notes about the agent."
         },
+        "notes": { "type": "string" },
+        "links": { "type": "array", "items": { "$ref": "#/$defs/ElementLink" } },
         "icon": { "$ref": "#/$defs/Icon" },
         "runtime": {
           "type": "string",
@@ -370,6 +388,27 @@
           "type": "object",
           "additionalProperties": { "$ref": "#/$defs/LayoutEntry" },
           "description": "Map of element id ? DI box. Semantic model lives outside views; layout is presentation only."
+        },
+        "routes": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "waypoints": {
+                "type": "array",
+                "default": [],
+                "items": {
+                  "type": "object",
+                  "required": ["x", "y"],
+                  "properties": {
+                    "x": { "type": "number" },
+                    "y": { "type": "number" }
+                  }
+                }
+              }
+            }
+          },
+          "description": "Map of connection id to intermediate orthogonal route waypoints."
         }
       }
     }

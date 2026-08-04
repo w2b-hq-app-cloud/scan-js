@@ -91,7 +91,7 @@ export function HostApp() {
         (e.g. calc(100vh - header) or a fixed panel).
       */}
       <main className="min-h-0 flex-1">
-        <BoardApp key={boardKey} shell="scan" fill="parent" initialYaml={activeYaml} />
+        <BoardApp key={boardKey} fill="parent" initialYaml={activeYaml} />
       </main>
     </div>
   );

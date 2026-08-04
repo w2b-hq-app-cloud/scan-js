@@ -1,9 +1,11 @@
 import type {
   ConnectionType,
+  ElementLink,
   LayoutEntry,
   SphereModel,
   SphereConnection,
 } from "@spherescan/model";
+import { slugifyId } from "@spherescan/model";
 import { canConnect, suggestConnectionType } from "@spherescan/rules";
 import type { NodeKind } from "@spherescan/viewer";
 import { CommandStack } from "./command-stack.js";
@@ -22,11 +24,64 @@ function cloneModel(model: SphereModel): SphereModel {
   return structuredClone(model);
 }
 
+type LinkHost = { links?: ElementLink[] };
+
+function findLinkHost(model: SphereModel, id: string): LinkHost | undefined {
+  return (
+    model.components.find((c) => c.id === id) ??
+    model.external_systems.find((c) => c.id === id) ??
+    model.agents.find((c) => c.id === id)
+  );
+}
+
+function normalizeLink(link: ElementLink): ElementLink {
+  const href = link.href.trim();
+  if (!href) throw new Error("Link href cannot be empty");
+  const title = link.title?.trim();
+  return { kind: link.kind, href, ...(title ? { title } : {}) };
+}
+
 function ensureView(model: SphereModel, viewId?: string) {
   const view =
     (viewId ? model.views.find((v) => v.id === viewId) : undefined) ?? model.views[0];
   if (!view) throw new Error("Model has no views");
   return view;
+}
+
+function connectionKey(connection: SphereConnection, index: number): string {
+  return connection.id ?? `e${index + 1}`;
+}
+
+type ActiveView = ReturnType<typeof ensureView>;
+
+/** Drop stored orthogonal routes when endpoints move or auto-layout runs. */
+function clearRoutesTouching(
+  model: SphereModel,
+  view: ActiveView,
+  elementIds: Iterable<string>,
+) {
+  if (!view.routes) return;
+  const ids = elementIds instanceof Set ? elementIds : new Set(elementIds);
+  if (!ids.size) return;
+  for (let i = 0; i < model.connections.length; i++) {
+    const connection = model.connections[i]!;
+    const key = connectionKey(connection, i);
+    if (ids.has(connection.from) || ids.has(connection.to)) {
+      delete view.routes[key];
+    }
+  }
+  if (!Object.keys(view.routes).length) delete view.routes;
+}
+
+function pruneOrphanRoutes(model: SphereModel, view: ActiveView) {
+  if (!view.routes) return;
+  const keys = new Set(
+    model.connections.map((connection, index) => connectionKey(connection, index)),
+  );
+  for (const id of Object.keys(view.routes)) {
+    if (!keys.has(id)) delete view.routes[id];
+  }
+  if (!Object.keys(view.routes).length) delete view.routes;
 }
 
 function defaultSize(kind: CreateKind): { w: number; h: number } {
@@ -109,6 +164,7 @@ export class Modeling {
     const view = ensureView(next, this.viewId);
     const layout = view.layout[id] ?? { x: 0, y: 0 };
     view.layout[id] = { ...layout, x, y };
+    clearRoutesTouching(next, view, [id]);
     syncBoundaryMembership(view);
     this.replace(next, prev, `Move ${id}`);
   }
@@ -127,7 +183,13 @@ export class Modeling {
       const layout = undoView.layout[u.id] ?? { x: 0, y: 0 };
       undoView.layout[u.id] = { ...layout, x: u.ox, y: u.oy };
     }
-    syncBoundaryMembership(ensureView(next, this.viewId));
+    const nextView = ensureView(next, this.viewId);
+    clearRoutesTouching(
+      next,
+      nextView,
+      moved.map((u) => u.id),
+    );
+    syncBoundaryMembership(nextView);
     syncBoundaryMembership(undoView);
     this.replace(
       next,
@@ -245,12 +307,98 @@ export class Modeling {
     throw new Error(`Element not found: ${id}`);
   }
 
+  /** Update author-facing metadata on a component, external system, or agent. */
+  updateElementMeta(
+    id: string,
+    patch: {
+      description?: string | null;
+      notes?: string | null;
+      technology?: string | null;
+      subtitle?: string | null;
+    },
+  ) {
+    const prev = cloneModel(this.getModel());
+    const next = cloneModel(prev);
+    const element =
+      next.components.find((c) => c.id === id) ??
+      next.external_systems.find((c) => c.id === id) ??
+      next.agents.find((c) => c.id === id);
+    if (!element) throw new Error(`Element not found or does not support metadata: ${id}`);
+    for (const key of ["description", "notes", "technology", "subtitle"] as const) {
+      if (!(key in patch)) continue;
+      const value = patch[key]?.trim();
+      const metadata = element as unknown as Record<string, string | undefined>;
+      if (value) metadata[key] = value;
+      else delete metadata[key];
+    }
+    this.replace(next, prev, `Update metadata ${id}`);
+  }
+
+  /** Set or clear an inline source repository reference. */
+  setElementRepository(
+    id: string,
+    repository: string | { provider?: string; path: string } | null,
+  ) {
+    const prev = cloneModel(this.getModel());
+    const next = cloneModel(prev);
+    const element =
+      next.components.find((c) => c.id === id) ??
+      next.external_systems.find((c) => c.id === id);
+    if (!element) throw new Error(`Element not found or does not support repositories: ${id}`);
+    if (repository === null) {
+      delete element.repository;
+    } else if (typeof repository === "string") {
+      const path = repository.trim();
+      if (!path) delete element.repository;
+      else element.repository = path;
+    } else {
+      const path = repository.path.trim();
+      if (!path) delete element.repository;
+      else element.repository = {
+        path,
+        ...(repository.provider?.trim() ? { provider: repository.provider.trim() } : {}),
+      };
+    }
+    this.replace(next, prev, `Set repository ${id}`);
+  }
+
+  addElementLink(id: string, link: ElementLink) {
+    const prev = cloneModel(this.getModel());
+    const next = cloneModel(prev);
+    const element = findLinkHost(next, id);
+    if (!element) throw new Error(`Element not found or does not support links: ${id}`);
+    element.links = [...(element.links ?? []), normalizeLink(link)];
+    this.replace(next, prev, `Add link ${id}`);
+  }
+
+  removeElementLink(id: string, index: number) {
+    const prev = cloneModel(this.getModel());
+    const next = cloneModel(prev);
+    const element = findLinkHost(next, id);
+    if (!element?.links?.[index]) throw new Error(`Link not found: ${id}[${index}]`);
+    element.links.splice(index, 1);
+    if (!element.links.length) delete element.links;
+    this.replace(next, prev, `Remove link ${id}`);
+  }
+
+  updateElementLink(id: string, index: number, link: ElementLink) {
+    const prev = cloneModel(this.getModel());
+    const next = cloneModel(prev);
+    const element = findLinkHost(next, id);
+    if (!element?.links?.[index]) throw new Error(`Link not found: ${id}[${index}]`);
+    element.links[index] = normalizeLink(link);
+    this.replace(next, prev, `Update link ${id}`);
+  }
+
   renameSystem(name: string) {
     const trimmed = name.trim();
     if (!trimmed) throw new Error("System name cannot be empty");
     const prev = cloneModel(this.getModel());
     const next = cloneModel(prev);
     next.system.name = trimmed;
+    // Keep system.id in sync with the display name (same as newBoard) so
+    // workspace paths / GitHub slugs follow a rename immediately.
+    next.system.id = slugifyId(trimmed);
     this.replace(next, prev, `Rename system to ${trimmed}`);
   }
 
@@ -268,6 +416,7 @@ export class Modeling {
       for (const b of view.boundaries) {
         b.members = b.members.filter((m) => m !== id);
       }
+      pruneOrphanRoutes(next, view);
     }
     this.replace(next, prev, `Delete ${id}`);
   }
@@ -417,6 +566,11 @@ export class Modeling {
     const prev = cloneModel(this.getModel());
     const next = cloneModel(prev);
     next.connections = next.connections.filter((c, i) => (c.id ?? `e${i + 1}`) !== connectionId);
+    for (const view of next.views) {
+      if (!view.routes?.[connectionId]) continue;
+      delete view.routes[connectionId];
+      if (!Object.keys(view.routes).length) delete view.routes;
+    }
     this.replace(next, prev, `Delete connection ${connectionId}`);
   }
 
@@ -664,6 +818,72 @@ export class Modeling {
     this.replace(next, prev, `Delete boundary ${id}`);
   }
 
+  bringBoundaryForward(id: string) {
+    this.reorderBoundary(id, (index, boundaries) => Math.min(boundaries.length - 1, index + 1), "Bring boundary forward");
+  }
+
+  sendBoundaryBackward(id: string) {
+    this.reorderBoundary(id, (index) => Math.max(0, index - 1), "Send boundary backward");
+  }
+
+  bringBoundaryToFront(id: string) {
+    this.reorderBoundary(id, (_index, boundaries) => boundaries.length - 1, "Bring boundary to front");
+  }
+
+  sendBoundaryToBack(id: string) {
+    this.reorderBoundary(id, () => 0, "Send boundary to back");
+  }
+
+  private reorderBoundary(
+    id: string,
+    destination: (index: number, boundaries: SphereModel["views"][number]["boundaries"]) => number,
+    label: string,
+  ) {
+    const prev = cloneModel(this.getModel());
+    const next = cloneModel(prev);
+    const boundaries = ensureView(next, this.viewId).boundaries;
+    const index = boundaries.findIndex((boundary) => boundary.id === id);
+    if (index < 0) throw new Error(`Boundary not found: ${id}`);
+    const target = destination(index, boundaries);
+    if (target === index) return;
+    const [boundary] = boundaries.splice(index, 1);
+    boundaries.splice(target, 0, boundary!);
+    this.replace(next, prev, `${label} ${id}`);
+  }
+
+  /** Set an active-view orthogonal route, or clear it to restore auto-routing. */
+  updateConnectionRoute(
+    id: string,
+    waypoints: Array<{ x: number; y: number }> | null,
+    sides?: {
+      fromSide: NonNullable<SphereConnection["fromSide"]>;
+      toSide: NonNullable<SphereConnection["toSide"]>;
+    },
+  ) {
+    const prev = cloneModel(this.getModel());
+    const next = cloneModel(prev);
+    const connection = next.connections.find((c, index) => (c.id ?? `e${index + 1}`) === id);
+    if (!connection) throw new Error(`Connection not found: ${id}`);
+    const view = ensureView(next, this.viewId);
+    if (waypoints === null) {
+      if (!view.routes?.[id] && !sides) return;
+      if (view.routes?.[id]) {
+        delete view.routes[id];
+        if (!Object.keys(view.routes).length) delete view.routes;
+      }
+    } else {
+      view.routes ??= {};
+      view.routes[id] = {
+        waypoints: waypoints.map((point) => ({ x: point.x, y: point.y })),
+      };
+    }
+    if (sides) {
+      connection.fromSide = sides.fromSide;
+      connection.toSide = sides.toSide;
+    }
+    this.replace(next, prev, `Update route ${id}`);
+  }
+
   /** Live move while dragging; commit with moveBoundary on pointer up. Moves members with the box. */
   previewMoveBoundary(id: string, x: number, y: number) {
     const current = this.getModel();
@@ -708,7 +928,8 @@ export class Modeling {
 
     boundary.x = nx;
     boundary.y = ny;
-    for (const memberId of boundary.members ?? []) {
+    const memberIds = [...(boundary.members ?? [])];
+    for (const memberId of memberIds) {
       const layout = view.layout[memberId];
       if (!layout) continue;
       view.layout[memberId] = {
@@ -717,6 +938,7 @@ export class Modeling {
         y: layout.y + dy,
       };
     }
+    clearRoutesTouching(next, view, memberIds);
     syncBoundaryMembership(view);
     this.replace(next, prev, `Move boundary ${id}`);
   }
@@ -753,7 +975,14 @@ export class Modeling {
         };
       }
     }
-    syncBoundaryMembership(ensureView(next, this.viewId));
+    const nextView = ensureView(next, this.viewId);
+    const memberIds = new Set<string>();
+    for (const u of moved) {
+      const b = nextView.boundaries.find((x) => x.id === u.id);
+      for (const memberId of b?.members ?? []) memberIds.add(memberId);
+    }
+    clearRoutesTouching(next, nextView, memberIds);
+    syncBoundaryMembership(nextView);
     syncBoundaryMembership(undoView);
     this.replace(
       next,
@@ -835,6 +1064,7 @@ export class Modeling {
       conn.toSide = side.toSide;
     }
 
+    delete view.routes;
     syncBoundaryMembership(view);
     this.replace(next, prev, "Auto-layout");
   }

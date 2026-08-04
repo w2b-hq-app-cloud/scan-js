@@ -342,6 +342,15 @@ export function useScanBoard(options: UseScanBoardOptions | string = {}) {
     [modeler],
   );
 
+  const updateConnectionRoute = useCallback(
+    (
+      id: string,
+      waypoints: Array<{ x: number; y: number }> | null,
+      sides?: { fromSide: "l" | "r" | "t" | "b"; toSide: "l" | "r" | "t" | "b" },
+    ) => modeler.modeling.updateConnectionRoute(id, waypoints, sides),
+    [modeler],
+  );
+
   const renameElement = useCallback(
     (id: string, name: string) => modeler.modeling.renameElement(id, name),
     [modeler],
@@ -355,6 +364,47 @@ export function useScanBoard(options: UseScanBoardOptions | string = {}) {
   const updateElementDescription = useCallback(
     (id: string, description: string | null) =>
       modeler.modeling.updateElementDescription(id, description),
+    [modeler],
+  );
+
+  const updateElementMeta = useCallback(
+    (
+      id: string,
+      patch: {
+        description?: string | null;
+        notes?: string | null;
+        technology?: string | null;
+        subtitle?: string | null;
+      },
+    ) => modeler.modeling.updateElementMeta(id, patch),
+    [modeler],
+  );
+
+  const setElementRepository = useCallback(
+    (id: string, repository: string | { provider?: string; path: string } | null) =>
+      modeler.modeling.setElementRepository(id, repository),
+    [modeler],
+  );
+
+  const addElementLink = useCallback(
+    (
+      id: string,
+      link: { kind: "doc" | "repo" | "openapi" | "other"; href: string; title?: string },
+    ) => modeler.modeling.addElementLink(id, link),
+    [modeler],
+  );
+
+  const removeElementLink = useCallback(
+    (id: string, index: number) => modeler.modeling.removeElementLink(id, index),
+    [modeler],
+  );
+
+  const updateElementLink = useCallback(
+    (
+      id: string,
+      index: number,
+      link: { kind: "doc" | "repo" | "openapi" | "other"; href: string; title?: string },
+    ) => modeler.modeling.updateElementLink(id, index, link),
     [modeler],
   );
 
@@ -444,6 +494,23 @@ export function useScanBoard(options: UseScanBoardOptions | string = {}) {
 
   const deleteBoundary = useCallback(
     (id: string) => modeler.modeling.deleteBoundary(id),
+    [modeler],
+  );
+
+  const bringBoundaryForward = useCallback(
+    (id: string) => modeler.modeling.bringBoundaryForward(id),
+    [modeler],
+  );
+  const sendBoundaryBackward = useCallback(
+    (id: string) => modeler.modeling.sendBoundaryBackward(id),
+    [modeler],
+  );
+  const bringBoundaryToFront = useCallback(
+    (id: string) => modeler.modeling.bringBoundaryToFront(id),
+    [modeler],
+  );
+  const sendBoundaryToBack = useCallback(
+    (id: string) => modeler.modeling.sendBoundaryToBack(id),
     [modeler],
   );
 
@@ -537,9 +604,15 @@ export function useScanBoard(options: UseScanBoardOptions | string = {}) {
       duplicateBoundary,
       deleteConnection,
       updateConnection,
+      updateConnectionRoute,
       renameElement,
       updateElementIcon,
       updateElementDescription,
+      updateElementMeta,
+      setElementRepository,
+      addElementLink,
+      removeElementLink,
+      updateElementLink,
       addPort,
       updatePort,
       deletePort,
@@ -551,6 +624,10 @@ export function useScanBoard(options: UseScanBoardOptions | string = {}) {
       renameBoundary,
       updateBoundary,
       deleteBoundary,
+      bringBoundaryForward,
+      sendBoundaryBackward,
+      bringBoundaryToFront,
+      sendBoundaryToBack,
       downloadYaml,
       importYamlFile,
       exportSvg,
@@ -586,9 +663,15 @@ export function useScanBoard(options: UseScanBoardOptions | string = {}) {
       duplicateBoundary,
       deleteConnection,
       updateConnection,
+      updateConnectionRoute,
       renameElement,
       updateElementIcon,
       updateElementDescription,
+      updateElementMeta,
+      setElementRepository,
+      addElementLink,
+      removeElementLink,
+      updateElementLink,
       addPort,
       updatePort,
       deletePort,
@@ -600,6 +683,10 @@ export function useScanBoard(options: UseScanBoardOptions | string = {}) {
       renameBoundary,
       updateBoundary,
       deleteBoundary,
+      bringBoundaryForward,
+      sendBoundaryBackward,
+      bringBoundaryToFront,
+      sendBoundaryToBack,
       downloadYaml,
       importYamlFile,
       exportSvg,

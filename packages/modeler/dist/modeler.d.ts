@@ -27,12 +27,25 @@ export declare class ScanModeler {
     private viewer;
     constructor(options?: ModelerOptions);
     importYAML(yaml: string): Promise<void>;
+    /**
+     * Replace the board from a user-picked file. Marks dirty so hosts persist a
+     * draft / cloud save — unlike `importYAML` used for boot/load (clean).
+     */
     importYAMLFile(file: File): Promise<void>;
     /**
      * Replace the board with a new empty SCAN model (clears undo history).
      * Marks the board dirty until the user saves/downloads YAML.
      */
     newBoard(systemName?: string): Promise<void>;
+    /**
+     * Clone the current board under a new system name/id (clears undo history).
+     * Hosts that keep per-system workspaces should treat this as a fresh tree
+     * (do not relocate the previous platform folder).
+     */
+    duplicateBoard(systemName: string): Promise<{
+        fromSystemId: string;
+        toSystemId: string;
+    }>;
     getModel(): SphereModel | null;
     getGraph(): BoardGraph | null;
     saveYAML(): string;

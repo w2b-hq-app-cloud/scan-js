@@ -33,7 +33,7 @@ export function Page() {
     <div style={{ height: "100vh", display: "flex", flexDirection: "column" }}>
       <header>…your product chrome…</header>
       <main style={{ flex: 1, minHeight: 0 }}>
-        <BoardApp shell="scan" fill="parent" initialYaml={diagramYaml} />
+        <BoardApp fill="parent" initialYaml={diagramYaml} />
       </main>
     </div>
   );

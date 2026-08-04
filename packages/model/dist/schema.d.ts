@@ -22,14 +22,40 @@ declare const portSchema: z.ZodObject<{
  * - `data:image/...` (uploaded file encoded as data URL)
  */
 export declare const iconSchema: z.ZodOptional<z.ZodString>;
+export declare const elementLinkSchema: z.ZodObject<{
+    kind: z.ZodEnum<["doc", "repo", "openapi", "other"]>;
+    href: z.ZodString;
+    title: z.ZodOptional<z.ZodString>;
+}, "strip", z.ZodTypeAny, {
+    kind: "doc" | "repo" | "openapi" | "other";
+    href: string;
+    title?: string | undefined;
+}, {
+    kind: "doc" | "repo" | "openapi" | "other";
+    href: string;
+    title?: string | undefined;
+}>;
 declare const componentSchema: z.ZodObject<{
     id: z.ZodString;
     name: z.ZodString;
     type: z.ZodEnum<["service", "datastore", "search", "external-system", "agent", "repository", "event-stream"]>;
     technology: z.ZodOptional<z.ZodString>;
     subtitle: z.ZodOptional<z.ZodString>;
-    /** Longer free-text notes about the element (inspector + agents). */
     description: z.ZodOptional<z.ZodString>;
+    notes: z.ZodOptional<z.ZodString>;
+    links: z.ZodOptional<z.ZodArray<z.ZodObject<{
+        kind: z.ZodEnum<["doc", "repo", "openapi", "other"]>;
+        href: z.ZodString;
+        title: z.ZodOptional<z.ZodString>;
+    }, "strip", z.ZodTypeAny, {
+        kind: "doc" | "repo" | "openapi" | "other";
+        href: string;
+        title?: string | undefined;
+    }, {
+        kind: "doc" | "repo" | "openapi" | "other";
+        href: string;
+        title?: string | undefined;
+    }>, "many">>;
     icon: z.ZodOptional<z.ZodString>;
     repository: z.ZodOptional<z.ZodUnion<[z.ZodObject<{
         provider: z.ZodOptional<z.ZodString>;
@@ -81,6 +107,12 @@ declare const componentSchema: z.ZodObject<{
     technology?: string | undefined;
     subtitle?: string | undefined;
     description?: string | undefined;
+    notes?: string | undefined;
+    links?: {
+        kind: "doc" | "repo" | "openapi" | "other";
+        href: string;
+        title?: string | undefined;
+    }[] | undefined;
     icon?: string | undefined;
     consumes?: {
         id: string;
@@ -105,6 +137,12 @@ declare const componentSchema: z.ZodObject<{
     technology?: string | undefined;
     subtitle?: string | undefined;
     description?: string | undefined;
+    notes?: string | undefined;
+    links?: {
+        kind: "doc" | "repo" | "openapi" | "other";
+        href: string;
+        title?: string | undefined;
+    }[] | undefined;
     icon?: string | undefined;
     consumes?: {
         id: string;
@@ -214,15 +252,15 @@ declare const viewSchema: z.ZodObject<{
     }, "strip", z.ZodTypeAny, {
         id: string;
         label: string;
+        kind: "runtime" | "trust";
         x: number;
         y: number;
         w: number;
         h: number;
-        kind: "runtime" | "trust";
         members: string[];
         icon?: string | undefined;
         tag?: string | undefined;
-        color?: "search" | "agent" | "warn" | "svc" | "ext" | "data" | "event" | "repo" | undefined;
+        color?: "repo" | "search" | "agent" | "warn" | "svc" | "ext" | "data" | "event" | undefined;
     }, {
         id: string;
         label: string;
@@ -231,10 +269,10 @@ declare const viewSchema: z.ZodObject<{
         w: number;
         h: number;
         members: string[];
+        kind?: "runtime" | "trust" | undefined;
         icon?: string | undefined;
         tag?: string | undefined;
-        kind?: "runtime" | "trust" | undefined;
-        color?: "search" | "agent" | "warn" | "svc" | "ext" | "data" | "event" | "repo" | undefined;
+        color?: "repo" | "search" | "agent" | "warn" | "svc" | "ext" | "data" | "event" | undefined;
     }>, "many">>;
     layout: z.ZodRecord<z.ZodString, z.ZodObject<{
         x: z.ZodNumber;
@@ -252,21 +290,43 @@ declare const viewSchema: z.ZodObject<{
         w?: number | undefined;
         h?: number | undefined;
     }>>;
+    routes: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodObject<{
+        waypoints: z.ZodDefault<z.ZodArray<z.ZodObject<{
+            x: z.ZodNumber;
+            y: z.ZodNumber;
+        }, "strip", z.ZodTypeAny, {
+            x: number;
+            y: number;
+        }, {
+            x: number;
+            y: number;
+        }>, "many">>;
+    }, "strip", z.ZodTypeAny, {
+        waypoints: {
+            x: number;
+            y: number;
+        }[];
+    }, {
+        waypoints?: {
+            x: number;
+            y: number;
+        }[] | undefined;
+    }>>>;
 }, "strip", z.ZodTypeAny, {
     id: string;
     type: string;
     boundaries: {
         id: string;
         label: string;
+        kind: "runtime" | "trust";
         x: number;
         y: number;
         w: number;
         h: number;
-        kind: "runtime" | "trust";
         members: string[];
         icon?: string | undefined;
         tag?: string | undefined;
-        color?: "search" | "agent" | "warn" | "svc" | "ext" | "data" | "event" | "repo" | undefined;
+        color?: "repo" | "search" | "agent" | "warn" | "svc" | "ext" | "data" | "event" | undefined;
     }[];
     layout: Record<string, {
         x: number;
@@ -274,6 +334,12 @@ declare const viewSchema: z.ZodObject<{
         w?: number | undefined;
         h?: number | undefined;
     }>;
+    routes?: Record<string, {
+        waypoints: {
+            x: number;
+            y: number;
+        }[];
+    }> | undefined;
 }, {
     id: string;
     layout: Record<string, {
@@ -291,11 +357,17 @@ declare const viewSchema: z.ZodObject<{
         w: number;
         h: number;
         members: string[];
+        kind?: "runtime" | "trust" | undefined;
         icon?: string | undefined;
         tag?: string | undefined;
-        kind?: "runtime" | "trust" | undefined;
-        color?: "search" | "agent" | "warn" | "svc" | "ext" | "data" | "event" | "repo" | undefined;
+        color?: "repo" | "search" | "agent" | "warn" | "svc" | "ext" | "data" | "event" | undefined;
     }[] | undefined;
+    routes?: Record<string, {
+        waypoints?: {
+            x: number;
+            y: number;
+        }[] | undefined;
+    }> | undefined;
 }>;
 export declare const scanModelSchema: z.ZodEffects<z.ZodObject<{
     scan: z.ZodUnion<[z.ZodString, z.ZodNumber]>;
@@ -322,8 +394,21 @@ export declare const scanModelSchema: z.ZodEffects<z.ZodObject<{
         type: z.ZodEnum<["service", "datastore", "search", "external-system", "agent", "repository", "event-stream"]>;
         technology: z.ZodOptional<z.ZodString>;
         subtitle: z.ZodOptional<z.ZodString>;
-        /** Longer free-text notes about the element (inspector + agents). */
         description: z.ZodOptional<z.ZodString>;
+        notes: z.ZodOptional<z.ZodString>;
+        links: z.ZodOptional<z.ZodArray<z.ZodObject<{
+            kind: z.ZodEnum<["doc", "repo", "openapi", "other"]>;
+            href: z.ZodString;
+            title: z.ZodOptional<z.ZodString>;
+        }, "strip", z.ZodTypeAny, {
+            kind: "doc" | "repo" | "openapi" | "other";
+            href: string;
+            title?: string | undefined;
+        }, {
+            kind: "doc" | "repo" | "openapi" | "other";
+            href: string;
+            title?: string | undefined;
+        }>, "many">>;
         icon: z.ZodOptional<z.ZodString>;
         repository: z.ZodOptional<z.ZodUnion<[z.ZodObject<{
             provider: z.ZodOptional<z.ZodString>;
@@ -375,6 +460,12 @@ export declare const scanModelSchema: z.ZodEffects<z.ZodObject<{
         technology?: string | undefined;
         subtitle?: string | undefined;
         description?: string | undefined;
+        notes?: string | undefined;
+        links?: {
+            kind: "doc" | "repo" | "openapi" | "other";
+            href: string;
+            title?: string | undefined;
+        }[] | undefined;
         icon?: string | undefined;
         consumes?: {
             id: string;
@@ -399,6 +490,12 @@ export declare const scanModelSchema: z.ZodEffects<z.ZodObject<{
         technology?: string | undefined;
         subtitle?: string | undefined;
         description?: string | undefined;
+        notes?: string | undefined;
+        links?: {
+            kind: "doc" | "repo" | "openapi" | "other";
+            href: string;
+            title?: string | undefined;
+        }[] | undefined;
         icon?: string | undefined;
         consumes?: {
             id: string;
@@ -418,6 +515,20 @@ export declare const scanModelSchema: z.ZodEffects<z.ZodObject<{
         type: z.ZodDefault<z.ZodLiteral<"event-stream">>;
         technology: z.ZodOptional<z.ZodString>;
         description: z.ZodOptional<z.ZodString>;
+        notes: z.ZodOptional<z.ZodString>;
+        links: z.ZodOptional<z.ZodArray<z.ZodObject<{
+            kind: z.ZodEnum<["doc", "repo", "openapi", "other"]>;
+            href: z.ZodString;
+            title: z.ZodOptional<z.ZodString>;
+        }, "strip", z.ZodTypeAny, {
+            kind: "doc" | "repo" | "openapi" | "other";
+            href: string;
+            title?: string | undefined;
+        }, {
+            kind: "doc" | "repo" | "openapi" | "other";
+            href: string;
+            title?: string | undefined;
+        }>, "many">>;
         icon: z.ZodOptional<z.ZodString>;
         consumes: z.ZodOptional<z.ZodArray<z.ZodObject<{
             id: z.ZodString;
@@ -451,6 +562,12 @@ export declare const scanModelSchema: z.ZodEffects<z.ZodObject<{
         name: string;
         technology?: string | undefined;
         description?: string | undefined;
+        notes?: string | undefined;
+        links?: {
+            kind: "doc" | "repo" | "openapi" | "other";
+            href: string;
+            title?: string | undefined;
+        }[] | undefined;
         icon?: string | undefined;
         consumes?: {
             id: string;
@@ -468,6 +585,12 @@ export declare const scanModelSchema: z.ZodEffects<z.ZodObject<{
         type?: "event-stream" | undefined;
         technology?: string | undefined;
         description?: string | undefined;
+        notes?: string | undefined;
+        links?: {
+            kind: "doc" | "repo" | "openapi" | "other";
+            href: string;
+            title?: string | undefined;
+        }[] | undefined;
         icon?: string | undefined;
         consumes?: {
             id: string;
@@ -486,6 +609,20 @@ export declare const scanModelSchema: z.ZodEffects<z.ZodObject<{
         type: z.ZodOptional<z.ZodLiteral<"external-system">>;
         technology: z.ZodOptional<z.ZodString>;
         description: z.ZodOptional<z.ZodString>;
+        notes: z.ZodOptional<z.ZodString>;
+        links: z.ZodOptional<z.ZodArray<z.ZodObject<{
+            kind: z.ZodEnum<["doc", "repo", "openapi", "other"]>;
+            href: z.ZodString;
+            title: z.ZodOptional<z.ZodString>;
+        }, "strip", z.ZodTypeAny, {
+            kind: "doc" | "repo" | "openapi" | "other";
+            href: string;
+            title?: string | undefined;
+        }, {
+            kind: "doc" | "repo" | "openapi" | "other";
+            href: string;
+            title?: string | undefined;
+        }>, "many">>;
         icon: z.ZodOptional<z.ZodString>;
         repository: z.ZodOptional<z.ZodUnion<[z.ZodObject<{
             provider: z.ZodOptional<z.ZodString>;
@@ -533,6 +670,12 @@ export declare const scanModelSchema: z.ZodEffects<z.ZodObject<{
         } | undefined;
         technology?: string | undefined;
         description?: string | undefined;
+        notes?: string | undefined;
+        links?: {
+            kind: "doc" | "repo" | "openapi" | "other";
+            href: string;
+            title?: string | undefined;
+        }[] | undefined;
         icon?: string | undefined;
         consumes?: {
             id: string;
@@ -554,6 +697,12 @@ export declare const scanModelSchema: z.ZodEffects<z.ZodObject<{
         } | undefined;
         technology?: string | undefined;
         description?: string | undefined;
+        notes?: string | undefined;
+        links?: {
+            kind: "doc" | "repo" | "openapi" | "other";
+            href: string;
+            title?: string | undefined;
+        }[] | undefined;
         icon?: string | undefined;
         consumes?: {
             id: string;
@@ -570,8 +719,23 @@ export declare const scanModelSchema: z.ZodEffects<z.ZodObject<{
         id: z.ZodString;
         name: z.ZodString;
         purpose: z.ZodOptional<z.ZodString>;
+        technology: z.ZodOptional<z.ZodString>;
         subtitle: z.ZodOptional<z.ZodString>;
         description: z.ZodOptional<z.ZodString>;
+        notes: z.ZodOptional<z.ZodString>;
+        links: z.ZodOptional<z.ZodArray<z.ZodObject<{
+            kind: z.ZodEnum<["doc", "repo", "openapi", "other"]>;
+            href: z.ZodString;
+            title: z.ZodOptional<z.ZodString>;
+        }, "strip", z.ZodTypeAny, {
+            kind: "doc" | "repo" | "openapi" | "other";
+            href: string;
+            title?: string | undefined;
+        }, {
+            kind: "doc" | "repo" | "openapi" | "other";
+            href: string;
+            title?: string | undefined;
+        }>, "many">>;
         icon: z.ZodOptional<z.ZodString>;
         runtime: z.ZodOptional<z.ZodString>;
         consumes: z.ZodOptional<z.ZodArray<z.ZodObject<{
@@ -603,8 +767,15 @@ export declare const scanModelSchema: z.ZodEffects<z.ZodObject<{
     }, "strip", z.ZodTypeAny, {
         id: string;
         name: string;
+        technology?: string | undefined;
         subtitle?: string | undefined;
         description?: string | undefined;
+        notes?: string | undefined;
+        links?: {
+            kind: "doc" | "repo" | "openapi" | "other";
+            href: string;
+            title?: string | undefined;
+        }[] | undefined;
         icon?: string | undefined;
         consumes?: {
             id: string;
@@ -621,8 +792,15 @@ export declare const scanModelSchema: z.ZodEffects<z.ZodObject<{
     }, {
         id: string;
         name: string;
+        technology?: string | undefined;
         subtitle?: string | undefined;
         description?: string | undefined;
+        notes?: string | undefined;
+        links?: {
+            kind: "doc" | "repo" | "openapi" | "other";
+            href: string;
+            title?: string | undefined;
+        }[] | undefined;
         icon?: string | undefined;
         consumes?: {
             id: string;
@@ -641,17 +819,14 @@ export declare const scanModelSchema: z.ZodEffects<z.ZodObject<{
         id: z.ZodString;
         name: z.ZodString;
         type: z.ZodOptional<z.ZodString>;
-        description: z.ZodOptional<z.ZodString>;
     }, "strip", z.ZodTypeAny, {
         id: string;
         name: string;
         type?: string | undefined;
-        description?: string | undefined;
     }, {
         id: string;
         name: string;
         type?: string | undefined;
-        description?: string | undefined;
     }>, "many">>;
     repositories: z.ZodDefault<z.ZodArray<z.ZodObject<{
         id: z.ZodString;
@@ -659,7 +834,6 @@ export declare const scanModelSchema: z.ZodEffects<z.ZodObject<{
         provider: z.ZodOptional<z.ZodString>;
         path: z.ZodOptional<z.ZodString>;
         subtitle: z.ZodOptional<z.ZodString>;
-        description: z.ZodOptional<z.ZodString>;
         icon: z.ZodOptional<z.ZodString>;
         consumes: z.ZodOptional<z.ZodArray<z.ZodObject<{
             id: z.ZodString;
@@ -693,7 +867,6 @@ export declare const scanModelSchema: z.ZodEffects<z.ZodObject<{
         path?: string | undefined;
         provider?: string | undefined;
         subtitle?: string | undefined;
-        description?: string | undefined;
         icon?: string | undefined;
         consumes?: {
             id: string;
@@ -711,7 +884,6 @@ export declare const scanModelSchema: z.ZodEffects<z.ZodObject<{
         path?: string | undefined;
         provider?: string | undefined;
         subtitle?: string | undefined;
-        description?: string | undefined;
         icon?: string | undefined;
         consumes?: {
             id: string;
@@ -801,15 +973,15 @@ export declare const scanModelSchema: z.ZodEffects<z.ZodObject<{
         }, "strip", z.ZodTypeAny, {
             id: string;
             label: string;
+            kind: "runtime" | "trust";
             x: number;
             y: number;
             w: number;
             h: number;
-            kind: "runtime" | "trust";
             members: string[];
             icon?: string | undefined;
             tag?: string | undefined;
-            color?: "search" | "agent" | "warn" | "svc" | "ext" | "data" | "event" | "repo" | undefined;
+            color?: "repo" | "search" | "agent" | "warn" | "svc" | "ext" | "data" | "event" | undefined;
         }, {
             id: string;
             label: string;
@@ -818,10 +990,10 @@ export declare const scanModelSchema: z.ZodEffects<z.ZodObject<{
             w: number;
             h: number;
             members: string[];
+            kind?: "runtime" | "trust" | undefined;
             icon?: string | undefined;
             tag?: string | undefined;
-            kind?: "runtime" | "trust" | undefined;
-            color?: "search" | "agent" | "warn" | "svc" | "ext" | "data" | "event" | "repo" | undefined;
+            color?: "repo" | "search" | "agent" | "warn" | "svc" | "ext" | "data" | "event" | undefined;
         }>, "many">>;
         layout: z.ZodRecord<z.ZodString, z.ZodObject<{
             x: z.ZodNumber;
@@ -839,21 +1011,43 @@ export declare const scanModelSchema: z.ZodEffects<z.ZodObject<{
             w?: number | undefined;
             h?: number | undefined;
         }>>;
+        routes: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodObject<{
+            waypoints: z.ZodDefault<z.ZodArray<z.ZodObject<{
+                x: z.ZodNumber;
+                y: z.ZodNumber;
+            }, "strip", z.ZodTypeAny, {
+                x: number;
+                y: number;
+            }, {
+                x: number;
+                y: number;
+            }>, "many">>;
+        }, "strip", z.ZodTypeAny, {
+            waypoints: {
+                x: number;
+                y: number;
+            }[];
+        }, {
+            waypoints?: {
+                x: number;
+                y: number;
+            }[] | undefined;
+        }>>>;
     }, "strip", z.ZodTypeAny, {
         id: string;
         type: string;
         boundaries: {
             id: string;
             label: string;
+            kind: "runtime" | "trust";
             x: number;
             y: number;
             w: number;
             h: number;
-            kind: "runtime" | "trust";
             members: string[];
             icon?: string | undefined;
             tag?: string | undefined;
-            color?: "search" | "agent" | "warn" | "svc" | "ext" | "data" | "event" | "repo" | undefined;
+            color?: "repo" | "search" | "agent" | "warn" | "svc" | "ext" | "data" | "event" | undefined;
         }[];
         layout: Record<string, {
             x: number;
@@ -861,6 +1055,12 @@ export declare const scanModelSchema: z.ZodEffects<z.ZodObject<{
             w?: number | undefined;
             h?: number | undefined;
         }>;
+        routes?: Record<string, {
+            waypoints: {
+                x: number;
+                y: number;
+            }[];
+        }> | undefined;
     }, {
         id: string;
         layout: Record<string, {
@@ -878,11 +1078,17 @@ export declare const scanModelSchema: z.ZodEffects<z.ZodObject<{
             w: number;
             h: number;
             members: string[];
+            kind?: "runtime" | "trust" | undefined;
             icon?: string | undefined;
             tag?: string | undefined;
-            kind?: "runtime" | "trust" | undefined;
-            color?: "search" | "agent" | "warn" | "svc" | "ext" | "data" | "event" | "repo" | undefined;
+            color?: "repo" | "search" | "agent" | "warn" | "svc" | "ext" | "data" | "event" | undefined;
         }[] | undefined;
+        routes?: Record<string, {
+            waypoints?: {
+                x: number;
+                y: number;
+            }[] | undefined;
+        }> | undefined;
     }>, "many">;
 }, "strip", z.ZodTypeAny, {
     scan: string | number;
@@ -904,6 +1110,12 @@ export declare const scanModelSchema: z.ZodEffects<z.ZodObject<{
         technology?: string | undefined;
         subtitle?: string | undefined;
         description?: string | undefined;
+        notes?: string | undefined;
+        links?: {
+            kind: "doc" | "repo" | "openapi" | "other";
+            href: string;
+            title?: string | undefined;
+        }[] | undefined;
         icon?: string | undefined;
         consumes?: {
             id: string;
@@ -923,6 +1135,12 @@ export declare const scanModelSchema: z.ZodEffects<z.ZodObject<{
         name: string;
         technology?: string | undefined;
         description?: string | undefined;
+        notes?: string | undefined;
+        links?: {
+            kind: "doc" | "repo" | "openapi" | "other";
+            href: string;
+            title?: string | undefined;
+        }[] | undefined;
         icon?: string | undefined;
         consumes?: {
             id: string;
@@ -945,6 +1163,12 @@ export declare const scanModelSchema: z.ZodEffects<z.ZodObject<{
         } | undefined;
         technology?: string | undefined;
         description?: string | undefined;
+        notes?: string | undefined;
+        links?: {
+            kind: "doc" | "repo" | "openapi" | "other";
+            href: string;
+            title?: string | undefined;
+        }[] | undefined;
         icon?: string | undefined;
         consumes?: {
             id: string;
@@ -960,8 +1184,15 @@ export declare const scanModelSchema: z.ZodEffects<z.ZodObject<{
     agents: {
         id: string;
         name: string;
+        technology?: string | undefined;
         subtitle?: string | undefined;
         description?: string | undefined;
+        notes?: string | undefined;
+        links?: {
+            kind: "doc" | "repo" | "openapi" | "other";
+            href: string;
+            title?: string | undefined;
+        }[] | undefined;
         icon?: string | undefined;
         consumes?: {
             id: string;
@@ -980,7 +1211,6 @@ export declare const scanModelSchema: z.ZodEffects<z.ZodObject<{
         id: string;
         name: string;
         type?: string | undefined;
-        description?: string | undefined;
     }[];
     repositories: {
         id: string;
@@ -988,7 +1218,6 @@ export declare const scanModelSchema: z.ZodEffects<z.ZodObject<{
         path?: string | undefined;
         provider?: string | undefined;
         subtitle?: string | undefined;
-        description?: string | undefined;
         icon?: string | undefined;
         consumes?: {
             id: string;
@@ -1024,15 +1253,15 @@ export declare const scanModelSchema: z.ZodEffects<z.ZodObject<{
         boundaries: {
             id: string;
             label: string;
+            kind: "runtime" | "trust";
             x: number;
             y: number;
             w: number;
             h: number;
-            kind: "runtime" | "trust";
             members: string[];
             icon?: string | undefined;
             tag?: string | undefined;
-            color?: "search" | "agent" | "warn" | "svc" | "ext" | "data" | "event" | "repo" | undefined;
+            color?: "repo" | "search" | "agent" | "warn" | "svc" | "ext" | "data" | "event" | undefined;
         }[];
         layout: Record<string, {
             x: number;
@@ -1040,6 +1269,12 @@ export declare const scanModelSchema: z.ZodEffects<z.ZodObject<{
             w?: number | undefined;
             h?: number | undefined;
         }>;
+        routes?: Record<string, {
+            waypoints: {
+                x: number;
+                y: number;
+            }[];
+        }> | undefined;
     }[];
     sphere?: string | number | undefined;
 }, {
@@ -1067,11 +1302,17 @@ export declare const scanModelSchema: z.ZodEffects<z.ZodObject<{
             w: number;
             h: number;
             members: string[];
+            kind?: "runtime" | "trust" | undefined;
             icon?: string | undefined;
             tag?: string | undefined;
-            kind?: "runtime" | "trust" | undefined;
-            color?: "search" | "agent" | "warn" | "svc" | "ext" | "data" | "event" | "repo" | undefined;
+            color?: "repo" | "search" | "agent" | "warn" | "svc" | "ext" | "data" | "event" | undefined;
         }[] | undefined;
+        routes?: Record<string, {
+            waypoints?: {
+                x: number;
+                y: number;
+            }[] | undefined;
+        }> | undefined;
     }[];
     sphere?: string | number | undefined;
     components?: {
@@ -1086,6 +1327,12 @@ export declare const scanModelSchema: z.ZodEffects<z.ZodObject<{
         technology?: string | undefined;
         subtitle?: string | undefined;
         description?: string | undefined;
+        notes?: string | undefined;
+        links?: {
+            kind: "doc" | "repo" | "openapi" | "other";
+            href: string;
+            title?: string | undefined;
+        }[] | undefined;
         icon?: string | undefined;
         consumes?: {
             id: string;
@@ -1105,6 +1352,12 @@ export declare const scanModelSchema: z.ZodEffects<z.ZodObject<{
         type?: "event-stream" | undefined;
         technology?: string | undefined;
         description?: string | undefined;
+        notes?: string | undefined;
+        links?: {
+            kind: "doc" | "repo" | "openapi" | "other";
+            href: string;
+            title?: string | undefined;
+        }[] | undefined;
         icon?: string | undefined;
         consumes?: {
             id: string;
@@ -1127,6 +1380,12 @@ export declare const scanModelSchema: z.ZodEffects<z.ZodObject<{
         } | undefined;
         technology?: string | undefined;
         description?: string | undefined;
+        notes?: string | undefined;
+        links?: {
+            kind: "doc" | "repo" | "openapi" | "other";
+            href: string;
+            title?: string | undefined;
+        }[] | undefined;
         icon?: string | undefined;
         consumes?: {
             id: string;
@@ -1142,8 +1401,15 @@ export declare const scanModelSchema: z.ZodEffects<z.ZodObject<{
     agents?: {
         id: string;
         name: string;
+        technology?: string | undefined;
         subtitle?: string | undefined;
         description?: string | undefined;
+        notes?: string | undefined;
+        links?: {
+            kind: "doc" | "repo" | "openapi" | "other";
+            href: string;
+            title?: string | undefined;
+        }[] | undefined;
         icon?: string | undefined;
         consumes?: {
             id: string;
@@ -1162,7 +1428,6 @@ export declare const scanModelSchema: z.ZodEffects<z.ZodObject<{
         id: string;
         name: string;
         type?: string | undefined;
-        description?: string | undefined;
     }[] | undefined;
     repositories?: {
         id: string;
@@ -1170,7 +1435,6 @@ export declare const scanModelSchema: z.ZodEffects<z.ZodObject<{
         path?: string | undefined;
         provider?: string | undefined;
         subtitle?: string | undefined;
-        description?: string | undefined;
         icon?: string | undefined;
         consumes?: {
             id: string;
@@ -1220,6 +1484,12 @@ export declare const scanModelSchema: z.ZodEffects<z.ZodObject<{
         technology?: string | undefined;
         subtitle?: string | undefined;
         description?: string | undefined;
+        notes?: string | undefined;
+        links?: {
+            kind: "doc" | "repo" | "openapi" | "other";
+            href: string;
+            title?: string | undefined;
+        }[] | undefined;
         icon?: string | undefined;
         consumes?: {
             id: string;
@@ -1239,6 +1509,12 @@ export declare const scanModelSchema: z.ZodEffects<z.ZodObject<{
         name: string;
         technology?: string | undefined;
         description?: string | undefined;
+        notes?: string | undefined;
+        links?: {
+            kind: "doc" | "repo" | "openapi" | "other";
+            href: string;
+            title?: string | undefined;
+        }[] | undefined;
         icon?: string | undefined;
         consumes?: {
             id: string;
@@ -1261,6 +1537,12 @@ export declare const scanModelSchema: z.ZodEffects<z.ZodObject<{
         } | undefined;
         technology?: string | undefined;
         description?: string | undefined;
+        notes?: string | undefined;
+        links?: {
+            kind: "doc" | "repo" | "openapi" | "other";
+            href: string;
+            title?: string | undefined;
+        }[] | undefined;
         icon?: string | undefined;
         consumes?: {
             id: string;
@@ -1276,8 +1558,15 @@ export declare const scanModelSchema: z.ZodEffects<z.ZodObject<{
     agents: {
         id: string;
         name: string;
+        technology?: string | undefined;
         subtitle?: string | undefined;
         description?: string | undefined;
+        notes?: string | undefined;
+        links?: {
+            kind: "doc" | "repo" | "openapi" | "other";
+            href: string;
+            title?: string | undefined;
+        }[] | undefined;
         icon?: string | undefined;
         consumes?: {
             id: string;
@@ -1296,7 +1585,6 @@ export declare const scanModelSchema: z.ZodEffects<z.ZodObject<{
         id: string;
         name: string;
         type?: string | undefined;
-        description?: string | undefined;
     }[];
     repositories: {
         id: string;
@@ -1304,7 +1592,6 @@ export declare const scanModelSchema: z.ZodEffects<z.ZodObject<{
         path?: string | undefined;
         provider?: string | undefined;
         subtitle?: string | undefined;
-        description?: string | undefined;
         icon?: string | undefined;
         consumes?: {
             id: string;
@@ -1340,15 +1627,15 @@ export declare const scanModelSchema: z.ZodEffects<z.ZodObject<{
         boundaries: {
             id: string;
             label: string;
+            kind: "runtime" | "trust";
             x: number;
             y: number;
             w: number;
             h: number;
-            kind: "runtime" | "trust";
             members: string[];
             icon?: string | undefined;
             tag?: string | undefined;
-            color?: "search" | "agent" | "warn" | "svc" | "ext" | "data" | "event" | "repo" | undefined;
+            color?: "repo" | "search" | "agent" | "warn" | "svc" | "ext" | "data" | "event" | undefined;
         }[];
         layout: Record<string, {
             x: number;
@@ -1356,6 +1643,12 @@ export declare const scanModelSchema: z.ZodEffects<z.ZodObject<{
             w?: number | undefined;
             h?: number | undefined;
         }>;
+        routes?: Record<string, {
+            waypoints: {
+                x: number;
+                y: number;
+            }[];
+        }> | undefined;
     }[];
     sphere?: string | number | undefined;
 }, unknown>;
@@ -1385,8 +1678,21 @@ export declare const sphereModelSchema: z.ZodEffects<z.ZodObject<{
         type: z.ZodEnum<["service", "datastore", "search", "external-system", "agent", "repository", "event-stream"]>;
         technology: z.ZodOptional<z.ZodString>;
         subtitle: z.ZodOptional<z.ZodString>;
-        /** Longer free-text notes about the element (inspector + agents). */
         description: z.ZodOptional<z.ZodString>;
+        notes: z.ZodOptional<z.ZodString>;
+        links: z.ZodOptional<z.ZodArray<z.ZodObject<{
+            kind: z.ZodEnum<["doc", "repo", "openapi", "other"]>;
+            href: z.ZodString;
+            title: z.ZodOptional<z.ZodString>;
+        }, "strip", z.ZodTypeAny, {
+            kind: "doc" | "repo" | "openapi" | "other";
+            href: string;
+            title?: string | undefined;
+        }, {
+            kind: "doc" | "repo" | "openapi" | "other";
+            href: string;
+            title?: string | undefined;
+        }>, "many">>;
         icon: z.ZodOptional<z.ZodString>;
         repository: z.ZodOptional<z.ZodUnion<[z.ZodObject<{
             provider: z.ZodOptional<z.ZodString>;
@@ -1438,6 +1744,12 @@ export declare const sphereModelSchema: z.ZodEffects<z.ZodObject<{
         technology?: string | undefined;
         subtitle?: string | undefined;
         description?: string | undefined;
+        notes?: string | undefined;
+        links?: {
+            kind: "doc" | "repo" | "openapi" | "other";
+            href: string;
+            title?: string | undefined;
+        }[] | undefined;
         icon?: string | undefined;
         consumes?: {
             id: string;
@@ -1462,6 +1774,12 @@ export declare const sphereModelSchema: z.ZodEffects<z.ZodObject<{
         technology?: string | undefined;
         subtitle?: string | undefined;
         description?: string | undefined;
+        notes?: string | undefined;
+        links?: {
+            kind: "doc" | "repo" | "openapi" | "other";
+            href: string;
+            title?: string | undefined;
+        }[] | undefined;
         icon?: string | undefined;
         consumes?: {
             id: string;
@@ -1481,6 +1799,20 @@ export declare const sphereModelSchema: z.ZodEffects<z.ZodObject<{
         type: z.ZodDefault<z.ZodLiteral<"event-stream">>;
         technology: z.ZodOptional<z.ZodString>;
         description: z.ZodOptional<z.ZodString>;
+        notes: z.ZodOptional<z.ZodString>;
+        links: z.ZodOptional<z.ZodArray<z.ZodObject<{
+            kind: z.ZodEnum<["doc", "repo", "openapi", "other"]>;
+            href: z.ZodString;
+            title: z.ZodOptional<z.ZodString>;
+        }, "strip", z.ZodTypeAny, {
+            kind: "doc" | "repo" | "openapi" | "other";
+            href: string;
+            title?: string | undefined;
+        }, {
+            kind: "doc" | "repo" | "openapi" | "other";
+            href: string;
+            title?: string | undefined;
+        }>, "many">>;
         icon: z.ZodOptional<z.ZodString>;
         consumes: z.ZodOptional<z.ZodArray<z.ZodObject<{
             id: z.ZodString;
@@ -1514,6 +1846,12 @@ export declare const sphereModelSchema: z.ZodEffects<z.ZodObject<{
         name: string;
         technology?: string | undefined;
         description?: string | undefined;
+        notes?: string | undefined;
+        links?: {
+            kind: "doc" | "repo" | "openapi" | "other";
+            href: string;
+            title?: string | undefined;
+        }[] | undefined;
         icon?: string | undefined;
         consumes?: {
             id: string;
@@ -1531,6 +1869,12 @@ export declare const sphereModelSchema: z.ZodEffects<z.ZodObject<{
         type?: "event-stream" | undefined;
         technology?: string | undefined;
         description?: string | undefined;
+        notes?: string | undefined;
+        links?: {
+            kind: "doc" | "repo" | "openapi" | "other";
+            href: string;
+            title?: string | undefined;
+        }[] | undefined;
         icon?: string | undefined;
         consumes?: {
             id: string;
@@ -1549,6 +1893,20 @@ export declare const sphereModelSchema: z.ZodEffects<z.ZodObject<{
         type: z.ZodOptional<z.ZodLiteral<"external-system">>;
         technology: z.ZodOptional<z.ZodString>;
         description: z.ZodOptional<z.ZodString>;
+        notes: z.ZodOptional<z.ZodString>;
+        links: z.ZodOptional<z.ZodArray<z.ZodObject<{
+            kind: z.ZodEnum<["doc", "repo", "openapi", "other"]>;
+            href: z.ZodString;
+            title: z.ZodOptional<z.ZodString>;
+        }, "strip", z.ZodTypeAny, {
+            kind: "doc" | "repo" | "openapi" | "other";
+            href: string;
+            title?: string | undefined;
+        }, {
+            kind: "doc" | "repo" | "openapi" | "other";
+            href: string;
+            title?: string | undefined;
+        }>, "many">>;
         icon: z.ZodOptional<z.ZodString>;
         repository: z.ZodOptional<z.ZodUnion<[z.ZodObject<{
             provider: z.ZodOptional<z.ZodString>;
@@ -1596,6 +1954,12 @@ export declare const sphereModelSchema: z.ZodEffects<z.ZodObject<{
         } | undefined;
         technology?: string | undefined;
         description?: string | undefined;
+        notes?: string | undefined;
+        links?: {
+            kind: "doc" | "repo" | "openapi" | "other";
+            href: string;
+            title?: string | undefined;
+        }[] | undefined;
         icon?: string | undefined;
         consumes?: {
             id: string;
@@ -1617,6 +1981,12 @@ export declare const sphereModelSchema: z.ZodEffects<z.ZodObject<{
         } | undefined;
         technology?: string | undefined;
         description?: string | undefined;
+        notes?: string | undefined;
+        links?: {
+            kind: "doc" | "repo" | "openapi" | "other";
+            href: string;
+            title?: string | undefined;
+        }[] | undefined;
         icon?: string | undefined;
         consumes?: {
             id: string;
@@ -1633,8 +2003,23 @@ export declare const sphereModelSchema: z.ZodEffects<z.ZodObject<{
         id: z.ZodString;
         name: z.ZodString;
         purpose: z.ZodOptional<z.ZodString>;
+        technology: z.ZodOptional<z.ZodString>;
         subtitle: z.ZodOptional<z.ZodString>;
         description: z.ZodOptional<z.ZodString>;
+        notes: z.ZodOptional<z.ZodString>;
+        links: z.ZodOptional<z.ZodArray<z.ZodObject<{
+            kind: z.ZodEnum<["doc", "repo", "openapi", "other"]>;
+            href: z.ZodString;
+            title: z.ZodOptional<z.ZodString>;
+        }, "strip", z.ZodTypeAny, {
+            kind: "doc" | "repo" | "openapi" | "other";
+            href: string;
+            title?: string | undefined;
+        }, {
+            kind: "doc" | "repo" | "openapi" | "other";
+            href: string;
+            title?: string | undefined;
+        }>, "many">>;
         icon: z.ZodOptional<z.ZodString>;
         runtime: z.ZodOptional<z.ZodString>;
         consumes: z.ZodOptional<z.ZodArray<z.ZodObject<{
@@ -1666,8 +2051,15 @@ export declare const sphereModelSchema: z.ZodEffects<z.ZodObject<{
     }, "strip", z.ZodTypeAny, {
         id: string;
         name: string;
+        technology?: string | undefined;
         subtitle?: string | undefined;
         description?: string | undefined;
+        notes?: string | undefined;
+        links?: {
+            kind: "doc" | "repo" | "openapi" | "other";
+            href: string;
+            title?: string | undefined;
+        }[] | undefined;
         icon?: string | undefined;
         consumes?: {
             id: string;
@@ -1684,8 +2076,15 @@ export declare const sphereModelSchema: z.ZodEffects<z.ZodObject<{
     }, {
         id: string;
         name: string;
+        technology?: string | undefined;
         subtitle?: string | undefined;
         description?: string | undefined;
+        notes?: string | undefined;
+        links?: {
+            kind: "doc" | "repo" | "openapi" | "other";
+            href: string;
+            title?: string | undefined;
+        }[] | undefined;
         icon?: string | undefined;
         consumes?: {
             id: string;
@@ -1704,17 +2103,14 @@ export declare const sphereModelSchema: z.ZodEffects<z.ZodObject<{
         id: z.ZodString;
         name: z.ZodString;
         type: z.ZodOptional<z.ZodString>;
-        description: z.ZodOptional<z.ZodString>;
     }, "strip", z.ZodTypeAny, {
         id: string;
         name: string;
         type?: string | undefined;
-        description?: string | undefined;
     }, {
         id: string;
         name: string;
         type?: string | undefined;
-        description?: string | undefined;
     }>, "many">>;
     repositories: z.ZodDefault<z.ZodArray<z.ZodObject<{
         id: z.ZodString;
@@ -1722,7 +2118,6 @@ export declare const sphereModelSchema: z.ZodEffects<z.ZodObject<{
         provider: z.ZodOptional<z.ZodString>;
         path: z.ZodOptional<z.ZodString>;
         subtitle: z.ZodOptional<z.ZodString>;
-        description: z.ZodOptional<z.ZodString>;
         icon: z.ZodOptional<z.ZodString>;
         consumes: z.ZodOptional<z.ZodArray<z.ZodObject<{
             id: z.ZodString;
@@ -1756,7 +2151,6 @@ export declare const sphereModelSchema: z.ZodEffects<z.ZodObject<{
         path?: string | undefined;
         provider?: string | undefined;
         subtitle?: string | undefined;
-        description?: string | undefined;
         icon?: string | undefined;
         consumes?: {
             id: string;
@@ -1774,7 +2168,6 @@ export declare const sphereModelSchema: z.ZodEffects<z.ZodObject<{
         path?: string | undefined;
         provider?: string | undefined;
         subtitle?: string | undefined;
-        description?: string | undefined;
         icon?: string | undefined;
         consumes?: {
             id: string;
@@ -1864,15 +2257,15 @@ export declare const sphereModelSchema: z.ZodEffects<z.ZodObject<{
         }, "strip", z.ZodTypeAny, {
             id: string;
             label: string;
+            kind: "runtime" | "trust";
             x: number;
             y: number;
             w: number;
             h: number;
-            kind: "runtime" | "trust";
             members: string[];
             icon?: string | undefined;
             tag?: string | undefined;
-            color?: "search" | "agent" | "warn" | "svc" | "ext" | "data" | "event" | "repo" | undefined;
+            color?: "repo" | "search" | "agent" | "warn" | "svc" | "ext" | "data" | "event" | undefined;
         }, {
             id: string;
             label: string;
@@ -1881,10 +2274,10 @@ export declare const sphereModelSchema: z.ZodEffects<z.ZodObject<{
             w: number;
             h: number;
             members: string[];
+            kind?: "runtime" | "trust" | undefined;
             icon?: string | undefined;
             tag?: string | undefined;
-            kind?: "runtime" | "trust" | undefined;
-            color?: "search" | "agent" | "warn" | "svc" | "ext" | "data" | "event" | "repo" | undefined;
+            color?: "repo" | "search" | "agent" | "warn" | "svc" | "ext" | "data" | "event" | undefined;
         }>, "many">>;
         layout: z.ZodRecord<z.ZodString, z.ZodObject<{
             x: z.ZodNumber;
@@ -1902,21 +2295,43 @@ export declare const sphereModelSchema: z.ZodEffects<z.ZodObject<{
             w?: number | undefined;
             h?: number | undefined;
         }>>;
+        routes: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodObject<{
+            waypoints: z.ZodDefault<z.ZodArray<z.ZodObject<{
+                x: z.ZodNumber;
+                y: z.ZodNumber;
+            }, "strip", z.ZodTypeAny, {
+                x: number;
+                y: number;
+            }, {
+                x: number;
+                y: number;
+            }>, "many">>;
+        }, "strip", z.ZodTypeAny, {
+            waypoints: {
+                x: number;
+                y: number;
+            }[];
+        }, {
+            waypoints?: {
+                x: number;
+                y: number;
+            }[] | undefined;
+        }>>>;
     }, "strip", z.ZodTypeAny, {
         id: string;
         type: string;
         boundaries: {
             id: string;
             label: string;
+            kind: "runtime" | "trust";
             x: number;
             y: number;
             w: number;
             h: number;
-            kind: "runtime" | "trust";
             members: string[];
             icon?: string | undefined;
             tag?: string | undefined;
-            color?: "search" | "agent" | "warn" | "svc" | "ext" | "data" | "event" | "repo" | undefined;
+            color?: "repo" | "search" | "agent" | "warn" | "svc" | "ext" | "data" | "event" | undefined;
         }[];
         layout: Record<string, {
             x: number;
@@ -1924,6 +2339,12 @@ export declare const sphereModelSchema: z.ZodEffects<z.ZodObject<{
             w?: number | undefined;
             h?: number | undefined;
         }>;
+        routes?: Record<string, {
+            waypoints: {
+                x: number;
+                y: number;
+            }[];
+        }> | undefined;
     }, {
         id: string;
         layout: Record<string, {
@@ -1941,11 +2362,17 @@ export declare const sphereModelSchema: z.ZodEffects<z.ZodObject<{
             w: number;
             h: number;
             members: string[];
+            kind?: "runtime" | "trust" | undefined;
             icon?: string | undefined;
             tag?: string | undefined;
-            kind?: "runtime" | "trust" | undefined;
-            color?: "search" | "agent" | "warn" | "svc" | "ext" | "data" | "event" | "repo" | undefined;
+            color?: "repo" | "search" | "agent" | "warn" | "svc" | "ext" | "data" | "event" | undefined;
         }[] | undefined;
+        routes?: Record<string, {
+            waypoints?: {
+                x: number;
+                y: number;
+            }[] | undefined;
+        }> | undefined;
     }>, "many">;
 }, "strip", z.ZodTypeAny, {
     scan: string | number;
@@ -1967,6 +2394,12 @@ export declare const sphereModelSchema: z.ZodEffects<z.ZodObject<{
         technology?: string | undefined;
         subtitle?: string | undefined;
         description?: string | undefined;
+        notes?: string | undefined;
+        links?: {
+            kind: "doc" | "repo" | "openapi" | "other";
+            href: string;
+            title?: string | undefined;
+        }[] | undefined;
         icon?: string | undefined;
         consumes?: {
             id: string;
@@ -1986,6 +2419,12 @@ export declare const sphereModelSchema: z.ZodEffects<z.ZodObject<{
         name: string;
         technology?: string | undefined;
         description?: string | undefined;
+        notes?: string | undefined;
+        links?: {
+            kind: "doc" | "repo" | "openapi" | "other";
+            href: string;
+            title?: string | undefined;
+        }[] | undefined;
         icon?: string | undefined;
         consumes?: {
             id: string;
@@ -2008,6 +2447,12 @@ export declare const sphereModelSchema: z.ZodEffects<z.ZodObject<{
         } | undefined;
         technology?: string | undefined;
         description?: string | undefined;
+        notes?: string | undefined;
+        links?: {
+            kind: "doc" | "repo" | "openapi" | "other";
+            href: string;
+            title?: string | undefined;
+        }[] | undefined;
         icon?: string | undefined;
         consumes?: {
             id: string;
@@ -2023,8 +2468,15 @@ export declare const sphereModelSchema: z.ZodEffects<z.ZodObject<{
     agents: {
         id: string;
         name: string;
+        technology?: string | undefined;
         subtitle?: string | undefined;
         description?: string | undefined;
+        notes?: string | undefined;
+        links?: {
+            kind: "doc" | "repo" | "openapi" | "other";
+            href: string;
+            title?: string | undefined;
+        }[] | undefined;
         icon?: string | undefined;
         consumes?: {
             id: string;
@@ -2043,7 +2495,6 @@ export declare const sphereModelSchema: z.ZodEffects<z.ZodObject<{
         id: string;
         name: string;
         type?: string | undefined;
-        description?: string | undefined;
     }[];
     repositories: {
         id: string;
@@ -2051,7 +2502,6 @@ export declare const sphereModelSchema: z.ZodEffects<z.ZodObject<{
         path?: string | undefined;
         provider?: string | undefined;
         subtitle?: string | undefined;
-        description?: string | undefined;
         icon?: string | undefined;
         consumes?: {
             id: string;
@@ -2087,15 +2537,15 @@ export declare const sphereModelSchema: z.ZodEffects<z.ZodObject<{
         boundaries: {
             id: string;
             label: string;
+            kind: "runtime" | "trust";
             x: number;
             y: number;
             w: number;
             h: number;
-            kind: "runtime" | "trust";
             members: string[];
             icon?: string | undefined;
             tag?: string | undefined;
-            color?: "search" | "agent" | "warn" | "svc" | "ext" | "data" | "event" | "repo" | undefined;
+            color?: "repo" | "search" | "agent" | "warn" | "svc" | "ext" | "data" | "event" | undefined;
         }[];
         layout: Record<string, {
             x: number;
@@ -2103,6 +2553,12 @@ export declare const sphereModelSchema: z.ZodEffects<z.ZodObject<{
             w?: number | undefined;
             h?: number | undefined;
         }>;
+        routes?: Record<string, {
+            waypoints: {
+                x: number;
+                y: number;
+            }[];
+        }> | undefined;
     }[];
     sphere?: string | number | undefined;
 }, {
@@ -2130,11 +2586,17 @@ export declare const sphereModelSchema: z.ZodEffects<z.ZodObject<{
             w: number;
             h: number;
             members: string[];
+            kind?: "runtime" | "trust" | undefined;
             icon?: string | undefined;
             tag?: string | undefined;
-            kind?: "runtime" | "trust" | undefined;
-            color?: "search" | "agent" | "warn" | "svc" | "ext" | "data" | "event" | "repo" | undefined;
+            color?: "repo" | "search" | "agent" | "warn" | "svc" | "ext" | "data" | "event" | undefined;
         }[] | undefined;
+        routes?: Record<string, {
+            waypoints?: {
+                x: number;
+                y: number;
+            }[] | undefined;
+        }> | undefined;
     }[];
     sphere?: string | number | undefined;
     components?: {
@@ -2149,6 +2611,12 @@ export declare const sphereModelSchema: z.ZodEffects<z.ZodObject<{
         technology?: string | undefined;
         subtitle?: string | undefined;
         description?: string | undefined;
+        notes?: string | undefined;
+        links?: {
+            kind: "doc" | "repo" | "openapi" | "other";
+            href: string;
+            title?: string | undefined;
+        }[] | undefined;
         icon?: string | undefined;
         consumes?: {
             id: string;
@@ -2168,6 +2636,12 @@ export declare const sphereModelSchema: z.ZodEffects<z.ZodObject<{
         type?: "event-stream" | undefined;
         technology?: string | undefined;
         description?: string | undefined;
+        notes?: string | undefined;
+        links?: {
+            kind: "doc" | "repo" | "openapi" | "other";
+            href: string;
+            title?: string | undefined;
+        }[] | undefined;
         icon?: string | undefined;
         consumes?: {
             id: string;
@@ -2190,6 +2664,12 @@ export declare const sphereModelSchema: z.ZodEffects<z.ZodObject<{
         } | undefined;
         technology?: string | undefined;
         description?: string | undefined;
+        notes?: string | undefined;
+        links?: {
+            kind: "doc" | "repo" | "openapi" | "other";
+            href: string;
+            title?: string | undefined;
+        }[] | undefined;
         icon?: string | undefined;
         consumes?: {
             id: string;
@@ -2205,8 +2685,15 @@ export declare const sphereModelSchema: z.ZodEffects<z.ZodObject<{
     agents?: {
         id: string;
         name: string;
+        technology?: string | undefined;
         subtitle?: string | undefined;
         description?: string | undefined;
+        notes?: string | undefined;
+        links?: {
+            kind: "doc" | "repo" | "openapi" | "other";
+            href: string;
+            title?: string | undefined;
+        }[] | undefined;
         icon?: string | undefined;
         consumes?: {
             id: string;
@@ -2225,7 +2712,6 @@ export declare const sphereModelSchema: z.ZodEffects<z.ZodObject<{
         id: string;
         name: string;
         type?: string | undefined;
-        description?: string | undefined;
     }[] | undefined;
     repositories?: {
         id: string;
@@ -2233,7 +2719,6 @@ export declare const sphereModelSchema: z.ZodEffects<z.ZodObject<{
         path?: string | undefined;
         provider?: string | undefined;
         subtitle?: string | undefined;
-        description?: string | undefined;
         icon?: string | undefined;
         consumes?: {
             id: string;
@@ -2283,6 +2768,12 @@ export declare const sphereModelSchema: z.ZodEffects<z.ZodObject<{
         technology?: string | undefined;
         subtitle?: string | undefined;
         description?: string | undefined;
+        notes?: string | undefined;
+        links?: {
+            kind: "doc" | "repo" | "openapi" | "other";
+            href: string;
+            title?: string | undefined;
+        }[] | undefined;
         icon?: string | undefined;
         consumes?: {
             id: string;
@@ -2302,6 +2793,12 @@ export declare const sphereModelSchema: z.ZodEffects<z.ZodObject<{
         name: string;
         technology?: string | undefined;
         description?: string | undefined;
+        notes?: string | undefined;
+        links?: {
+            kind: "doc" | "repo" | "openapi" | "other";
+            href: string;
+            title?: string | undefined;
+        }[] | undefined;
         icon?: string | undefined;
         consumes?: {
             id: string;
@@ -2324,6 +2821,12 @@ export declare const sphereModelSchema: z.ZodEffects<z.ZodObject<{
         } | undefined;
         technology?: string | undefined;
         description?: string | undefined;
+        notes?: string | undefined;
+        links?: {
+            kind: "doc" | "repo" | "openapi" | "other";
+            href: string;
+            title?: string | undefined;
+        }[] | undefined;
         icon?: string | undefined;
         consumes?: {
             id: string;
@@ -2339,8 +2842,15 @@ export declare const sphereModelSchema: z.ZodEffects<z.ZodObject<{
     agents: {
         id: string;
         name: string;
+        technology?: string | undefined;
         subtitle?: string | undefined;
         description?: string | undefined;
+        notes?: string | undefined;
+        links?: {
+            kind: "doc" | "repo" | "openapi" | "other";
+            href: string;
+            title?: string | undefined;
+        }[] | undefined;
         icon?: string | undefined;
         consumes?: {
             id: string;
@@ -2359,7 +2869,6 @@ export declare const sphereModelSchema: z.ZodEffects<z.ZodObject<{
         id: string;
         name: string;
         type?: string | undefined;
-        description?: string | undefined;
     }[];
     repositories: {
         id: string;
@@ -2367,7 +2876,6 @@ export declare const sphereModelSchema: z.ZodEffects<z.ZodObject<{
         path?: string | undefined;
         provider?: string | undefined;
         subtitle?: string | undefined;
-        description?: string | undefined;
         icon?: string | undefined;
         consumes?: {
             id: string;
@@ -2403,15 +2911,15 @@ export declare const sphereModelSchema: z.ZodEffects<z.ZodObject<{
         boundaries: {
             id: string;
             label: string;
+            kind: "runtime" | "trust";
             x: number;
             y: number;
             w: number;
             h: number;
-            kind: "runtime" | "trust";
             members: string[];
             icon?: string | undefined;
             tag?: string | undefined;
-            color?: "search" | "agent" | "warn" | "svc" | "ext" | "data" | "event" | "repo" | undefined;
+            color?: "repo" | "search" | "agent" | "warn" | "svc" | "ext" | "data" | "event" | undefined;
         }[];
         layout: Record<string, {
             x: number;
@@ -2419,6 +2927,12 @@ export declare const sphereModelSchema: z.ZodEffects<z.ZodObject<{
             w?: number | undefined;
             h?: number | undefined;
         }>;
+        routes?: Record<string, {
+            waypoints: {
+                x: number;
+                y: number;
+            }[];
+        }> | undefined;
     }[];
     sphere?: string | number | undefined;
 }, unknown>;
@@ -2429,6 +2943,7 @@ export type SphereView = z.infer<typeof viewSchema>;
 export type SphereComponent = z.infer<typeof componentSchema>;
 export type SphereConnection = z.infer<typeof connectionSchema>;
 export type SpherePort = z.infer<typeof portSchema>;
+export type ElementLink = z.infer<typeof elementLinkSchema>;
 export type ConnectionType = z.infer<typeof connectionTypeSchema>;
 export type LayoutEntry = z.infer<typeof layoutEntrySchema>;
 export {};
