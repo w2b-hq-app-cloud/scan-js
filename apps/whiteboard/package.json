@@ -13,10 +13,10 @@
     "format": "prettier --write ."
   },
   "dependencies": {
-    "@spherescan/model": "0.3.2",
-    "@spherescan/modeler": "0.3.2",
-    "@spherescan/rules": "0.3.2",
-    "@spherescan/viewer": "0.3.2",
+    "@spherescan/model": "0.4.0",
+    "@spherescan/modeler": "0.4.0",
+    "@spherescan/rules": "0.4.0",
+    "@spherescan/viewer": "0.4.0",
     "@spherescan/board": "0.4.0",
     "@hookform/resolvers": "^5.2.2",
     "@radix-ui/react-accordion": "^1.2.12",
