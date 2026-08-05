@@ -47,6 +47,26 @@ function activeScanTarget(): {
   return undefined;
 }
 
+function asUri(value: unknown): vscode.Uri | undefined {
+  if (!value) return undefined;
+  if (value instanceof vscode.Uri) return value;
+  if (typeof value === "string") {
+    try {
+      return vscode.Uri.parse(value);
+    } catch {
+      return undefined;
+    }
+  }
+  if (typeof value === "object" && value !== null && "scheme" in value && "path" in value) {
+    try {
+      return vscode.Uri.from(value as vscode.Uri);
+    } catch {
+      return undefined;
+    }
+  }
+  return undefined;
+}
+
 export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(ScanPreviewEditorProvider.register(context));
 
@@ -63,25 +83,30 @@ export function activate(context: vscode.ExtensionContext): void {
     }
   }
 
-  // Left side, high priority — less likely to be collapsed than right-side items.
+  // Always-visible fallback: Cursor often collapses editor-title icons into "...".
   const status = vscode.window.createStatusBarItem(
-    vscode.StatusBarAlignment.Left,
-    100,
+    vscode.StatusBarAlignment.Right,
+    1000,
   );
   status.name = "SCAN Preview";
   context.subscriptions.push(status);
 
   let hideTimer: ReturnType<typeof setTimeout> | undefined;
+  /** Last SCAN URI shown on the status item — survives status-bar click focus loss. */
+  let pinnedUri: vscode.Uri | undefined;
 
-  const refreshChrome = async () => {
+  const refreshChrome = () => {
     const target = activeScanTarget();
     if (!target) {
-      // Debounce hide: tab switches briefly clear the active editor and caused flicker.
       if (hideTimer) clearTimeout(hideTimer);
-      hideTimer = setTimeout(async () => {
-        if (activeScanTarget()) return;
-        await vscode.commands.executeCommand("setContext", "scan.isScanEditor", false);
-        await vscode.commands.executeCommand("setContext", "scan.isPreviewEditor", false);
+      hideTimer = setTimeout(() => {
+        if (activeScanTarget()) {
+          refreshChrome();
+          return;
+        }
+        pinnedUri = undefined;
+        void vscode.commands.executeCommand("setContext", "scan.isScanEditor", false);
+        void vscode.commands.executeCommand("setContext", "scan.isPreviewEditor", false);
         status.hide();
       }, 150);
       return;
@@ -92,46 +117,58 @@ export function activate(context: vscode.ExtensionContext): void {
       hideTimer = undefined;
     }
 
+    pinnedUri = target.uri;
+
+    // Do not await — language flips can rebind the editor and cancel a concurrent openWith.
     if (target.document && target.document.languageId !== "scan") {
-      try {
-        await vscode.languages.setTextDocumentLanguage(target.document, "scan");
-      } catch {
-        /* ignore */
-      }
+      void vscode.languages.setTextDocumentLanguage(target.document, "scan");
     }
 
     const inPreview = target.mode === "preview";
-    await vscode.commands.executeCommand("setContext", "scan.isScanEditor", true);
-    await vscode.commands.executeCommand("setContext", "scan.isPreviewEditor", inPreview);
+    void vscode.commands.executeCommand("setContext", "scan.isScanEditor", true);
+    void vscode.commands.executeCommand("setContext", "scan.isPreviewEditor", inPreview);
 
     if (inPreview) {
       status.text = "$(go-to-file) SCAN Source";
-      status.command = "scan.showSource";
       status.tooltip = "Show YAML source";
+      status.command = {
+        command: "scan.showSource",
+        title: "Show Source",
+        arguments: [target.uri],
+      };
     } else {
       status.text = "$(open-preview) SCAN Preview";
-      status.command = "scan.openPreview";
-      status.tooltip = "Open SCAN diagram preview";
+      status.tooltip = "Open SCAN diagram preview (Ctrl+Shift+V)";
+      status.command = {
+        command: "scan.openPreview",
+        title: "Open Preview",
+        arguments: [target.uri],
+      };
     }
     status.show();
   };
 
   context.subscriptions.push(
-    vscode.commands.registerCommand("scan.openPreview", () => {
+    vscode.commands.registerCommand("scan.openPreview", (arg?: unknown) => {
+      const uri = asUri(arg) ?? pinnedUri ?? activeScanTarget()?.uri;
       const target = activeScanTarget();
-      return openScanPreview(target?.document, vscode.ViewColumn.Active, target?.uri);
+      return openScanPreview(target?.document, vscode.ViewColumn.Active, uri);
     }),
-    vscode.commands.registerCommand("scan.openPreviewToSide", () => {
+    vscode.commands.registerCommand("scan.openPreviewToSide", (arg?: unknown) => {
+      const uri = asUri(arg) ?? pinnedUri ?? activeScanTarget()?.uri;
       const target = activeScanTarget();
-      return openScanPreview(target?.document, vscode.ViewColumn.Beside, target?.uri);
+      return openScanPreview(target?.document, vscode.ViewColumn.Beside, uri);
     }),
-    vscode.commands.registerCommand("scan.showSource", () => showScanSource()),
+    vscode.commands.registerCommand("scan.showSource", (arg?: unknown) => {
+      const uri = asUri(arg) ?? pinnedUri;
+      return showScanSource(uri);
+    }),
     vscode.commands.registerCommand("scan.refreshPreview", () => {
-      const target = activeScanTarget();
-      if (target?.uri) {
+      const uri = pinnedUri ?? activeScanTarget()?.uri;
+      if (uri) {
         void vscode.commands.executeCommand(
           "vscode.openWith",
-          target.uri,
+          uri,
           SCAN_PREVIEW_EDITOR_ID,
         );
       }
@@ -140,19 +177,19 @@ export function activate(context: vscode.ExtensionContext): void {
 
   context.subscriptions.push(
     vscode.window.onDidChangeActiveTextEditor(() => {
-      void refreshChrome();
+      refreshChrome();
     }),
     vscode.window.tabGroups.onDidChangeTabs(() => {
-      void refreshChrome();
+      refreshChrome();
     }),
     vscode.window.tabGroups.onDidChangeTabGroups(() => {
-      void refreshChrome();
+      refreshChrome();
     }),
     vscode.workspace.onDidOpenTextDocument(() => {
-      void refreshChrome();
+      refreshChrome();
     }),
     vscode.workspace.onDidCloseTextDocument(() => {
-      void refreshChrome();
+      refreshChrome();
     }),
     {
       dispose: () => {
@@ -161,7 +198,7 @@ export function activate(context: vscode.ExtensionContext): void {
     },
   );
 
-  void refreshChrome();
+  refreshChrome();
 }
 
 export function deactivate(): void {

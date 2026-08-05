@@ -50,10 +50,6 @@ export function buildPreviewHtml(
 <body>
   <header class="toolbar">
     <div class="toolbar-left">
-      <div class="mode-toggle" role="tablist" aria-label="Editor mode">
-        <button type="button" class="mode-btn active" role="tab" aria-selected="true" disabled>Preview</button>
-        <button type="button" class="mode-btn" id="btn-show-source" role="tab" aria-selected="false" title="Show YAML source">SCAN</button>
-      </div>
       <span id="system-label" class="system-label">SCAN</span>
     </div>
     <div class="toolbar-right">

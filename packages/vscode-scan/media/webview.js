@@ -13,7 +13,6 @@
   const btnZoomOut = document.getElementById("btn-zoom-out");
   const btnZoomReset = document.getElementById("btn-zoom-reset");
   const btnFit = document.getElementById("btn-fit");
-  const btnShowSource = document.getElementById("btn-show-source");
 
   let scale = 1;
   let tx = 24;
@@ -136,12 +135,6 @@
     applyTransform();
   });
   btnFit.addEventListener("click", fitView);
-
-  if (btnShowSource) {
-    btnShowSource.addEventListener("click", () => {
-      vscode.postMessage({ type: "showSource" });
-    });
-  }
 
   applyTransform();
   vscode.postMessage({ type: "ready" });

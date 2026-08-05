@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - VS Code / Cursor extension [`packages/vscode-scan`](packages/vscode-scan) (`spherescan.scan`): read-only `*.scan.yaml` / `*.scan` preview with pan/zoom and detail inspection; see [SHIPPING.md](packages/vscode-scan/SHIPPING.md).
+- `spherescan.scan` **0.1.12**: status-bar Preview opens on first click (pin URI on the command; stop awaiting language flips that canceled `openWith`).
+- `spherescan.scan` **0.1.11**: show Preview via filename `when` (works even if language stays `yaml`) + status-bar **SCAN Preview** fallback when Cursor collapses title icons into `...`.
+- `spherescan.scan` **0.1.10**: restore editor-title **Open Preview** / **Show Source** icons (Cursor does not show Markdown-style Preview|language text toggles for third-party custom editors).
+- `spherescan.scan` **0.1.9**: Markdown-style **Preview | SCAN** in the editor title (breadcrumb row); drop status-bar and in-webview mode toggle.
 - `spherescan.scan` **0.1.8**: stable SCAN Preview status item (left, debounced; survives custom-editor tab switches); editor title menus use `scan.isScanEditor` context; README screenshot uses `docs/screenshot.png` on main.
 - `spherescan.scan` **0.1.7**: drop unused Details side panel (selection was unreliable); preview is pan/zoom only.
 - `spherescan.scan` **0.1.6**: fix Details screenshot (relative media paths); remove incomplete SCAN Icons theme that replaced all explorer icons; drop small CodeLens (use editor title / `Ctrl+Shift+V` like Markdown); auto-restore Seti if SCAN Icons was left active.
