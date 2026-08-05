@@ -41,13 +41,11 @@ See [SHIPPING.md](./SHIPPING.md) to publish.
 ## Usage
 
 1. Open a `*.scan.yaml` file.
-2. Toggle preview in the **same tab** (like Markdown):
-   - Editor title **Open Preview** icon (top-right of the editor)
-   - Shortcut `Ctrl+Shift+V` / `Cmd+Shift+V`
-   - Status bar **SCAN Preview**
-3. In preview, use **Preview | SCAN** (or title **Show Source** / the same shortcut) to return to YAML.
-4. Optional: **Open Preview to the Side** (`Ctrl+K V`) for a side-by-side layout.
-5. Drag to pan, scroll to zoom, use **Fit** / **±**.
+2. Click **Open Preview** in the editor title (top-right), or **SCAN Preview** in the status bar (right). If the title only shows `...`, open that menu — Cursor often collapses title actions.
+3. Or press `Ctrl+Shift+V` / `Cmd+Shift+V` to toggle the same tab.
+4. In preview, use the title **Show Source** icon (or the same shortcut) to return to YAML.
+5. Optional: **Open Preview to the Side** (`Ctrl+K V`) for a side-by-side layout.
+6. Drag to pan, scroll to zoom, use **Fit** / **±**.
 
 Preview refreshes automatically when you edit the YAML (keep the source editor open in another group, or toggle back to edit).
 

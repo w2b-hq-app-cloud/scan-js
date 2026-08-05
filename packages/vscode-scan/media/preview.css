@@ -46,43 +46,6 @@ body {
   min-width: 0;
 }
 
-.mode-toggle {
-  display: inline-flex;
-  align-items: center;
-  padding: 2px;
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--border) 55%, var(--panel));
-  border: 1px solid var(--border);
-  flex-shrink: 0;
-}
-
-.mode-btn {
-  appearance: none;
-  border: 0;
-  margin: 0;
-  min-width: 0;
-  height: 24px;
-  padding: 0 10px;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--muted);
-  cursor: pointer;
-  font: inherit;
-  font-size: 12px;
-  font-weight: 500;
-}
-
-.mode-btn.active {
-  background: var(--panel);
-  color: var(--fg);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--border) 80%, transparent);
-  cursor: default;
-}
-
-.mode-btn:not(.active):hover {
-  color: var(--fg);
-}
-
 .system-label {
   font-weight: 600;
   letter-spacing: 0.01em;

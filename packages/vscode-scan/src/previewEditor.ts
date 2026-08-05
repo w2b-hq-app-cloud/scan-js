@@ -65,17 +65,19 @@ export class ScanPreviewEditorProvider implements vscode.CustomTextEditorProvide
 
 export async function openScanPreview(
   document: vscode.TextDocument | undefined,
-  column: vscode.ViewColumn,
+  column: vscode.ViewColumn | vscode.TextDocumentShowOptions,
   uri?: vscode.Uri,
 ): Promise<void> {
+  // Prefer an explicit URI (status-bar args) — clicking the status bar clears
+  // activeTextEditor, so resolving from focus alone often no-ops on first click.
   const fromDoc =
-    document && isScanDocument(document)
-      ? document.uri
-      : vscode.window.activeTextEditor?.document &&
-          isScanDocument(vscode.window.activeTextEditor.document)
-        ? vscode.window.activeTextEditor.document.uri
-        : undefined;
-  const target = fromDoc ?? uri;
+    document && isScanDocument(document) ? document.uri : undefined;
+  const fromActive =
+    vscode.window.activeTextEditor?.document &&
+    isScanDocument(vscode.window.activeTextEditor.document)
+      ? vscode.window.activeTextEditor.document.uri
+      : undefined;
+  const target = uri ?? fromDoc ?? fromActive;
   if (!target) {
     void vscode.window.showInformationMessage("Open a *.scan.yaml file to preview.");
     return;
@@ -88,20 +90,23 @@ export async function openScanPreview(
   );
 }
 
-export async function showScanSource(): Promise<void> {
-  const tab = vscode.window.tabGroups.activeTabGroup.activeTab;
-  const input = tab?.input;
-  const uri =
-    input instanceof vscode.TabInputCustom
-      ? input.uri
-      : input instanceof vscode.TabInputText
+export async function showScanSource(uri?: vscode.Uri): Promise<void> {
+  let target = uri;
+  if (!target) {
+    const tab = vscode.window.tabGroups.activeTabGroup.activeTab;
+    const input = tab?.input;
+    target =
+      input instanceof vscode.TabInputCustom
         ? input.uri
-        : undefined;
-  if (!uri) {
+        : input instanceof vscode.TabInputText
+          ? input.uri
+          : undefined;
+  }
+  if (!target) {
     void vscode.window.showInformationMessage("No SCAN preview to switch from.");
     return;
   }
-  await vscode.commands.executeCommand("vscode.openWith", uri, "default");
+  await vscode.commands.executeCommand("vscode.openWith", target, "default");
 }
 
 export { isScanDocument };

@@ -2,7 +2,7 @@
   "name": "scan",
   "displayName": "SCAN Diagram Preview",
   "description": "Read-only preview for System & Component Architecture Notation (*.scan.yaml / *.scan) - pan, zoom, and inspect details.",
-  "version": "0.1.8",
+  "version": "0.1.12",
   "publisher": "spherescan",
   "license": "Apache-2.0",
   "private": true,
@@ -72,7 +72,7 @@
     "customEditors": [
       {
         "viewType": "scan.previewEditor",
-        "displayName": "SCAN Preview",
+        "displayName": "Preview",
         "selector": [
           {
             "filenamePattern": "*.scan.yaml"
@@ -116,33 +116,33 @@
     "menus": {
       "editor/title": [
         {
-          "when": "scan.isScanEditor && !scan.isPreviewEditor",
+          "when": "resourceFilename =~ /\\.scan(\\.ya?ml)?$/ && !activeCustomEditorId",
           "command": "scan.openPreview",
           "group": "navigation@1"
         },
         {
-          "when": "scan.isPreviewEditor",
+          "when": "activeCustomEditorId == 'scan.previewEditor'",
           "command": "scan.showSource",
           "group": "navigation@1"
         }
       ],
       "editor/title/context": [
         {
-          "when": "scan.isScanEditor",
+          "when": "resourceFilename =~ /\\.scan(\\.ya?ml)?$/",
           "command": "scan.openPreviewToSide",
           "group": "navigation"
         }
       ],
       "editor/context": [
         {
-          "when": "scan.isScanEditor && !scan.isPreviewEditor",
+          "when": "resourceFilename =~ /\\.scan(\\.ya?ml)?$/ && !activeCustomEditorId",
           "command": "scan.openPreview",
           "group": "navigation@1"
         }
       ],
       "explorer/context": [
         {
-          "when": "resourceLangId == scan",
+          "when": "resourceFilename =~ /\\.scan(\\.ya?ml)?$/",
           "command": "scan.openPreview",
           "group": "navigation@1"
         }
@@ -150,19 +150,19 @@
       "commandPalette": [
         {
           "command": "scan.openPreview",
-          "when": "scan.isScanEditor || scan.isPreviewEditor"
+          "when": "resourceFilename =~ /\\.scan(\\.ya?ml)?$/ || scan.isScanEditor || scan.isPreviewEditor"
         },
         {
           "command": "scan.openPreviewToSide",
-          "when": "scan.isScanEditor"
+          "when": "resourceFilename =~ /\\.scan(\\.ya?ml)?$/ || scan.isScanEditor"
         },
         {
           "command": "scan.showSource",
-          "when": "scan.isPreviewEditor"
+          "when": "scan.isPreviewEditor || activeCustomEditorId == 'scan.previewEditor'"
         },
         {
           "command": "scan.refreshPreview",
-          "when": "scan.isScanEditor || scan.isPreviewEditor"
+          "when": "resourceFilename =~ /\\.scan(\\.ya?ml)?$/ || scan.isScanEditor || scan.isPreviewEditor"
         }
       ]
     },
@@ -171,19 +171,19 @@
         "command": "scan.openPreview",
         "key": "ctrl+shift+v",
         "mac": "cmd+shift+v",
-        "when": "scan.isScanEditor && !scan.isPreviewEditor"
+        "when": "resourceFilename =~ /\\.scan(\\.ya?ml)?$/ && !activeCustomEditorId"
       },
       {
         "command": "scan.showSource",
         "key": "ctrl+shift+v",
         "mac": "cmd+shift+v",
-        "when": "scan.isPreviewEditor"
+        "when": "activeCustomEditorId == 'scan.previewEditor'"
       },
       {
         "command": "scan.openPreviewToSide",
         "key": "ctrl+k v",
         "mac": "cmd+k v",
-        "when": "scan.isScanEditor && !scan.isPreviewEditor"
+        "when": "resourceFilename =~ /\\.scan(\\.ya?ml)?$/ && !activeCustomEditorId"
       }
     ],
     "configurationDefaults": {
