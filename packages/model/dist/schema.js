@@ -40,6 +40,7 @@ const componentSchema = z.object({
     ]),
     technology: z.string().optional(),
     subtitle: z.string().optional(),
+    /** Longer free-text notes about the element (inspector + agents). */
     description: z.string().optional(),
     notes: z.string().optional(),
     links: z.array(elementLinkSchema).optional(),
@@ -93,6 +94,7 @@ const agentRuntimeSchema = z.object({
     id: z.string(),
     name: z.string(),
     type: z.string().optional(),
+    description: z.string().optional(),
 });
 const repositorySchema = z.object({
     id: z.string(),
@@ -100,6 +102,7 @@ const repositorySchema = z.object({
     provider: z.string().optional(),
     path: z.string().optional(),
     subtitle: z.string().optional(),
+    description: z.string().optional(),
     icon: iconSchema,
     consumes: z.array(portSchema).optional(),
     exposes: z.array(portSchema).optional(),

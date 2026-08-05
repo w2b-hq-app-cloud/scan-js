@@ -10,6 +10,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - VS Code / Cursor extension [`packages/vscode-scan`](packages/vscode-scan) (`spherescan.scan`): read-only `*.scan.yaml` / `*.scan` preview with pan/zoom and detail inspection; see [SHIPPING.md](packages/vscode-scan/SHIPPING.md).
+- `spherescan.scan` **0.1.8**: stable SCAN Preview status item (left, debounced; survives custom-editor tab switches); editor title menus use `scan.isScanEditor` context; README screenshot uses `docs/screenshot.png` on main.
+- `spherescan.scan` **0.1.7**: drop unused Details side panel (selection was unreliable); preview is pan/zoom only.
+- `spherescan.scan` **0.1.6**: fix Details screenshot (relative media paths); remove incomplete SCAN Icons theme that replaced all explorer icons; drop small CodeLens (use editor title / `Ctrl+Shift+V` like Markdown); auto-restore Seti if SCAN Icons was left active.
+- `spherescan.scan` **0.1.5**: Markdown-style same-tab Preview/Source toggle (`customEditors` + `Ctrl+Shift+V`); fix blank diagram (webview `ready` race); CSP allows SVG inline styles; marketplace icon + README packaging.
+- `spherescan.scan` **0.1.4**: Marketplace extension icon (Sphere mark) + README/gallery screenshot from the product landing page.
+- `spherescan.scan` **0.1.3**: editor title / menus use `editorLangId == scan` (no custom context); CodeLens **Open SCAN Preview**; explorer + editor context menus; highlighted status-bar action; command icons use SCAN SVG.
+- `spherescan.scan` **0.1.2**: status-bar **SCAN Preview**, language icons + optional **SCAN Icons** file icon theme for `*.scan.yaml`.
+- `@spherescan/viewer`: SVG export marks nodes/edges with `data-node` / `data-edge` (wider hit target) for preview selection.
+- `@spherescan/model`: element descriptions, notes, typed links, and per-view orthogonal route waypoints.
+- `@spherescan/modeler` / `@spherescan/board`: undoable metadata, repository, link, boundary-layer, and route editing APIs with inspector controls.
+- `@spherescan/viewer`: graph metadata projection and persisted-waypoint orthogonal routing.
+- `@spherescan/board`: Duplicate diagram control + `onSystemIdentityChange` so hosts can relocate workspaces on rename and treat duplicate as a fresh identity.
+- `@spherescan/modeler`: `renameSystem` keeps `system.id` slugified in sync with the display name.
+
+### Changed
+
+- (none yet)
+
+## [0.3.2] - 2026-08-01
+
+### Changed
+
+- (none yet)
+
+## [0.3.1] - 2026-08-01
+
+### Added
+
+- `@spherescan/modeler`: `mergeModels` — merges another SCAN document's elements/connections into a model, remapping any colliding ids and offsetting incoming layout so it doesn't overlap existing content. Exposed as `Modeling.mergeYAML` (single undoable step) and `ScanModeler.mergeYAML`.
+- `@spherescan/board`: `BoardAppProps.pendingMergeYaml` / `onMergeApplied` — host slot to merge YAML into the currently-open board (additive, one-shot, apply-once guard mirrors `initialYaml`). No board-side UI; hosts drive it entirely.
+- `@spherescan/modeler`: export `cloneModel` and `createId` from `modeling.ts` (previously private) for reuse by `merge.ts`.
+- VS Code / Cursor extension [`packages/vscode-scan`](packages/vscode-scan) (`spherescan.scan`): read-only `*.scan.yaml` / `*.scan` preview with pan/zoom and detail inspection; see [SHIPPING.md](packages/vscode-scan/SHIPPING.md).
 - `@spherescan/viewer`: SVG export marks nodes/edges with `data-node` / `data-edge` (wider hit target) for preview selection.
 - `@spherescan/model`: element descriptions, notes, typed links, and per-view orthogonal route waypoints.
 - `@spherescan/modeler` / `@spherescan/board`: undoable metadata, repository, link, boundary-layer, and route editing APIs with inspector controls.

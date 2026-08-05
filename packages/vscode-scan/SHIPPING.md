@@ -24,31 +24,31 @@ Distribution: **VSIX** / Visual Studio Marketplace / Open VSX (not npm).
 ```bash
 cd scan-js
 npm run package -w scan
-# → packages/vscode-scan/scan-0.1.0.vsix (version from package.json)
+# → packages/vscode-scan/scan-0.1.5.vsix (version from package.json)
 ```
 
 Install for smoke test:
 
 ```bash
-code --install-extension packages/vscode-scan/scan-0.1.0.vsix --force
+code --install-extension packages/vscode-scan/scan-0.1.5.vsix --force
 # or
-cursor --install-extension packages/vscode-scan/scan-0.1.0.vsix --force
+cursor --install-extension packages/vscode-scan/scan-0.1.5.vsix --force
 ```
 
 ### Smoke checklist
 
-- [ ] Open a valid `*.scan.yaml` → **SCAN: Open Preview to the Side**
-- [ ] Diagram renders; **Fit** frames the graph
+- [ ] Open a valid `*.scan.yaml` → editor title **Open Preview** (or `Ctrl+Shift+V`) toggles same-tab diagram
+- [ ] Preview toolbar shows **Preview | SCAN**; **SCAN** returns to YAML source
+- [ ] Diagram renders full-bleed (no Details column); **Fit** frames the graph
 - [ ] Drag pans; wheel zooms
-- [ ] Click a component → details (id, kind, tech, ports)
-- [ ] Click a connection → details (type, from/to)
 - [ ] Break the YAML → preview shows an error; fix → diagram returns
+- [ ] Extensions view shows Sphere icon + README screenshot
 - [ ] Reload window → preview command still works
 
 ## Publish to Visual Studio Marketplace
 
 1. Confirm `"publisher": "spherescan"` in [`package.json`](./package.json).
-2. Optional: add `media/icon.png` (128×128) and set `"icon": "media/icon.png"`.
+2. Marketplace assets: `media/icon.png` (128×128 Sphere mark) and `media/screenshot.png` (also embedded in README). Upload the screenshot in the Marketplace publisher portal when creating the listing.
 3. Bump `"version"` when releasing (independent of `@spherescan/*` npm versions).
 4. Package and publish:
 

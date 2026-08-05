@@ -32,6 +32,8 @@ export declare class ScanModeler {
      * draft / cloud save — unlike `importYAML` used for boot/load (clean).
      */
     importYAMLFile(file: File): Promise<void>;
+    /** Merges another SCAN document into the current model (additive, undoable). */
+    mergeYAML(yaml: string): void;
     /**
      * Replace the board with a new empty SCAN model (clears undo history).
      * Marks the board dirty until the user saves/downloads YAML.

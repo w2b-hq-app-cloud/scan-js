@@ -2,7 +2,7 @@
   "name": "scan",
   "displayName": "SCAN Diagram Preview",
   "description": "Read-only preview for System & Component Architecture Notation (*.scan.yaml / *.scan) - pan, zoom, and inspect details.",
-  "version": "0.1.1",
+  "version": "0.1.8",
   "publisher": "spherescan",
   "license": "Apache-2.0",
   "private": true,
@@ -21,6 +21,11 @@
     "yaml",
     "spherescan"
   ],
+  "icon": "media/icon.png",
+  "galleryBanner": {
+    "color": "#0B1220",
+    "theme": "dark"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/w2b-hq-app-cloud/scan-js.git",
@@ -35,8 +40,10 @@
     "onStartupFinished",
     "onLanguage:scan",
     "onLanguage:yaml",
+    "onCustomEditor:scan.previewEditor",
     "onCommand:scan.openPreview",
     "onCommand:scan.openPreviewToSide",
+    "onCommand:scan.showSource",
     "onCommand:scan.refreshPreview"
   ],
   "contributes": {
@@ -55,7 +62,29 @@
           "*.scan.yml",
           "*.scan"
         ],
-        "configuration": "./language-configuration.json"
+        "configuration": "./language-configuration.json",
+        "icon": {
+          "light": "./icons/scan.svg",
+          "dark": "./icons/scan-dark.svg"
+        }
+      }
+    ],
+    "customEditors": [
+      {
+        "viewType": "scan.previewEditor",
+        "displayName": "SCAN Preview",
+        "selector": [
+          {
+            "filenamePattern": "*.scan.yaml"
+          },
+          {
+            "filenamePattern": "*.scan.yml"
+          },
+          {
+            "filenamePattern": "*.scan"
+          }
+        ],
+        "priority": "option"
       }
     ],
     "commands": [
@@ -72,6 +101,12 @@
         "icon": "$(open-preview)"
       },
       {
+        "command": "scan.showSource",
+        "title": "Show Source",
+        "category": "SCAN",
+        "icon": "$(go-to-file)"
+      },
+      {
         "command": "scan.refreshPreview",
         "title": "Refresh Preview",
         "category": "SCAN",
@@ -81,27 +116,53 @@
     "menus": {
       "editor/title": [
         {
-          "when": "editorLangId == scan || resourceLangId == scan || resourceFilename =~ /\\.scan(\\.ya?ml)?$/i",
-          "command": "scan.openPreviewToSide",
+          "when": "scan.isScanEditor && !scan.isPreviewEditor",
+          "command": "scan.openPreview",
+          "group": "navigation@1"
+        },
+        {
+          "when": "scan.isPreviewEditor",
+          "command": "scan.showSource",
           "group": "navigation@1"
         }
       ],
       "editor/title/context": [
         {
-          "when": "resourceFilename =~ /\\.scan(\\.ya?ml)?$/i || editorLangId == scan",
+          "when": "scan.isScanEditor",
           "command": "scan.openPreviewToSide",
           "group": "navigation"
         }
       ],
+      "editor/context": [
+        {
+          "when": "scan.isScanEditor && !scan.isPreviewEditor",
+          "command": "scan.openPreview",
+          "group": "navigation@1"
+        }
+      ],
+      "explorer/context": [
+        {
+          "when": "resourceLangId == scan",
+          "command": "scan.openPreview",
+          "group": "navigation@1"
+        }
+      ],
       "commandPalette": [
         {
-          "command": "scan.openPreview"
+          "command": "scan.openPreview",
+          "when": "scan.isScanEditor || scan.isPreviewEditor"
         },
         {
-          "command": "scan.openPreviewToSide"
+          "command": "scan.openPreviewToSide",
+          "when": "scan.isScanEditor"
         },
         {
-          "command": "scan.refreshPreview"
+          "command": "scan.showSource",
+          "when": "scan.isPreviewEditor"
+        },
+        {
+          "command": "scan.refreshPreview",
+          "when": "scan.isScanEditor || scan.isPreviewEditor"
         }
       ]
     },
@@ -110,13 +171,19 @@
         "command": "scan.openPreview",
         "key": "ctrl+shift+v",
         "mac": "cmd+shift+v",
-        "when": "editorTextFocus && (editorLangId == scan || resourceFilename =~ /\\.scan(\\.ya?ml)?$/i)"
+        "when": "scan.isScanEditor && !scan.isPreviewEditor"
+      },
+      {
+        "command": "scan.showSource",
+        "key": "ctrl+shift+v",
+        "mac": "cmd+shift+v",
+        "when": "scan.isPreviewEditor"
       },
       {
         "command": "scan.openPreviewToSide",
         "key": "ctrl+k v",
         "mac": "cmd+k v",
-        "when": "editorTextFocus && (editorLangId == scan || resourceFilename =~ /\\.scan(\\.ya?ml)?$/i)"
+        "when": "scan.isScanEditor && !scan.isPreviewEditor"
       }
     ],
     "configurationDefaults": {
@@ -134,8 +201,8 @@
     "package": "npm run build && npx --yes @vscode/vsce package --no-dependencies --allow-missing-repository"
   },
   "dependencies": {
-    "@spherescan/model": "0.3.0",
-    "@spherescan/viewer": "0.3.0"
+    "@spherescan/model": "0.3.2",
+    "@spherescan/viewer": "0.3.2"
   },
   "devDependencies": {
     "@types/node": "^22.16.5",

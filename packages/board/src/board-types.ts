@@ -85,6 +85,11 @@ export type BoardAppProps = {
    * Return true only after the host has persisted the document successfully.
    */
   onSaveDocument?: (yaml: string) => Promise<boolean>;
+  /**
+   * Fired after a successful local Save / download when `onSaveDocument` is
+   * not set (e.g. anonymous hosts that fall back to .scan.yaml on disk).
+   */
+  onLocalSave?: (info: { filename: string; connected: boolean }) => void;
   /** Called after a model command changes the document, for host-driven autosave. */
   onDocumentChange?: (yaml: string) => void;
   /**
@@ -94,6 +99,14 @@ export type BoardAppProps = {
   onSystemIdentityChange?: (change: SystemIdentityChange) => void;
   /** YAML supplied by a host to replace the built-in sample document. */
   initialYaml?: string | null;
+  /**
+   * One-shot: YAML to merge (additive) into the current board, e.g. a library
+   * template attached from another screen. Applied once, then the host should
+   * clear it via `onMergeApplied`.
+   */
+  pendingMergeYaml?: string | null;
+  /** Fired after `pendingMergeYaml` has been applied to the board. */
+  onMergeApplied?: () => void;
   /**
    * Start from an empty Untitled board instead of the Order Platform sample.
    * Ignored when `initialYaml` is supplied (e.g. opening a saved diagram).

@@ -8,3 +8,13 @@ esbuild.mjs
 tsconfig.json
 .gitignore
 *.vsix
+!icons/**
+!media/**
+!dist/extension.js
+!language-configuration.json
+!package.json
+!README.md
+!SHIPPING.md
+!LICENSE
+!NOTICE
+fix-vsix-readme.py

@@ -37,6 +37,7 @@ Thumbs.db
 # Generated / temp
 *.svg
 !docs/**
+!packages/vscode-scan/icons/**
 order-platform.svg
 *.tgz
 
