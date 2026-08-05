@@ -29,8 +29,8 @@
     "ext:package": "npm run ext:build && npm run package -w scan"
   },
   "dependencies": {
-    "@spherescan/model": "^0.3.2",
-    "@spherescan/viewer": "^0.3.2"
+    "@spherescan/model": "^0.4.0",
+    "@spherescan/viewer": "^0.4.0"
   },
   "overrides": {
     "react": "^19.2.0",

@@ -9,7 +9,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@spherescan/viewer": "0.3.2"
+    "@spherescan/viewer": "0.4.0"
   },
   "devDependencies": {
     "typescript": "^5.8.3",
