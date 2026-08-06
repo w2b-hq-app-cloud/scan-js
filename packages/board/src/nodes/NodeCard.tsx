@@ -2,7 +2,7 @@
 // Copyright 2026 WABLOO PARTNERS SRL
 
 import type { MouseEvent, PointerEvent } from "react";
-import { AlertTriangle, Github } from "lucide-react";
+import { AlertTriangle, ExternalLink, Github } from "lucide-react";
 import type { SphereNode } from "@spherescan/viewer";
 import { kindMeta } from "../kinds";
 import { ElementIcon } from "../ElementIcon";
@@ -113,21 +113,38 @@ export function NodeCard({
               )}
             </div>
           </div>
-          <button
-            type="button"
-            title={node.repoUrl ? `Open ${node.repo}` : node.repo ? node.repo : "No repository"}
-            className={`shrink-0 rounded p-0.5 outline-none focus:outline-none ${
-              node.repoUrl
-                ? "cursor-pointer opacity-0 group-hover:opacity-100 hover:bg-muted"
-                : "pointer-events-none opacity-0"
-            }`}
-            onClick={(e) => {
-              e.stopPropagation();
-              if (node.repoUrl) openExternal(node.repoUrl);
-            }}
-          >
-            <Github className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground" />
-          </button>
+          <div className="flex shrink-0 items-center gap-0.5">
+            <button
+              type="button"
+              title={node.url ? `Open ${node.url}` : "No service URL"}
+              className={`rounded p-0.5 outline-none focus:outline-none ${
+                node.url
+                  ? "cursor-pointer opacity-0 group-hover:opacity-100 hover:bg-muted"
+                  : "pointer-events-none opacity-0"
+              }`}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (node.url) openExternal(node.url);
+              }}
+            >
+              <ExternalLink className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground" />
+            </button>
+            <button
+              type="button"
+              title={node.repoUrl ? `Open ${node.repo}` : node.repo ? node.repo : "No repository"}
+              className={`rounded p-0.5 outline-none focus:outline-none ${
+                node.repoUrl
+                  ? "cursor-pointer opacity-0 group-hover:opacity-100 hover:bg-muted"
+                  : "pointer-events-none opacity-0"
+              }`}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (node.repoUrl) openExternal(node.repoUrl);
+              }}
+            >
+              <Github className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground" />
+            </button>
+          </div>
         </div>
 
         {hasPorts ? (

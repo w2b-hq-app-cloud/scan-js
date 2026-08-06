@@ -127,6 +127,7 @@ export default function BoardApp({
   renderLeftPanel,
   renderViewTabsEnd,
   renderCanvasOverlay,
+  inspectorOpen = true,
   architectureWarnings: architectureWarningsProp,
   renderValidationAction,
   architectureValidating = false,
@@ -176,6 +177,7 @@ export default function BoardApp({
     updateElementDescription,
     updateElementMeta,
     setElementRepository,
+    setElementUrl,
     addElementLink,
     removeElementLink,
     addPort,
@@ -225,6 +227,14 @@ export default function BoardApp({
   const onBoardReadyCalledRef = useRef(false);
   const loadYamlTextRef = useRef(loadYamlText);
   loadYamlTextRef.current = loadYamlText;
+  const clearSelectionRef = useRef(() => {});
+  clearSelectionRef.current = () => {
+    setSelected(null);
+    setSelectedExtras([]);
+    setSelectedBoundary(null);
+    setSelectedBoundaryExtras([]);
+    setSelectedEdge(null);
+  };
   const [connectFrom, setConnectFrom] = useState<{
     nodeId: string;
     portId?: string;
@@ -758,6 +768,7 @@ export default function BoardApp({
       // Always call through the latest loadYamlText (avoids stale closures after HMR / modeler swap).
       loadYaml: (yaml) => loadYamlTextRef.current(yaml),
       getSelection: () => selectionRef.current,
+      clearSelection: () => clearSelectionRef.current(),
       subscribeSelection: (listener) => {
         selectionListenersRef.current.add(listener);
         listener(selectionRef.current);
@@ -1647,6 +1658,7 @@ export default function BoardApp({
   const completeNewBoard = useCallback(
     async (name: string) => {
       try {
+        const fromSystemId = modeler.getModel()?.system.id ?? null;
         await newBoard(name.trim() || "Untitled System");
         setSelected(null);
         setSelectedEdge(null);
@@ -1654,13 +1666,21 @@ export default function BoardApp({
         setCtxMenu(null);
         applyViewport(0.85, { x: 40, y: 20 });
         setNewBoardModal(null);
+        const yaml = modeler.peekYAML();
+        const toSystemId = modeler.getModel()?.system.id ?? "";
+        emitSystemIdentityChange({
+          reason: "new",
+          fromSystemId,
+          toSystemId,
+          yaml,
+        });
         toast.success("New board ready");
       } catch (err) {
         const message = err instanceof Error ? err.message : "Could not create board";
         toast.error("New board failed", { description: message });
       }
     },
-    [newBoard, applyViewport],
+    [newBoard, applyViewport, emitSystemIdentityChange, modeler],
   );
 
   const selNode = selected ? nodeById[selected] : null;
@@ -2501,8 +2521,8 @@ export default function BoardApp({
           }}
         />
 
-        {/* INSPECTOR */}
-        {(selNode || selEdge || selBoundary) && (
+        {/* INSPECTOR — host may hide on YAML/Code without clearing selection */}
+        {inspectorOpen && (selNode || selEdge || selBoundary) && (
           <Inspector
             node={selNode ?? null}
             edge={selEdge ?? null}
@@ -2564,6 +2584,15 @@ export default function BoardApp({
                 setElementRepository(id, repository);
               } catch (err) {
                 toast.error("Could not set repository", {
+                  description: err instanceof Error ? err.message : "Update failed",
+                });
+              }
+            }}
+            onSetElementUrl={(id, url) => {
+              try {
+                setElementUrl(id, url);
+              } catch (err) {
+                toast.error("Could not set service URL", {
                   description: err instanceof Error ? err.message : "Update failed",
                 });
               }

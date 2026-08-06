@@ -52,6 +52,8 @@ const componentSchema = z.object({
   links: z.array(elementLinkSchema).optional(),
   icon: iconSchema,
   repository: repositoryRefSchema.optional(),
+  /** Deploy / service URL (runtime endpoint); opens from the board when set. */
+  url: z.string().min(1).optional(),
   consumes: z.array(portSchema).optional(),
   exposes: z.array(portSchema).optional(),
   status: z.enum(["ok", "warn"]).optional(),
@@ -81,6 +83,8 @@ const externalSystemSchema = z.object({
   links: z.array(elementLinkSchema).optional(),
   icon: iconSchema,
   repository: repositoryRefSchema.optional(),
+  /** Deploy / service URL (runtime endpoint); opens from the board when set. */
+  url: z.string().min(1).optional(),
   consumes: z.array(portSchema).optional(),
   exposes: z.array(portSchema).optional(),
 });

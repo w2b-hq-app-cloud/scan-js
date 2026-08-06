@@ -131,6 +131,7 @@ components:
 | `links` | no | Typed references: `{ kind, href, title? }`; `kind` is `doc`, `repo`, `openapi`, or `other` |
 | `icon` | no | Diagram icon override: Lucide name (`shield`), `https://...`, or `data:image/...` |
 | `repository` | no | String path **or** `{ provider?, path }` |
+| `url` | no | Deploy / service URL (runtime); board Open control when set |
 | `consumes` / `exposes` | no | Port lists |
 | `status` | no | `ok` \| `warn` |
 | `warn` | no | Human-readable warning when `status: warn` |
@@ -186,6 +187,7 @@ external_systems:
 | `technology` | no | |
 | `description` | no | Free-text notes |
 | `repository` | no | String or `{ provider?, path }` |
+| `url` | no | Deploy / service URL (runtime); board Open control when set |
 | `consumes` / `exposes` | no | |
 
 ---

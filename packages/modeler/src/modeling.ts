@@ -364,6 +364,20 @@ export class Modeling {
     this.replace(next, prev, `Set repository ${id}`);
   }
 
+  /** Set or clear a deploy / service URL on a component or external system. */
+  setElementUrl(id: string, url: string | null) {
+    const prev = cloneModel(this.getModel());
+    const next = cloneModel(prev);
+    const element =
+      next.components.find((c) => c.id === id) ??
+      next.external_systems.find((c) => c.id === id);
+    if (!element) throw new Error(`Element not found or does not support url: ${id}`);
+    const trimmed = url?.trim() ?? "";
+    if (!trimmed) delete element.url;
+    else element.url = trimmed;
+    this.replace(next, prev, `Set url ${id}`);
+  }
+
   addElementLink(id: string, link: ElementLink) {
     const prev = cloneModel(this.getModel());
     const next = cloneModel(prev);

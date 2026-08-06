@@ -25,6 +25,7 @@ export function Inspector({
   onDeletePort,
   onUpdateElementMeta,
   onSetElementRepository,
+  onSetElementUrl,
   onAddElementLink,
   onRemoveElementLink,
   onDeleteBoundary,
@@ -70,6 +71,7 @@ export function Inspector({
   onDeletePort: (id: string, portId: string) => void;
   onUpdateElementMeta: (id: string, patch: { description?: string | null; notes?: string | null }) => void;
   onSetElementRepository: (id: string, repository: string | null) => void;
+  onSetElementUrl: (id: string, url: string | null) => void;
   onAddElementLink: (id: string, link: { kind: "doc" | "repo" | "openapi" | "other"; href: string; title?: string }) => void;
   onRemoveElementLink: (id: string, index: number) => void;
   onDeleteBoundary: (id: string) => void;
@@ -131,6 +133,7 @@ export function Inspector({
             onDeletePort={onDeletePort}
             onUpdateMeta={onUpdateElementMeta}
             onSetRepository={onSetElementRepository}
+            onSetUrl={onSetElementUrl}
             onAddLink={onAddElementLink}
             onRemoveLink={onRemoveElementLink}
           />
