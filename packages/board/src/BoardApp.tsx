@@ -1647,6 +1647,7 @@ export default function BoardApp({
   const completeNewBoard = useCallback(
     async (name: string) => {
       try {
+        const fromSystemId = modeler.getModel()?.system.id ?? null;
         await newBoard(name.trim() || "Untitled System");
         setSelected(null);
         setSelectedEdge(null);
@@ -1654,13 +1655,21 @@ export default function BoardApp({
         setCtxMenu(null);
         applyViewport(0.85, { x: 40, y: 20 });
         setNewBoardModal(null);
+        const yaml = modeler.peekYAML();
+        const toSystemId = modeler.getModel()?.system.id ?? "";
+        emitSystemIdentityChange({
+          reason: "new",
+          fromSystemId,
+          toSystemId,
+          yaml,
+        });
         toast.success("New board ready");
       } catch (err) {
         const message = err instanceof Error ? err.message : "Could not create board";
         toast.error("New board failed", { description: message });
       }
     },
-    [newBoard, applyViewport],
+    [newBoard, applyViewport, emitSystemIdentityChange, modeler],
   );
 
   const selNode = selected ? nodeById[selected] : null;

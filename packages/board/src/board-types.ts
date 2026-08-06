@@ -24,9 +24,9 @@ export type BoardHostApi = {
   subscribeDocument: (listener: (yaml: string) => void) => () => void;
 };
 
-/** System rename vs duplicate — hosts map this to workspace relocate vs fresh seed. */
+/** System rename vs duplicate vs new board — hosts map this to workspace relocate vs fresh seed. */
 export type SystemIdentityChange = {
-  reason: "rename" | "duplicate";
+  reason: "rename" | "duplicate" | "new";
   fromSystemId: string | null;
   toSystemId: string;
   yaml: string;
