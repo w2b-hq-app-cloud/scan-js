@@ -280,6 +280,7 @@ export function NodeInspector({
   onDeletePort,
   onUpdateMeta,
   onSetRepository,
+  onSetUrl,
   onAddLink,
   onRemoveLink,
 }: {
@@ -298,6 +299,7 @@ export function NodeInspector({
   onDeletePort: (id: string, portId: string) => void;
   onUpdateMeta: (id: string, patch: { description?: string | null; notes?: string | null }) => void;
   onSetRepository: (id: string, repository: string | null) => void;
+  onSetUrl: (id: string, url: string | null) => void;
   onAddLink: (id: string, link: { kind: "doc" | "repo" | "openapi" | "other"; href: string; title?: string }) => void;
   onRemoveLink: (id: string, index: number) => void;
 }) {
@@ -496,6 +498,15 @@ export function NodeInspector({
           </div>
         )}
       </Section>
+
+      <OptionalMetaSection
+        title="Service URL"
+        value={node.url ?? ""}
+        placeholder="https://… or http://localhost:8080"
+        resetKey={node.id}
+        onCommit={(next) => onSetUrl(node.id, next)}
+        onOpen={node.url ? () => openExternal(node.url!) : undefined}
+      />
 
       <OptionalMetaSection
         title="Repository"

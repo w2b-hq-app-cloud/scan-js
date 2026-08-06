@@ -386,6 +386,11 @@ export function useScanBoard(options: UseScanBoardOptions | string = {}) {
     [modeler],
   );
 
+  const setElementUrl = useCallback(
+    (id: string, url: string | null) => modeler.modeling.setElementUrl(id, url),
+    [modeler],
+  );
+
   const addElementLink = useCallback(
     (
       id: string,
@@ -617,6 +622,7 @@ export function useScanBoard(options: UseScanBoardOptions | string = {}) {
       updateElementDescription,
       updateElementMeta,
       setElementRepository,
+      setElementUrl,
       addElementLink,
       removeElementLink,
       updateElementLink,
@@ -677,6 +683,7 @@ export function useScanBoard(options: UseScanBoardOptions | string = {}) {
       updateElementDescription,
       updateElementMeta,
       setElementRepository,
+      setElementUrl,
       addElementLink,
       removeElementLink,
       updateElementLink,

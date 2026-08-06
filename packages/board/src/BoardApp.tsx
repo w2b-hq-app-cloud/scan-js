@@ -178,6 +178,7 @@ export default function BoardApp({
     updateElementDescription,
     updateElementMeta,
     setElementRepository,
+    setElementUrl,
     addElementLink,
     removeElementLink,
     addPort,
@@ -2601,6 +2602,15 @@ export default function BoardApp({
                 setElementRepository(id, repository);
               } catch (err) {
                 toast.error("Could not set repository", {
+                  description: err instanceof Error ? err.message : "Update failed",
+                });
+              }
+            }}
+            onSetElementUrl={(id, url) => {
+              try {
+                setElementUrl(id, url);
+              } catch (err) {
+                toast.error("Could not set service URL", {
                   description: err instanceof Error ? err.message : "Update failed",
                 });
               }
