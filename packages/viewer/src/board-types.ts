@@ -38,6 +38,8 @@ export type SphereNode = {
   repo?: string;
   /** Resolved browse URL for `repo` when known (e.g. GitHub). */
   repoUrl?: string;
+  /** Deploy / service URL from SCAN `url` (runtime endpoint). */
+  url?: string;
   /** Free-text from SCAN `description` (inspector). */
   description?: string;
   notes?: string;

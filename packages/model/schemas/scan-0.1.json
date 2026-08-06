@@ -139,6 +139,11 @@
         "links": { "type": "array", "items": { "$ref": "#/$defs/ElementLink" } },
         "icon": { "$ref": "#/$defs/Icon" },
         "repository": { "$ref": "#/$defs/RepositoryRef" },
+        "url": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Deploy / service URL (runtime endpoint); opens from the board when set."
+        },
         "consumes": {
           "type": "array",
           "items": { "$ref": "#/$defs/Port" }
@@ -192,6 +197,11 @@
         "links": { "type": "array", "items": { "$ref": "#/$defs/ElementLink" } },
         "icon": { "$ref": "#/$defs/Icon" },
         "repository": { "$ref": "#/$defs/RepositoryRef" },
+        "url": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Deploy / service URL (runtime endpoint); opens from the board when set."
+        },
         "consumes": {
           "type": "array",
           "items": { "$ref": "#/$defs/Port" }
