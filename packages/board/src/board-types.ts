@@ -19,6 +19,8 @@ export type BoardHostApi = {
   peekYaml: () => string;
   loadYaml: (yaml: string) => Promise<void>;
   getSelection: () => BoardSelection;
+  /** Clear node / edge / boundary selection (closes the inspector). */
+  clearSelection: () => void;
   subscribeSelection: (listener: (selection: BoardSelection) => void) => () => void;
   /** Subscribe to document revisions (after model commands). */
   subscribeDocument: (listener: (yaml: string) => void) => () => void;
@@ -133,6 +135,12 @@ export type BoardAppProps = {
   renderViewTabsEnd?: () => ReactNode;
   /** Absolute overlay over the canvas (e.g. YAML / Code surface). */
   renderCanvasOverlay?: () => ReactNode;
+  /**
+   * When false, the right-hand inspector is hidden even if something is selected.
+   * Hosts use this on non-diagram surfaces (YAML / Code) without clearing selection.
+   * Default: true.
+   */
+  inspectorOpen?: boolean;
   /** Host-owned architecture warnings (badges + toast). */
   architectureWarnings?: ArchitectureWarning[];
   /** Optional CTA next to the validation toast (host-owned label/action). */
