@@ -128,6 +128,7 @@ export default function BoardApp({
   renderLeftPanel,
   renderViewTabsEnd,
   renderCanvasOverlay,
+  inspectorOpen = true,
   architectureWarnings: architectureWarningsProp,
   renderValidationAction,
   architectureValidating = false,
@@ -225,6 +226,15 @@ export default function BoardApp({
   });
   const onBoardReadyCalledRef = useRef(false);
   const loadYamlTextRef = useRef(loadYamlText);
+  loadYamlTextRef.current = loadYamlText;
+  const clearSelectionRef = useRef(() => {});
+  clearSelectionRef.current = () => {
+    setSelected(null);
+    setSelectedExtras([]);
+    setSelectedBoundary(null);
+    setSelectedBoundaryExtras([]);
+    setSelectedEdge(null);
+  };
   const [connectFrom, setConnectFrom] = useState<{
     nodeId: string;
     portId?: string;
@@ -775,6 +785,7 @@ export default function BoardApp({
       // Always call through the latest loadYamlText (avoids stale closures after HMR / modeler swap).
       loadYaml: (yaml) => loadYamlTextRef.current(yaml),
       getSelection: () => selectionRef.current,
+      clearSelection: () => clearSelectionRef.current(),
       subscribeSelection: (listener) => {
         selectionListenersRef.current.add(listener);
         listener(selectionRef.current);
@@ -2527,8 +2538,8 @@ export default function BoardApp({
           }}
         />
 
-        {/* INSPECTOR */}
-        {(selNode || selEdge || selBoundary) && (
+        {/* INSPECTOR — host may hide on YAML/Code without clearing selection */}
+        {inspectorOpen && (selNode || selEdge || selBoundary) && (
           <Inspector
             node={selNode ?? null}
             edge={selEdge ?? null}
