@@ -121,6 +121,7 @@ export default function BoardApp({
   applyYamlNonce = 0,
   readOnly = false,
   onBoardReady,
+  onYamlLoadError,
   renderNodeOverlay,
   renderInspectorExtras,
   renderBottomChrome,
@@ -224,7 +225,6 @@ export default function BoardApp({
   });
   const onBoardReadyCalledRef = useRef(false);
   const loadYamlTextRef = useRef(loadYamlText);
-  loadYamlTextRef.current = loadYamlText;
   const [connectFrom, setConnectFrom] = useState<{
     nodeId: string;
     portId?: string;
@@ -641,21 +641,38 @@ export default function BoardApp({
     for (const listener of documentListenersRef.current) listener(yaml);
   }, [historyStep, model, dirty, ready, modeler]);
 
+  const onYamlLoadErrorRef = useRef(onYamlLoadError);
+  onYamlLoadErrorRef.current = onYamlLoadError;
+
+  const safeLoadYamlText = useCallback(
+    async (yaml: string) => {
+      try {
+        await loadYamlText(yaml);
+      } catch (cause) {
+        const err = cause instanceof Error ? cause : new Error(String(cause));
+        onYamlLoadErrorRef.current?.(err, yaml);
+        // Do not rethrow — host surfaces Fix UI; avoid unhandled rejection in Vite.
+      }
+    },
+    [loadYamlText],
+  );
+  loadYamlTextRef.current = safeLoadYamlText;
+
   const loadedYamlRef = useRef<string | null>(null);
   useEffect(() => {
     if (!ready || !initialYaml) return;
     if (loadedYamlRef.current === initialYaml) return;
     loadedYamlRef.current = initialYaml;
-    void loadYamlText(initialYaml);
-  }, [ready, initialYaml, loadYamlText]);
+    void safeLoadYamlText(initialYaml);
+  }, [ready, initialYaml, safeLoadYamlText]);
 
   const appliedYamlNonceRef = useRef(0);
   useEffect(() => {
     if (!ready || !applyYaml?.trim()) return;
     if (applyYamlNonce === appliedYamlNonceRef.current) return;
     appliedYamlNonceRef.current = applyYamlNonce;
-    void loadYamlText(applyYaml);
-  }, [ready, applyYaml, applyYamlNonce, loadYamlText]);
+    void safeLoadYamlText(applyYaml);
+  }, [ready, applyYaml, applyYamlNonce, safeLoadYamlText]);
 
   const mergedYamlRef = useRef<string | null>(null);
   useEffect(() => {

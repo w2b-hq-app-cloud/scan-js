@@ -121,6 +121,11 @@ export type BoardAppProps = {
   readOnly?: boolean;
   /** Register imperative host API once the board is ready. */
   onBoardReady?: (api: BoardHostApi) => void;
+  /**
+   * Fired when `initialYaml` / `applyYaml` / host `loadYaml` fails to parse.
+   * Hosts should surface a Fix CTA instead of leaving an unhandled rejection.
+   */
+  onYamlLoadError?: (error: Error, yaml: string) => void;
   /** World-space overlay above the selected node (product Ask / Build chrome). */
   renderNodeOverlay?: (ctx: BoardNodeOverlayContext) => ReactNode;
   /** Extra panels below the standard inspector sections. */
