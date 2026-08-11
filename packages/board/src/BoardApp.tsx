@@ -125,6 +125,7 @@ export default function BoardApp({
   onBoardReady,
   onYamlLoadError,
   renderNodeOverlay,
+  renderNodeBadge,
   renderInspectorExtras,
   renderBottomChrome,
   renderLeftPanel,
@@ -136,7 +137,8 @@ export default function BoardApp({
   renderValidationAction,
   architectureValidating = false,
 }: BoardAppProps) {
-  void readOnly;
+  const readOnlyRef = useRef(readOnly);
+  readOnlyRef.current = readOnly;
   const board = useScanBoard({
     startEmpty: startEmpty && !initialYaml,
   });
@@ -370,6 +372,19 @@ export default function BoardApp({
   // Keyboard: undo/redo, save, delete
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (readOnlyRef.current) {
+        // Allow save / escape only — block edit shortcuts while diagram is locked.
+        if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
+          e.preventDefault();
+          void saveYaml();
+        }
+        if (e.key === "Escape") {
+          setCtxMenu(null);
+          setConnectFrom(null);
+          setConnectCursor(null);
+        }
+        return;
+      }
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
         e.preventDefault();
         void saveYaml();
@@ -588,6 +603,14 @@ export default function BoardApp({
     groups,
     nodes,
   ]);
+
+  useEffect(() => {
+    if (!readOnly) return;
+    setTool("select");
+    setConnectFrom(null);
+    setConnectCursor(null);
+    setFastDraft(null);
+  }, [readOnly]);
 
   useEffect(() => {
     if (tool !== "connect" && tool !== "fast") {
@@ -1050,6 +1073,15 @@ export default function BoardApp({
   };
 
   const startDrag = (e: PointerEvent, id: string) => {
+    if (readOnlyRef.current) {
+      e.stopPropagation();
+      setSelected(id);
+      setSelectedExtras([]);
+      setSelectedBoundaryExtras([]);
+      setSelectedEdge(null);
+      setSelectedBoundary(null);
+      return;
+    }
     if (tool === "connect" || tool === "fast") {
       e.stopPropagation();
       // Node body: port-less / fallback node->node wire
@@ -1133,6 +1165,7 @@ export default function BoardApp({
   };
 
   const onPortConnect = (nodeId: string, portId: string, role: "expose" | "consume") => {
+    if (readOnlyRef.current) return;
     // Ports are always interactive: start/finish wiring without requiring the Connect tool first.
     if (!connectFrom) {
       if (role === "expose") {
@@ -1481,6 +1514,24 @@ export default function BoardApp({
   };
 
   const onCanvasPointerDown = (e: PointerEvent) => {
+    if (readOnlyRef.current) {
+      if (e.button === 1 || tool === "pan" || e.altKey || e.button === 2) {
+        panning.current = {
+          sx: e.clientX,
+          sy: e.clientY,
+          px: panRef.current.x,
+          py: panRef.current.y,
+        };
+      } else {
+        setSelected(null);
+        setSelectedExtras([]);
+        setSelectedBoundary(null);
+        setSelectedBoundaryExtras([]);
+        setSelectedEdge(null);
+        setCtxMenu(null);
+      }
+      return;
+    }
     if (tool === "fast" && e.button === 0) {
       // Empty-canvas sketch: click → component, drag box → boundary.
       // Node clicks are handled in startDrag / ports and stopPropagation.
@@ -2351,6 +2402,15 @@ export default function BoardApp({
                 }}
               />
             ))}
+            {displayNodes.map((n) =>
+              renderNodeBadge?.({
+                node: n,
+                x: n.x,
+                y: n.y,
+                w: n.w,
+                h: n.h,
+              }),
+            )}
             {selected &&
               selNode &&
               tool === "select" &&
@@ -2456,12 +2516,22 @@ export default function BoardApp({
         <div data-canvas-chrome>
           <ToolRail
             tool={tool}
-            setTool={setTool}
+            setTool={(next) => {
+              if (readOnlyRef.current && next !== "select" && next !== "pan") {
+                toast.message("Diagram is locked while building");
+                return;
+              }
+              setTool(next);
+            }}
             showGrid={showGrid}
             setShowGrid={setShowGrid}
             orthogonalEdges={orthogonalEdges}
             setOrthogonalEdges={setOrthogonalEdges}
             onPickCreate={(kind) => {
+              if (readOnlyRef.current) {
+                toast.message("Diagram is locked while building");
+                return;
+              }
               setCreateKind(kind);
               if (tool === "fast") {
                 toast.message(`Fast design places ${createKindHints[kind].label}`);
@@ -2470,6 +2540,10 @@ export default function BoardApp({
               setTool("create");
             }}
             onPickBoundary={(kind) => {
+              if (readOnlyRef.current) {
+                toast.message("Diagram is locked while building");
+                return;
+              }
               setBoundaryKind(kind);
               if (tool === "fast") {
                 toast.message(

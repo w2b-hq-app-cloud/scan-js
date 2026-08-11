@@ -119,7 +119,10 @@ export type BoardAppProps = {
    */
   applyYaml?: string | null;
   applyYamlNonce?: number;
-  /** Host share/view-only hint. Decorative for type compatibility. */
+  /**
+   * When true, diagram editing is locked (no drag/create/connect/delete).
+   * Pan and zoom still work. Used during component plan-chain builds.
+   */
   readOnly?: boolean;
   /** Register imperative host API once the board is ready. */
   onBoardReady?: (api: BoardHostApi) => void;
@@ -130,6 +133,11 @@ export type BoardAppProps = {
   onYamlLoadError?: (error: Error, yaml: string) => void;
   /** World-space overlay above the selected node (product Ask / Build chrome). */
   renderNodeOverlay?: (ctx: BoardNodeOverlayContext) => ReactNode;
+  /**
+   * Always-on world-space badge per node (e.g. Plans button). Called for every
+   * visible node, not only the selection.
+   */
+  renderNodeBadge?: (ctx: BoardNodeOverlayContext) => ReactNode;
   /** Extra panels below the standard inspector sections. */
   renderInspectorExtras?: (ctx: BoardInspectorExtrasContext) => ReactNode;
   /** Chrome under the top bar (e.g. product AI prompt bar). */

@@ -9,11 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `@spherescan/board`: honor `readOnly` for drag/create/connect/delete (pan/zoom still work); keep save/escape available.
 - `@spherescan/board`: orthogonal route handles sit above edge labels when selected (labels no longer block reshape dots).
 - `@spherescan/board`: component inspector can edit **Technology** (`updateElementMeta`).
 
 ### Changed
 
+- `@spherescan/board`: add `renderNodeBadge` host slot for always-on per-node overlays (e.g. Plans).
 - `@spherescan/board` / `@spherescan/viewer`: edges stroke and arrowheads follow the **source** node kind color; hover shows a source-name pill.
 - `@spherescan/board`: rename/edit modal type picker reuses the Add Component icon/color list (not a plain `<select>`).
 - `@spherescan/board`: rename modal is **Edit component** with a type dropdown (`changeElementKind`).
