@@ -72,6 +72,8 @@ Optional **`description`**: free-text notes (role, ownership, constraints). Pref
 
 Inline `repository:` on a component is a **ref** (`path` or `{ provider, path }`), not a canvas node. Use `repositories:` when the repo itself is a diagram element.
 
+Optional **`url:`** is the deploy/service base URL (e.g. `http://localhost:8080` or a public HTTPS URL). **Required when known** — set it as soon as Compose, a tunnel, or a deploy exposes the service, and update it when the host/port changes. Sphere shows an Open control and a live reachability heartbeat (green = 2xx, yellow = other response, red = unreachable/5xx) when `url` is set.
+
 ## Minimal valid document
 
 ```yaml

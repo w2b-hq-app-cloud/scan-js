@@ -146,6 +146,11 @@ export type BoardAppProps = {
    * Default: true.
    */
   inspectorOpen?: boolean;
+  /**
+   * Live service URL reachability by node id (host-probed; not SCAN).
+   * Merged onto nodes for the Open/status affordance on NodeCard.
+   */
+  urlHealthById?: Record<string, "up" | "degraded" | "down" | "unknown">;
   /** Host-owned architecture warnings (badges + toast). */
   architectureWarnings?: ArchitectureWarning[];
   /** Optional CTA next to the validation toast (host-owned label/action). */

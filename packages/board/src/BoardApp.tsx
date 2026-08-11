@@ -129,6 +129,7 @@ export default function BoardApp({
   renderViewTabsEnd,
   renderCanvasOverlay,
   inspectorOpen = true,
+  urlHealthById,
   architectureWarnings: architectureWarningsProp,
   renderValidationAction,
   architectureValidating = false,
@@ -718,21 +719,33 @@ export default function BoardApp({
   }, []);
 
   const displayNodes = useMemo(() => {
-    if (architectureWarningsProp === undefined) return nodes;
-    const msgById = new Map(
-      architectureWarningsProp.map((w) => [w.id, w.message] as const),
-    );
-    return nodes.map((n) => {
-      const msg = msgById.get(n.id);
-      if (msg) {
-        return { ...n, status: "warn" as const, warn: msg };
-      }
-      if (n.status === "warn" || n.warn) {
-        return { ...n, status: undefined, warn: undefined };
-      }
-      return n;
+    const withWarn =
+      architectureWarningsProp === undefined
+        ? nodes
+        : (() => {
+            const msgById = new Map(
+              architectureWarningsProp.map((w) => [w.id, w.message] as const),
+            );
+            return nodes.map((n) => {
+              const msg = msgById.get(n.id);
+              if (msg) {
+                return { ...n, status: "warn" as const, warn: msg };
+              }
+              if (n.status === "warn" || n.warn) {
+                return { ...n, status: undefined, warn: undefined };
+              }
+              return n;
+            });
+          })();
+    if (!urlHealthById || Object.keys(urlHealthById).length === 0) {
+      return withWarn;
+    }
+    return withWarn.map((n) => {
+      const health = urlHealthById[n.id];
+      if (!health || n.urlHealth === health) return n;
+      return { ...n, urlHealth: health };
     });
-  }, [nodes, architectureWarningsProp]);
+  }, [nodes, architectureWarningsProp, urlHealthById]);
 
   const nodeById = useMemo(
     () => Object.fromEntries(displayNodes.map((n) => [n.id, n])),
@@ -2608,6 +2621,11 @@ export default function BoardApp({
             }}
             onSetElementUrl={(id, url) => {
               try {
+                if (typeof setElementUrl !== "function") {
+                  throw new Error(
+                    "Board API missing setElementUrl — hard-refresh after scan:local",
+                  );
+                }
                 setElementUrl(id, url);
               } catch (err) {
                 toast.error("Could not set service URL", {

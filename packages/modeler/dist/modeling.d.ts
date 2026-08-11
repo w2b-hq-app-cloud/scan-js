@@ -58,6 +58,8 @@ export declare class Modeling {
         provider?: string;
         path: string;
     } | null): void;
+    /** Set or clear a deploy / service URL on a component or external system. */
+    setElementUrl(id: string, url: string | null): void;
     addElementLink(id: string, link: ElementLink): void;
     removeElementLink(id: string, index: number): void;
     updateElementLink(id: string, index: number, link: ElementLink): void;

@@ -114,6 +114,54 @@ export function NodeCard({
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-0.5">
+            {node.url ? (
+              <span
+                title={
+                  node.urlHealth === "up"
+                    ? `Reachable (2xx): ${node.url}`
+                    : node.urlHealth === "degraded"
+                      ? `Responding but not OK: ${node.url}`
+                      : node.urlHealth === "down"
+                        ? `Unreachable or 5xx: ${node.url}`
+                        : `Service URL (probing…): ${node.url}`
+                }
+                className="relative inline-flex h-2 w-2 shrink-0 items-center justify-center"
+                aria-label={
+                  node.urlHealth === "up"
+                    ? "Service up"
+                    : node.urlHealth === "degraded"
+                      ? "Service degraded"
+                      : node.urlHealth === "down"
+                        ? "Service down"
+                        : "Service health unknown"
+                }
+              >
+                <span
+                  aria-hidden
+                  className={`absolute inline-flex h-full w-full rounded-full opacity-70 ${
+                    node.urlHealth === "up"
+                      ? "bg-emerald-500 animate-ping [animation-duration:2.2s]"
+                      : node.urlHealth === "degraded"
+                        ? "bg-amber-400 animate-ping [animation-duration:1.6s]"
+                        : node.urlHealth === "down"
+                          ? "bg-red-500 animate-ping [animation-duration:1.1s]"
+                          : "bg-muted-foreground/50 animate-pulse"
+                  }`}
+                />
+                <span
+                  aria-hidden
+                  className={`relative inline-flex h-2 w-2 rounded-full ${
+                    node.urlHealth === "up"
+                      ? "bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.85)]"
+                      : node.urlHealth === "degraded"
+                        ? "bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.85)]"
+                        : node.urlHealth === "down"
+                          ? "bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.85)]"
+                          : "bg-muted-foreground/50"
+                  }`}
+                />
+              </span>
+            ) : null}
             <button
               type="button"
               title={node.url ? `Open ${node.url}` : "No service URL"}

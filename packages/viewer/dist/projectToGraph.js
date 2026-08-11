@@ -176,6 +176,7 @@ function projectNodes(model, view) {
             exposes: mapPorts(ext.exposes, "out"),
             repo: repoPath(ext.repository),
             repoUrl: repoUrl(ext.repository),
+            url: ext.url?.trim() || undefined,
             notes: ext.notes,
             links: ext.links?.map((link) => ({ ...link })),
         });
@@ -203,6 +204,7 @@ function projectNodes(model, view) {
             exposes: mapPorts(c.exposes, "out"),
             repo: repoPath(c.repository),
             repoUrl: repoUrl(c.repository),
+            url: c.url?.trim() || undefined,
             notes: c.notes,
             links: c.links?.map((link) => ({ ...link })),
             status: c.status,

@@ -28,6 +28,16 @@ export type SphereNode = {
     repo?: string;
     /** Resolved browse URL for `repo` when known (e.g. GitHub). */
     repoUrl?: string;
+    /** Deploy / service URL from SCAN `url` (runtime endpoint). */
+    url?: string;
+    /**
+     * Live reachability of `url` (host-injected; not part of SCAN YAML).
+     * - up: HTTP 2xx
+     * - degraded: response received, not 2xx and not 5xx
+     * - down: no response / timeout / 5xx
+     * - unknown: not probed yet
+     */
+    urlHealth?: "up" | "degraded" | "down" | "unknown";
     /** Free-text from SCAN `description` (inspector). */
     description?: string;
     notes?: string;
