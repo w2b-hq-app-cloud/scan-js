@@ -4,9 +4,8 @@
 import { useState } from "react";
 import { Plus } from "lucide-react";
 import type { CreateKind } from "@spherescan/modeler";
-import { kindMeta } from "../kinds";
-import { createKindHints } from "../board-style";
 import { IconBtn } from "../ui/IconBtn";
+import { KindPickerList } from "./KindPickerList";
 
 export function PopoverAdd({
   active,
@@ -16,9 +15,6 @@ export function PopoverAdd({
   onPick: (kind: CreateKind) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const items = (
-    Object.keys(createKindHints) as CreateKind[]
-  ).map((kind) => ({ kind, label: createKindHints[kind].label, nodeKind: createKindHints[kind].nodeKind }));
   return (
     <div className="relative">
       <IconBtn
@@ -34,27 +30,15 @@ export function PopoverAdd({
           <div className="border-b border-border px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
             Add Component
           </div>
-          {items.map((it) => {
-            const meta = kindMeta[it.nodeKind];
-            return (
-              <button
-                key={it.kind}
-                onClick={() => {
-                  onPick(it.kind);
-                  setOpen(false);
-                }}
-                className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-muted"
-              >
-                <div className={`grid h-6 w-6 place-items-center rounded ${meta.soft}`}>
-                  <meta.Icon className={`h-3.5 w-3.5 ${meta.color}`} />
-                </div>
-                {it.label}
-              </button>
-            );
-          })}
+          <KindPickerList
+            framed={false}
+            onChange={(kind) => {
+              onPick(kind);
+              setOpen(false);
+            }}
+          />
         </div>
       )}
     </div>
   );
 }
-

@@ -43,6 +43,7 @@ import {
   estimateEdgeLabelSize,
 } from "@spherescan/viewer";
 import type { CreateKind } from "@spherescan/modeler";
+import { nodeKindToCreateKind } from "@spherescan/modeler";
 import {
   parseScanYaml,
   serializeSphereYaml,
@@ -74,7 +75,7 @@ import {
   normalizeDraftRect,
   applyBoundaryResize,
 } from "./board-geometry";
-import { createKindHints, edgeKindTitle, edgeStyle } from "./board-style";
+import { createKindHints, edgeKindTitle, edgeStyle, kindColorVar } from "./board-style";
 import { isScanFile } from "./board-files";
 import { IconBtn } from "./ui/IconBtn";
 import { EdgeIcon } from "./icons/EdgeIcon";
@@ -87,6 +88,7 @@ import { TopBar } from "./chrome/TopBar";
 import { ViewTabs } from "./chrome/ViewTabs";
 import { ValidationToast } from "./chrome/ValidationToast";
 import { ContextMenu } from "./chrome/ContextMenu";
+import { KindPickerList } from "./tools/KindPickerList";
 import { Legend } from "./chrome/Legend";
 import { MiniMap } from "./chrome/MiniMap";
 
@@ -175,6 +177,7 @@ export default function BoardApp({
     exportPng,
     newBoard,
     renameElement,
+    changeElementKind,
     updateElementIcon,
     updateElementDescription,
     updateElementMeta,
@@ -249,7 +252,11 @@ export default function BoardApp({
     | null
   >(null);
   const [yamlDragDepth, setYamlDragDepth] = useState(0);
-  const [renameModal, setRenameModal] = useState<{ nodeId: string; value: string } | null>(null);
+  const [renameModal, setRenameModal] = useState<{
+    nodeId: string;
+    value: string;
+    kind: CreateKind;
+  } | null>(null);
   const [boundaryRenameModal, setBoundaryRenameModal] = useState<{
     id: string;
     value: string;
@@ -498,8 +505,14 @@ export default function BoardApp({
           if (g) setBoundaryRenameModal({ id: g.id, value: g.title });
         } else if (selected) {
           e.preventDefault();
-          const current = nodes.find((n) => n.id === selected)?.title ?? "";
-          setRenameModal({ nodeId: selected, value: current });
+          const current = nodes.find((n) => n.id === selected);
+          if (current) {
+            setRenameModal({
+              nodeId: selected,
+              value: current.title,
+              kind: nodeKindToCreateKind(current.kind) ?? "service",
+            });
+          }
         }
       }
       if (
@@ -1985,39 +1998,20 @@ export default function BoardApp({
               style={{ overflow: "visible" }}
             >
               <defs>
-                <marker
-                  id="arrow"
-                  viewBox="0 0 10 10"
-                  refX="8"
-                  refY="5"
-                  markerWidth="6"
-                  markerHeight="6"
-                  orient="auto-start-reverse"
-                >
-                  <path d="M 0 0 L 10 5 L 0 10 z" fill="oklch(0.35 0.03 260)" />
-                </marker>
-                <marker
-                  id="arrow-agent"
-                  viewBox="0 0 10 10"
-                  refX="8"
-                  refY="5"
-                  markerWidth="6"
-                  markerHeight="6"
-                  orient="auto-start-reverse"
-                >
-                  <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--agent)" />
-                </marker>
-                <marker
-                  id="arrow-event"
-                  viewBox="0 0 10 10"
-                  refX="8"
-                  refY="5"
-                  markerWidth="6"
-                  markerHeight="6"
-                  orient="auto-start-reverse"
-                >
-                  <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--event)" />
-                </marker>
+                {(Object.keys(kindColorVar) as Array<keyof typeof kindColorVar>).map((k) => (
+                  <marker
+                    key={`arrow-${k}`}
+                    id={`arrow-${k}`}
+                    viewBox="0 0 10 10"
+                    refX="8"
+                    refY="5"
+                    markerWidth="6"
+                    markerHeight="6"
+                    orient="auto-start-reverse"
+                  >
+                    <path d="M 0 0 L 10 5 L 0 10 z" fill={kindColorVar[k]} />
+                  </marker>
+                ))}
               </defs>
               {edges.map((e) => {
                 const from = nodeById[e.from];
@@ -2028,15 +2022,10 @@ export default function BoardApp({
                 const b = anchors?.b ?? anchorPoint(to, e.toSide ?? "l");
                 const fromSide = anchors?.fromSide ?? e.fromSide ?? "r";
                 const toSide = anchors?.toSide ?? e.toSide ?? "l";
-                const s = edgeStyle(e.kind);
+                const s = edgeStyle(e.kind, from.kind);
                 const active = hoverEdge === e.id || selectedEdge === e.id;
                 const faded = edgeDimmed(e) && !active;
-                const marker =
-                  e.kind === "flow" || e.kind === "db"
-                    ? "url(#arrow-agent)"
-                    : e.kind === "async" || e.kind === "stream"
-                      ? "url(#arrow-event)"
-                      : "url(#arrow)";
+                const marker = `url(#arrow-${from.kind})`;
                 const d =
                   routeDrag?.edgeId === e.id
                     ? routeDrag.points
@@ -2083,7 +2072,7 @@ export default function BoardApp({
                       strokeDasharray="6 4"
                       fill="none"
                       opacity={0.85}
-                      markerEnd="url(#arrow)"
+                      markerEnd="url(#arrow-service)"
                       pointerEvents="none"
                     />
                   );
@@ -2130,7 +2119,7 @@ export default function BoardApp({
                 return handles.map((h) => (
                   <div
                     key={h.key}
-                    className="absolute z-[1] h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-sm border-2 border-primary bg-background shadow active:cursor-grabbing"
+                    className="absolute z-[6] h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-sm border-2 border-primary bg-background shadow active:cursor-grabbing"
                     style={{ left: h.x, top: h.y, cursor: h.cursor }}
                     title={
                       h.axis === "y"
@@ -2180,6 +2169,7 @@ export default function BoardApp({
               const showOps = hoverEdge === e.id && (e.operations?.length ?? 0) > 0;
               const faded = edgeDimmed(e) && !active;
               const showText = active || zoom >= LABEL_LOD_ZOOM;
+              const selectedForRoute = selectedEdge === e.id;
               if (!showText && !active) {
                 // Thin hit target at low zoom so edges stay selectable via path;
                 // skip the opaque chip to reduce clutter.
@@ -2188,14 +2178,26 @@ export default function BoardApp({
               return (
                 <div
                   key={`lbl-${e.id}`}
-                  className={`absolute z-[4] flex -translate-x-1/2 -translate-y-1/2 cursor-pointer flex-col items-stretch gap-1 ${
-                    showOps ? "z-[5]" : ""
+                  className={`absolute flex -translate-x-1/2 -translate-y-1/2 flex-col items-stretch gap-1 ${
+                    selectedForRoute
+                      ? "pointer-events-none z-[2]"
+                      : showOps
+                        ? "z-[5] cursor-pointer"
+                        : "z-[4] cursor-pointer"
                   } ${faded ? "opacity-25" : ""}`}
                   style={{ left: m.x, top: m.y }}
-                  onMouseEnter={() => setHoverEdge(e.id)}
-                  onMouseLeave={() => setHoverEdge(null)}
-                  onPointerDown={(ev) => ev.stopPropagation()}
+                  onMouseEnter={() => {
+                    if (!selectedForRoute) setHoverEdge(e.id);
+                  }}
+                  onMouseLeave={() => {
+                    if (!selectedForRoute) setHoverEdge(null);
+                  }}
+                  onPointerDown={(ev) => {
+                    if (selectedForRoute) return;
+                    ev.stopPropagation();
+                  }}
                   onClick={(ev) => {
+                    if (selectedForRoute) return;
                     ev.stopPropagation();
                     setSelectedEdge(e.id);
                     setSelected(null);
@@ -2247,38 +2249,53 @@ export default function BoardApp({
               );
             })}
 
-            {/* EDGE HOVER (edges without labels still show ops) */}
+            {/* EDGE HOVER — source component pill + ops for unlabeled edges */}
             {hoverEdge &&
               (() => {
                 const e = edges.find((x) => x.id === hoverEdge);
-                if (!e || e.label || !e.operations?.length) return null;
+                if (!e) return null;
                 const from = nodeById[e.from];
                 const to = nodeById[e.to];
                 if (!from || !to) return null;
-                const a = anchorPoint(from, e.fromSide ?? "r");
-                const b = anchorPoint(to, e.toSide ?? "l");
-                const m = placeEdgeLabel({
-                  a,
-                  b,
-                  aSide: e.fromSide ?? "r",
-                  bSide: e.toSide ?? "l",
-                  nodes: nodes.map((n) => ({ x: n.x, y: n.y, w: n.w, h: n.h })),
-                });
+                const m =
+                  edgeLabelPositions.get(e.id) ??
+                  placeEdgeLabel({
+                    a: anchorPoint(from, e.fromSide ?? "r"),
+                    b: anchorPoint(to, e.toSide ?? "l"),
+                    aSide: e.fromSide ?? "r",
+                    bSide: e.toSide ?? "l",
+                    nodes: nodes.map((n) => ({ x: n.x, y: n.y, w: n.w, h: n.h })),
+                  });
+                const sourceColor = kindColorVar[from.kind];
                 return (
                   <div
-                    className="pointer-events-none absolute z-[5] min-w-[180px] max-w-[240px] -translate-x-1/2 -translate-y-1/2 rounded-lg border border-border bg-popover px-2.5 py-2 node-shadow-lg"
-                    style={{ left: m.x, top: m.y }}
+                    className="pointer-events-none absolute z-[7] flex -translate-x-1/2 -translate-y-full flex-col items-center gap-1"
+                    style={{ left: m.x, top: m.y - 10 }}
                   >
-                    <div className="mb-1.5 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">
-                      {edgeKindTitle(e.kind)} endpoints
-                    </div>
-                    <ul className="space-y-1">
-                      {e.operations.map((op) => (
-                        <li key={op} className="truncate font-mono text-[10px]" title={op}>
-                          {op}
-                        </li>
-                      ))}
-                    </ul>
+                    <span
+                      className="rounded-full px-2 py-0.5 text-[10px] font-medium text-white shadow"
+                      style={{ background: sourceColor }}
+                    >
+                      {from.title}
+                    </span>
+                    {!e.label && (e.operations?.length ?? 0) > 0 && (
+                      <div className="min-w-[180px] max-w-[240px] rounded-lg border border-border bg-popover px-2.5 py-2 text-left node-shadow-lg">
+                        <div className="mb-1.5 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">
+                          {edgeKindTitle(e.kind)} endpoints
+                        </div>
+                        <ul className="space-y-1">
+                          {e.operations!.map((op) => (
+                            <li
+                              key={op}
+                              className="truncate font-mono text-[10px] text-foreground"
+                              title={op}
+                            >
+                              {op}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
                   </div>
                 );
               })()}
@@ -2326,7 +2343,11 @@ export default function BoardApp({
                   setSelectedEdge(null);
                   setSelectedBoundary(null);
                   setSelectedBoundaryExtras([]);
-                  setRenameModal({ nodeId: n.id, value: n.title });
+                  setRenameModal({
+                    nodeId: n.id,
+                    value: n.title,
+                    kind: nodeKindToCreateKind(n.kind) ?? "service",
+                  });
                 }}
               />
             ))}
@@ -2732,8 +2753,14 @@ export default function BoardApp({
               }
             }}
             onRename={() => {
-              const current = nodeById[ctxMenu.nodeId]?.title ?? "";
-              setRenameModal({ nodeId: ctxMenu.nodeId, value: current });
+              const current = nodeById[ctxMenu.nodeId];
+              if (current) {
+                setRenameModal({
+                  nodeId: ctxMenu.nodeId,
+                  value: current.title,
+                  kind: nodeKindToCreateKind(current.kind) ?? "service",
+                });
+              }
               setCtxMenu(null);
             }}
             onConnect={() => {
@@ -2786,8 +2813,8 @@ export default function BoardApp({
         <Modal
           open={!!renameModal}
           onClose={() => setRenameModal(null)}
-          title="Rename component"
-          description="Give this component a clearer name. This updates the SCAN model."
+          title="Edit component"
+          description="Update the display name and SCAN element type."
           tone="info"
           actions={[
             { label: "Cancel", variant: "ghost", onClick: () => setRenameModal(null) },
@@ -2798,8 +2825,21 @@ export default function BoardApp({
               disabled: !renameModal?.value.trim(),
               onClick: () => {
                 if (!renameModal?.value.trim()) return;
-                renameElement(renameModal.nodeId, renameModal.value.trim());
-                setRenameModal(null);
+                const node = nodeById[renameModal.nodeId];
+                const prevKind = node
+                  ? nodeKindToCreateKind(node.kind) ?? "service"
+                  : "service";
+                try {
+                  if (renameModal.kind !== prevKind) {
+                    changeElementKind(renameModal.nodeId, renameModal.kind);
+                  }
+                  renameElement(renameModal.nodeId, renameModal.value.trim());
+                  setRenameModal(null);
+                } catch (err) {
+                  toast.error("Could not update component", {
+                    description: err instanceof Error ? err.message : "Update failed",
+                  });
+                }
               },
             },
           ]}
@@ -2815,12 +2855,35 @@ export default function BoardApp({
             }
             onKeyDown={(e) => {
               if (e.key === "Enter" && renameModal?.value.trim()) {
-                renameElement(renameModal.nodeId, renameModal.value.trim());
-                setRenameModal(null);
+                const node = nodeById[renameModal.nodeId];
+                const prevKind = node
+                  ? nodeKindToCreateKind(node.kind) ?? "service"
+                  : "service";
+                try {
+                  if (renameModal.kind !== prevKind) {
+                    changeElementKind(renameModal.nodeId, renameModal.kind);
+                  }
+                  renameElement(renameModal.nodeId, renameModal.value.trim());
+                  setRenameModal(null);
+                } catch (err) {
+                  toast.error("Could not update component", {
+                    description: err instanceof Error ? err.message : "Update failed",
+                  });
+                }
               }
             }}
             className="mt-1.5 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
             placeholder="e.g. Order API"
+          />
+          <label className="mt-3 block text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+            Type
+          </label>
+          <KindPickerList
+            className="mt-1.5 max-h-56 overflow-y-auto node-shadow-lg"
+            value={renameModal?.kind}
+            onChange={(kind) =>
+              setRenameModal((r) => (r ? { ...r, kind } : r))
+            }
           />
         </Modal>
 

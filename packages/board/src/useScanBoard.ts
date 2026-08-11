@@ -403,6 +403,12 @@ export function useScanBoard(options: UseScanBoardOptions | string = {}) {
     [modeler],
   );
 
+  const changeElementKind = useCallback(
+    (id: string, kind: Parameters<typeof modeler.modeling.changeElementKind>[1]) =>
+      modeler.modeling.changeElementKind(id, kind),
+    [modeler],
+  );
+
   const updateElementIcon = useCallback(
     (id: string, icon: string | null) => modeler.modeling.updateElementIcon(id, icon),
     [modeler],
@@ -665,6 +671,7 @@ export function useScanBoard(options: UseScanBoardOptions | string = {}) {
       updateConnection,
       updateConnectionRoute,
       renameElement,
+      changeElementKind,
       updateElementIcon,
       updateElementDescription,
       updateElementMeta,
@@ -726,6 +733,7 @@ export function useScanBoard(options: UseScanBoardOptions | string = {}) {
       updateConnection,
       updateConnectionRoute,
       renameElement,
+      changeElementKind,
       updateElementIcon,
       updateElementDescription,
       updateElementMeta,

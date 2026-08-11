@@ -7,9 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `@spherescan/board`: orthogonal route handles sit above edge labels when selected (labels no longer block reshape dots).
+- `@spherescan/board`: component inspector can edit **Technology** (`updateElementMeta`).
+
 ### Changed
 
-- (none yet)
+- `@spherescan/board` / `@spherescan/viewer`: edges stroke and arrowheads follow the **source** node kind color; hover shows a source-name pill.
+- `@spherescan/board`: rename/edit modal type picker reuses the Add Component icon/color list (not a plain `<select>`).
+- `@spherescan/board`: rename modal is **Edit component** with a type dropdown (`changeElementKind`).
+- `@spherescan/modeler`: `changeElementKind` moves elements across collections when needed (undoable).
 
 ## [0.4.0] - 2026-08-05
 

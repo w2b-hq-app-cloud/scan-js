@@ -15,6 +15,8 @@ export type SphereNode = {
     kind: NodeKind;
     title: string;
     subtitle?: string;
+    /** SCAN `technology` when set (editable in inspector). */
+    technology?: string;
     tech?: string;
     /** Optional icon override: Lucide name, https URL, or data:image URL. */
     icon?: string;

@@ -42,6 +42,11 @@ export declare class Modeling {
     /** Update layout without stacking (used while dragging); commit via moveElement on pointer up. */
     previewMove(id: string, x: number, y: number): void;
     renameElement(id: string, name: string): void;
+    /**
+     * Change an element's SCAN kind (may move between collections).
+     * Preserves id, name, description, notes, ports, icon, links, layout.
+     */
+    changeElementKind(id: string, kind: CreateKind): void;
     /** Set or clear a custom diagram icon (Lucide name, URL, or data URL). */
     updateElementIcon(id: string, icon: string | null): void;
     /** Set or clear free-text `description` on a diagram element. */

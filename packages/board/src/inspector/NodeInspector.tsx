@@ -297,7 +297,12 @@ export function NodeInspector({
     patch: { label?: string | null; protocol?: string | null },
   ) => void;
   onDeletePort: (id: string, portId: string) => void;
-  onUpdateMeta: (id: string, patch: { description?: string | null; notes?: string | null }) => void;
+  onUpdateMeta: (id: string, patch: {
+    description?: string | null;
+    notes?: string | null;
+    technology?: string | null;
+    subtitle?: string | null;
+  }) => void;
   onSetRepository: (id: string, repository: string | null) => void;
   onSetUrl: (id: string, url: string | null) => void;
   onAddLink: (id: string, link: { kind: "doc" | "repo" | "openapi" | "other"; href: string; title?: string }) => void;
@@ -381,6 +386,16 @@ export function NodeInspector({
           aria-label="Component description"
         />
       </Section>
+
+      {node.kind !== "repo" && (
+        <OptionalMetaSection
+          title="Technology"
+          value={node.technology ?? ""}
+          placeholder="e.g. Spring Boot, PostgreSQL, Kafka"
+          resetKey={node.id}
+          onCommit={(next) => onUpdateMeta(node.id, { technology: next })}
+        />
+      )}
 
       {node.warn && (
         <div className="mx-4 mt-4 rounded-lg border border-warn/40 bg-warn-soft p-3 text-[11px] text-warn">
