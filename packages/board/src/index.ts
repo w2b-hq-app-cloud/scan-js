@@ -9,6 +9,8 @@ export type {
   ResizeHandle,
   BoardAppProps,
   BoardHostApi,
+  HostHighlightEdge,
+  HostCenterTarget,
   BoardSelection,
   BoardNodeOverlayContext,
   BoardInspectorExtrasContext,

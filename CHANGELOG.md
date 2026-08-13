@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `@spherescan/board`: `hostCenter` pans (keeps zoom) to an edge step-badge or node; `showViewTools` host flag to hide Filters / Focus / Auto-layout.
+
 ### Fixed
 
 - `@spherescan/board`: honor `readOnly` for drag/create/connect/delete (pan/zoom still work); keep save/escape available.

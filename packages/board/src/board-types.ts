@@ -49,6 +49,24 @@ export type BoardNodeOverlayContext = {
   h: number;
 };
 
+/** Host-driven edge emphasis (path overlay). Unbranded — any host may use it. */
+export type HostHighlightEdge = {
+  id: string;
+  /** 1-based step number drawn on the edge. */
+  step?: number;
+  state?: "done" | "active" | "pending";
+};
+
+/**
+ * Pan the canvas so this target sits in view (keeps current zoom).
+ * Prefer `edgeId` (step badge on the path); `nodeId` is the fallback
+ * when a step has no SCAN connection (same-component).
+ */
+export type HostCenterTarget = {
+  edgeId?: string;
+  nodeId?: string;
+};
+
 export type BoardInspectorExtrasContext = {
   node: SphereNode | null;
   edge: SphereEdge | null;
@@ -144,8 +162,30 @@ export type BoardAppProps = {
   renderBottomChrome?: () => ReactNode;
   /** Host left panel beside the canvas (e.g. product chat sidebar). */
   renderLeftPanel?: () => ReactNode;
+  /** Host right column beside the canvas (e.g. a scenario/flow panel). */
+  renderRightPanel?: () => ReactNode;
+  /**
+   * When non-null, dim nodes outside this set (replaces selection-neighborhood Focus).
+   * Pass `null` / omit to keep built-in Focus behavior.
+   */
+  hostFocusNodeIds?: readonly string[] | null;
+  /**
+   * Emphasize these edges and optionally draw a numbered step badge on the path.
+   * When non-empty, edges not in the list are dimmed like Focus-mode outsiders.
+   */
+  hostHighlightEdges?: readonly HostHighlightEdge[] | null;
+  /**
+   * When the target identity changes, pan (keep zoom) so the edge step-badge
+   * or node is centered in the canvas. User pan/zoom cancels the animation.
+   */
+  hostCenter?: HostCenterTarget | null;
   /** Host controls on the right side of the view-tabs row. */
   renderViewTabsEnd?: () => ReactNode;
+  /**
+   * When false, hide Filters / Focus / Auto-layout on the view-tabs row.
+   * Default: true.
+   */
+  showViewTools?: boolean;
   /** Absolute overlay over the canvas (e.g. YAML / Code surface). */
   renderCanvasOverlay?: () => ReactNode;
   /**

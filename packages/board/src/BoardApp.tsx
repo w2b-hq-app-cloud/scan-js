@@ -38,6 +38,7 @@ import {
   sideFacingPoint,
   routeOrthogonalEdges,
   routeOrthogonalPolylines,
+  pointOnPolyline,
   assignOrthogonalLanes,
   resolveLabelOverlaps,
   estimateEdgeLabelSize,
@@ -61,6 +62,8 @@ import type {
   ResizeHandle,
   BoardAppProps,
   BoardHostApi,
+  HostHighlightEdge,
+  HostCenterTarget,
   BoardSelection,
   ArchitectureWarning,
   SystemIdentityChange,
@@ -103,6 +106,41 @@ export type {
   SystemIdentityChange,
 } from "./board-types";
 
+/** Fraction along the routed polyline where host step badges sit. */
+const HOST_STEP_BADGE_T = 0.35;
+
+function hostEdgeWorldPoint(
+  edgeId: string,
+  edges: SphereEdge[],
+  nodeById: Record<string, SphereNode>,
+  orthogonalPolylines: Map<string, Point[]> | null | undefined,
+  edgeAnchorsById: Map<string, { a: Point; b: Point }>,
+): Point | null {
+  const e = edges.find((x) => x.id === edgeId);
+  if (!e) return null;
+  const from = nodeById[e.from];
+  const to = nodeById[e.to];
+  if (!from || !to) return null;
+  const poly = orthogonalPolylines?.get(e.id);
+  const anchors = edgeAnchorsById.get(e.id);
+  const a = anchors?.a ?? anchorPoint(from, e.fromSide ?? "r");
+  const b = anchors?.b ?? anchorPoint(to, e.toSide ?? "l");
+  return poly?.length
+    ? pointOnPolyline(poly, HOST_STEP_BADGE_T)
+    : { x: a.x * 0.65 + b.x * 0.35, y: a.y * 0.65 + b.y * 0.35 };
+}
+
+function easeOutCubic(t: number): number {
+  return 1 - (1 - t) ** 3;
+}
+
+function hostCenterKey(target: HostCenterTarget | null | undefined): string {
+  if (!target) return "";
+  if (target.edgeId) return `e:${target.edgeId}`;
+  if (target.nodeId) return `n:${target.nodeId}`;
+  return "";
+}
+
 export default function BoardApp({
   fill = "viewport",
   topBarBrand,
@@ -129,7 +167,12 @@ export default function BoardApp({
   renderInspectorExtras,
   renderBottomChrome,
   renderLeftPanel,
+  renderRightPanel,
+  hostFocusNodeIds = null,
+  hostHighlightEdges = null,
+  hostCenter = null,
   renderViewTabsEnd,
+  showViewTools = true,
   renderCanvasOverlay,
   inspectorOpen = true,
   urlHealthById,
@@ -276,6 +319,15 @@ export default function BoardApp({
   const lastPointerOnCanvas = useRef<Point | null>(null);
   const zoomRef = useRef(zoom);
   const panRef = useRef(pan);
+  const panAnimRef = useRef<number | null>(null);
+  const lastHostCenterSig = useRef<string>("");
+
+  const cancelPanAnim = useCallback(() => {
+    if (panAnimRef.current != null) {
+      cancelAnimationFrame(panAnimRef.current);
+      panAnimRef.current = null;
+    }
+  }, []);
 
   const applyViewport = useCallback((nextZoom: number, nextPan: Point) => {
     zoomRef.current = nextZoom;
@@ -283,6 +335,37 @@ export default function BoardApp({
     setZoom(nextZoom);
     setPan(nextPan);
   }, []);
+
+  const panWorldToCenter = useCallback(
+    (world: Point) => {
+      const z = zoomRef.current;
+      const target = {
+        x: canvasSize.w / 2 - world.x * z,
+        y: canvasSize.h / 2 - world.y * z,
+      };
+      const from = { ...panRef.current };
+      if (Math.hypot(target.x - from.x, target.y - from.y) < 12) return;
+      cancelPanAnim();
+      const started = performance.now();
+      const duration = 280;
+      const tick = (now: number) => {
+        const t = Math.min(1, (now - started) / duration);
+        const k = easeOutCubic(t);
+        const next = {
+          x: from.x + (target.x - from.x) * k,
+          y: from.y + (target.y - from.y) * k,
+        };
+        panRef.current = next;
+        setPan(next);
+        if (t < 1) panAnimRef.current = requestAnimationFrame(tick);
+        else panAnimRef.current = null;
+      };
+      panAnimRef.current = requestAnimationFrame(tick);
+    },
+    [canvasSize.h, canvasSize.w, cancelPanAnim],
+  );
+
+  useEffect(() => () => cancelPanAnim(), [cancelPanAnim]);
 
   const loadYamlFromFile = useCallback(
     async (file: File) => {
@@ -854,6 +937,7 @@ export default function BoardApp({
   }, [ready, onBoardReady, modeler, loadYamlText]);
 
   const focusIds = useMemo(() => {
+    if (hostFocusNodeIds) return new Set(hostFocusNodeIds);
     if (!focusMode) return null;
     // While wiring, keep every component fully visible — focus dimming hides valid targets.
     if (tool === "connect" || tool === "fast" || connectFrom) return null;
@@ -882,7 +966,13 @@ export default function BoardApp({
       }
     }
     return hop;
-  }, [focusMode, selectedNodeIds, selectedEdge, hoverEdge, edges, tool, connectFrom]);
+  }, [hostFocusNodeIds, focusMode, selectedNodeIds, selectedEdge, hoverEdge, edges, tool, connectFrom]);
+
+  const highlightById = useMemo(() => {
+    const map = new Map<string, HostHighlightEdge>();
+    for (const h of hostHighlightEdges ?? []) map.set(h.id, h);
+    return map;
+  }, [hostHighlightEdges]);
 
   const edgeFanById = useMemo(() => {
     const counts = new Map<string, number>();
@@ -1032,6 +1122,42 @@ export default function BoardApp({
     return routeOrthogonalPolylines(routed);
   }, [orthogonalEdges, edges, nodeById, edgeFanById]);
 
+  const centerKey = hostCenterKey(hostCenter);
+  useEffect(() => {
+    if (!centerKey) {
+      lastHostCenterSig.current = "";
+      return;
+    }
+    const sig = `${centerKey}@${canvasSize.w}x${canvasSize.h}`;
+    let world: Point | null = null;
+    if (hostCenter?.edgeId) {
+      world = hostEdgeWorldPoint(
+        hostCenter.edgeId,
+        edges,
+        nodeById,
+        orthogonalPolylines,
+        edgeAnchorsById,
+      );
+    } else if (hostCenter?.nodeId) {
+      const n = nodeById[hostCenter.nodeId];
+      if (n) world = { x: n.x + n.w / 2, y: n.y + n.h / 2 };
+    }
+    if (!world) return;
+    if (lastHostCenterSig.current === sig) return;
+    lastHostCenterSig.current = sig;
+    panWorldToCenter(world);
+  }, [
+    canvasSize.h,
+    canvasSize.w,
+    centerKey,
+    edgeAnchorsById,
+    edges,
+    hostCenter,
+    nodeById,
+    orthogonalPolylines,
+    panWorldToCenter,
+  ]);
+
   const [routeDrag, setRouteDrag] = useState<{
     edgeId: string;
     /** Segment start index: handle sits on points[i]→points[i+1]. */
@@ -1057,10 +1183,11 @@ export default function BoardApp({
 
   const edgeDimmed = useCallback(
     (e: SphereEdge) => {
+      if (highlightById.size) return !highlightById.has(e.id);
       if (!focusIds) return false;
       return !(focusIds.has(e.from) && focusIds.has(e.to));
     },
-    [focusIds],
+    [focusIds, highlightById],
   );
 
   const clientToWorld = (cx: number, cy: number): Point => {
@@ -1403,6 +1530,7 @@ export default function BoardApp({
       );
     }
     if (panning.current) {
+      cancelPanAnim();
       const p = panning.current;
       const next = { x: p.px + (e.clientX - p.sx), y: p.py + (e.clientY - p.sy) };
       panRef.current = next;
@@ -1652,6 +1780,7 @@ export default function BoardApp({
       }
 
       // Trackpad pinch / ctrl+wheel: zoom toward cursor. Plain wheel pans.
+      cancelPanAnim();
       if (e.ctrlKey || e.metaKey) {
         const factor = Math.exp(-e.deltaY * 0.0015);
         zoomAround({ x: cx, y: cy }, zoomRef.current * factor);
@@ -1666,7 +1795,7 @@ export default function BoardApp({
     };
     el.addEventListener("wheel", handler, { passive: false });
     return () => el.removeEventListener("wheel", handler);
-  }, [zoomAround]);
+  }, [cancelPanAnim, zoomAround]);
 
   const zoomReset = () => {
     applyViewport(0.85, { x: 40, y: 20 });
@@ -1857,6 +1986,7 @@ export default function BoardApp({
         nodes={displayNodes}
         groups={groups}
         endSlot={renderViewTabsEnd?.()}
+        showViewTools={showViewTools}
       />
 
       <div className="flex min-h-0 flex-1">
@@ -2074,8 +2204,12 @@ export default function BoardApp({
                 const fromSide = anchors?.fromSide ?? e.fromSide ?? "r";
                 const toSide = anchors?.toSide ?? e.toSide ?? "l";
                 const s = edgeStyle(e.kind, from.kind);
-                const active = hoverEdge === e.id || selectedEdge === e.id;
-                const faded = edgeDimmed(e) && !active;
+                const highlight = highlightById.get(e.id);
+                const active =
+                  hoverEdge === e.id ||
+                  selectedEdge === e.id ||
+                  highlight?.state === "active";
+                const faded = edgeDimmed(e) && !active && !highlight;
                 const marker = `url(#arrow-${from.kind})`;
                 const d =
                   routeDrag?.edgeId === e.id
@@ -2084,16 +2218,24 @@ export default function BoardApp({
                         .join(" ")
                     : orthogonalEdgePaths?.get(e.id) ??
                       edgePath(a, b, fromSide, toSide);
+                const width =
+                  highlight?.state === "active"
+                    ? s.width + 2
+                    : highlight
+                      ? s.width + 1
+                      : active
+                        ? s.width + 1.5
+                        : s.width;
                 return (
                   <g key={e.id} className="pointer-events-auto">
                     <path
                       d={d}
                       stroke={s.stroke}
-                      strokeWidth={active ? s.width + 1.5 : s.width}
+                      strokeWidth={width}
                       strokeDasharray={s.dash}
                       fill="none"
                       markerEnd={marker}
-                      opacity={faded ? 0.18 : active ? 1 : 0.9}
+                      opacity={faded ? 0.18 : active || highlight ? 1 : 0.9}
                       style={{ cursor: "pointer" }}
                       onMouseEnter={() => setHoverEdge(e.id)}
                       onMouseLeave={() => setHoverEdge(null)}
@@ -2299,6 +2441,48 @@ export default function BoardApp({
                 </div>
               );
             })}
+
+            {/* HOST PATH STEP BADGES */}
+            {highlightById.size
+              ? [...highlightById.values()].map((h) => {
+                  const e = edges.find((x) => x.id === h.id);
+                  if (!e || h.step == null) return null;
+                  const p = hostEdgeWorldPoint(
+                    e.id,
+                    edges,
+                    nodeById,
+                    orthogonalPolylines,
+                    edgeAnchorsById,
+                  );
+                  if (!p) return null;
+                  const active = h.state === "active" || selectedEdge === e.id;
+                  const done = h.state === "done";
+                  return (
+                    <button
+                      key={`step-${e.id}`}
+                      type="button"
+                      className={`absolute z-[6] flex h-6 w-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full text-[11px] font-semibold tabular-nums hairline node-shadow ${
+                        active
+                          ? "bg-primary text-primary-foreground"
+                          : done
+                            ? "bg-surface text-foreground"
+                            : "bg-surface text-muted-foreground"
+                      }`}
+                      style={{ left: p.x, top: p.y }}
+                      title={`Step ${h.step}`}
+                      onPointerDown={(ev) => ev.stopPropagation()}
+                      onClick={(ev) => {
+                        ev.stopPropagation();
+                        setSelectedEdge(e.id);
+                        setSelected(null);
+                        setSelectedBoundary(null);
+                      }}
+                    >
+                      {h.step}
+                    </button>
+                  );
+                })
+              : null}
 
             {/* EDGE HOVER — source component pill + ops for unlabeled edges */}
             {hoverEdge &&
@@ -2616,6 +2800,7 @@ export default function BoardApp({
             canvasSize={canvasSize}
             systemName={systemName}
             onNavigate={(worldX, worldY) => {
+              cancelPanAnim();
               const next = {
                 x: canvasSize.w / 2 - worldX * zoomRef.current,
                 y: canvasSize.h / 2 - worldY * zoomRef.current,
@@ -2624,6 +2809,7 @@ export default function BoardApp({
               setPan(next);
             }}
             onPanDelta={(dxWorld, dyWorld) => {
+              cancelPanAnim();
               const z = zoomRef.current;
               const next = {
                 x: panRef.current.x - dxWorld * z,
@@ -3195,6 +3381,7 @@ export default function BoardApp({
         </Modal>
 
       </div>
+      {renderRightPanel?.()}
       </div>
     </div>
     </TooltipProvider>
