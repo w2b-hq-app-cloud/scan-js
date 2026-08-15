@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- (none yet)
+
+## [0.5.0] - 2026-08-15
+
 ### Added
 
 - README ownership note: `scan-js` is the official SCAN JavaScript implementation used by Sphere, with links to [spherescan.io](https://spherescan.io).
