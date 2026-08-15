@@ -162,6 +162,7 @@ export default function BoardApp({
   readOnly = false,
   onBoardReady,
   onYamlLoadError,
+  onYamlImported,
   renderNodeOverlay,
   renderNodeBadge,
   renderInspectorExtras,
@@ -367,6 +368,9 @@ export default function BoardApp({
 
   useEffect(() => () => cancelPanAnim(), [cancelPanAnim]);
 
+  const onYamlImportedRef = useRef(onYamlImported);
+  onYamlImportedRef.current = onYamlImported;
+
   const loadYamlFromFile = useCallback(
     async (file: File) => {
       if (!isScanFile(file)) {
@@ -379,12 +383,18 @@ export default function BoardApp({
         setSelectedEdge(null);
         setConnectFrom(null);
         toast.success(`Loaded ${file.name}`);
+        try {
+          const yaml = modeler.peekYAML();
+          onYamlImportedRef.current?.({ filename: file.name, yaml });
+        } catch {
+          onYamlImportedRef.current?.({ filename: file.name, yaml: "" });
+        }
       } catch (err) {
         const message = err instanceof Error ? err.message : "Invalid SCAN YAML";
         toast.error("Could not import YAML", { description: message });
       }
     },
-    [importYamlFile],
+    [importYamlFile, modeler],
   );
   const dragging = useRef<{
     id: string;

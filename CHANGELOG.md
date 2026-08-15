@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- README ownership note: `scan-js` is the official SCAN JavaScript implementation used by Sphere, with links to [spherescan.io](https://spherescan.io).
 - `@spherescan/board`: `hostCenter` pans (keeps zoom) to an edge step-badge or node; `showViewTools` host flag to hide Filters / Focus / Auto-layout.
 
 ### Fixed

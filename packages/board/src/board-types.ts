@@ -149,6 +149,11 @@ export type BoardAppProps = {
    * Hosts should surface a Fix CTA instead of leaving an unhandled rejection.
    */
   onYamlLoadError?: (error: Error, yaml: string) => void;
+  /**
+   * Fired after a successful Import YAML / file drop. Filename is the browser
+   * `File.name` (no directory). Hosts can resolve sibling `.sphere/flows`.
+   */
+  onYamlImported?: (info: { filename: string; yaml: string }) => void;
   /** World-space overlay above the selected node (product Ask / Build chrome). */
   renderNodeOverlay?: (ctx: BoardNodeOverlayContext) => ReactNode;
   /**
