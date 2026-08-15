@@ -159,6 +159,7 @@ export default function BoardApp({
   startEmpty = false,
   applyYaml = null,
   applyYamlNonce = 0,
+  fitOnLoad = true,
   readOnly = false,
   onBoardReady,
   onYamlLoadError,
@@ -370,6 +371,17 @@ export default function BoardApp({
 
   const onYamlImportedRef = useRef(onYamlImported);
   onYamlImportedRef.current = onYamlImported;
+  const fitOnLoadRef = useRef(fitOnLoad);
+  fitOnLoadRef.current = fitOnLoad;
+  /** Latest fitContent — defined later; load paths call through this ref. */
+  const fitContentRef = useRef<() => void>(() => {});
+  const scheduleFitAfterLoad = useCallback(() => {
+    if (!fitOnLoadRef.current) return;
+    // Double rAF: wait for model→React commit so canvas size is current.
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => fitContentRef.current());
+    });
+  }, []);
 
   const loadYamlFromFile = useCallback(
     async (file: File) => {
@@ -383,6 +395,7 @@ export default function BoardApp({
         setSelectedEdge(null);
         setConnectFrom(null);
         toast.success(`Loaded ${file.name}`);
+        scheduleFitAfterLoad();
         try {
           const yaml = modeler.peekYAML();
           onYamlImportedRef.current?.({ filename: file.name, yaml });
@@ -394,7 +407,7 @@ export default function BoardApp({
         toast.error("Could not import YAML", { description: message });
       }
     },
-    [importYamlFile, modeler],
+    [importYamlFile, modeler, scheduleFitAfterLoad],
   );
   const dragging = useRef<{
     id: string;
@@ -789,13 +802,14 @@ export default function BoardApp({
     async (yaml: string) => {
       try {
         await loadYamlText(yaml);
+        scheduleFitAfterLoad();
       } catch (cause) {
         const err = cause instanceof Error ? cause : new Error(String(cause));
         onYamlLoadErrorRef.current?.(err, yaml);
         // Do not rethrow — host surfaces Fix UI; avoid unhandled rejection in Vite.
       }
     },
-    [loadYamlText],
+    [loadYamlText, scheduleFitAfterLoad],
   );
   loadYamlTextRef.current = safeLoadYamlText;
 
@@ -820,8 +834,11 @@ export default function BoardApp({
     if (!ready || !pendingMergeYaml) return;
     if (mergedYamlRef.current === pendingMergeYaml) return;
     mergedYamlRef.current = pendingMergeYaml;
-    void mergeYamlText(pendingMergeYaml).then(() => onMergeApplied?.());
-  }, [ready, pendingMergeYaml, mergeYamlText, onMergeApplied]);
+    void mergeYamlText(pendingMergeYaml).then(() => {
+      scheduleFitAfterLoad();
+      onMergeApplied?.();
+    });
+  }, [ready, pendingMergeYaml, mergeYamlText, onMergeApplied, scheduleFitAfterLoad]);
 
   useEffect(() => {
     if (!warnOnUnload) return;
@@ -1855,6 +1872,7 @@ export default function BoardApp({
     };
     applyViewport(nextZoom, nextPan);
   }, [applyViewport, board.modeler]);
+  fitContentRef.current = fitContent;
 
   const runAutoLayout = useCallback(() => {
     try {
