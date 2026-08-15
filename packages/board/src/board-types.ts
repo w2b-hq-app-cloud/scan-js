@@ -19,14 +19,16 @@ export type BoardHostApi = {
   peekYaml: () => string;
   loadYaml: (yaml: string) => Promise<void>;
   getSelection: () => BoardSelection;
+  /** Clear node / edge / boundary selection (closes the inspector). */
+  clearSelection: () => void;
   subscribeSelection: (listener: (selection: BoardSelection) => void) => () => void;
   /** Subscribe to document revisions (after model commands). */
   subscribeDocument: (listener: (yaml: string) => void) => () => void;
 };
 
-/** System rename vs duplicate — hosts map this to workspace relocate vs fresh seed. */
+/** System rename vs duplicate vs new board — hosts map this to workspace relocate vs fresh seed. */
 export type SystemIdentityChange = {
-  reason: "rename" | "duplicate";
+  reason: "rename" | "duplicate" | "new";
   fromSystemId: string | null;
   toSystemId: string;
   yaml: string;
@@ -45,6 +47,24 @@ export type BoardNodeOverlayContext = {
   y: number;
   w: number;
   h: number;
+};
+
+/** Host-driven edge emphasis (path overlay). Unbranded — any host may use it. */
+export type HostHighlightEdge = {
+  id: string;
+  /** 1-based step number drawn on the edge. */
+  step?: number;
+  state?: "done" | "active" | "pending";
+};
+
+/**
+ * Pan the canvas so this target sits in view (keeps current zoom).
+ * Prefer `edgeId` (step badge on the path); `nodeId` is the fallback
+ * when a step has no SCAN connection (same-component).
+ */
+export type HostCenterTarget = {
+  edgeId?: string;
+  nodeId?: string;
 };
 
 export type BoardInspectorExtrasContext = {
@@ -117,22 +137,73 @@ export type BoardAppProps = {
    */
   applyYaml?: string | null;
   applyYamlNonce?: number;
-  /** Host share/view-only hint. Decorative for type compatibility. */
+  /**
+   * When true, diagram editing is locked (no drag/create/connect/delete).
+   * Pan and zoom still work. Used during component plan-chain builds.
+   */
   readOnly?: boolean;
   /** Register imperative host API once the board is ready. */
   onBoardReady?: (api: BoardHostApi) => void;
+  /**
+   * Fired when `initialYaml` / `applyYaml` / host `loadYaml` fails to parse.
+   * Hosts should surface a Fix CTA instead of leaving an unhandled rejection.
+   */
+  onYamlLoadError?: (error: Error, yaml: string) => void;
+  /**
+   * Fired after a successful Import YAML / file drop. Filename is the browser
+   * `File.name` (no directory). Hosts can resolve sibling `.sphere/flows`.
+   */
+  onYamlImported?: (info: { filename: string; yaml: string }) => void;
   /** World-space overlay above the selected node (product Ask / Build chrome). */
   renderNodeOverlay?: (ctx: BoardNodeOverlayContext) => ReactNode;
+  /**
+   * Always-on world-space badge per node (e.g. Plans button). Called for every
+   * visible node, not only the selection.
+   */
+  renderNodeBadge?: (ctx: BoardNodeOverlayContext) => ReactNode;
   /** Extra panels below the standard inspector sections. */
   renderInspectorExtras?: (ctx: BoardInspectorExtrasContext) => ReactNode;
   /** Chrome under the top bar (e.g. product AI prompt bar). */
   renderBottomChrome?: () => ReactNode;
   /** Host left panel beside the canvas (e.g. product chat sidebar). */
   renderLeftPanel?: () => ReactNode;
+  /** Host right column beside the canvas (e.g. a scenario/flow panel). */
+  renderRightPanel?: () => ReactNode;
+  /**
+   * When non-null, dim nodes outside this set (replaces selection-neighborhood Focus).
+   * Pass `null` / omit to keep built-in Focus behavior.
+   */
+  hostFocusNodeIds?: readonly string[] | null;
+  /**
+   * Emphasize these edges and optionally draw a numbered step badge on the path.
+   * When non-empty, edges not in the list are dimmed like Focus-mode outsiders.
+   */
+  hostHighlightEdges?: readonly HostHighlightEdge[] | null;
+  /**
+   * When the target identity changes, pan (keep zoom) so the edge step-badge
+   * or node is centered in the canvas. User pan/zoom cancels the animation.
+   */
+  hostCenter?: HostCenterTarget | null;
   /** Host controls on the right side of the view-tabs row. */
   renderViewTabsEnd?: () => ReactNode;
+  /**
+   * When false, hide Filters / Focus / Auto-layout on the view-tabs row.
+   * Default: true.
+   */
+  showViewTools?: boolean;
   /** Absolute overlay over the canvas (e.g. YAML / Code surface). */
   renderCanvasOverlay?: () => ReactNode;
+  /**
+   * When false, the right-hand inspector is hidden even if something is selected.
+   * Hosts use this on non-diagram surfaces (YAML / Code) without clearing selection.
+   * Default: true.
+   */
+  inspectorOpen?: boolean;
+  /**
+   * Live service URL reachability by node id (host-probed; not SCAN).
+   * Merged onto nodes for the Open/status affordance on NodeCard.
+   */
+  urlHealthById?: Record<string, "up" | "degraded" | "down" | "unknown">;
   /** Host-owned architecture warnings (badges + toast). */
   architectureWarnings?: ArchitectureWarning[];
   /** Optional CTA next to the validation toast (host-owned label/action). */

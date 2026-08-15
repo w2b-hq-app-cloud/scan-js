@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  Modeling,
   ScanModeler,
   type CreateKind,
 } from "@spherescan/modeler";
@@ -10,6 +11,32 @@ import {
   type SphereModel,
 } from "@spherescan/model";
 import orderPlatformYaml from "./samples/order-platform";
+
+/**
+ * Call setElementUrl even when HMR left a Modeling instance from an older class
+ * (instance missing the method, but current module prototype has it).
+ */
+function applyElementUrl(
+  modeling: Modeling,
+  id: string,
+  url: string | null,
+): void {
+  const direct = (
+    modeling as Modeling & { setElementUrl?: (i: string, u: string | null) => void }
+  ).setElementUrl;
+  if (typeof direct === "function") {
+    direct.call(modeling, id, url);
+    return;
+  }
+  const fromProto = Modeling.prototype.setElementUrl;
+  if (typeof fromProto === "function") {
+    fromProto.call(modeling, id, url);
+    return;
+  }
+  throw new Error(
+    "setElementUrl is unavailable — rebuild @spherescan/modeler and hard-refresh the app",
+  );
+}
 
 export type UseScanBoardOptions = {
   /** Initial document YAML. Defaults to the Order Platform sample. */
@@ -117,9 +144,29 @@ export function useScanBoard(options: UseScanBoardOptions | string = {}) {
   const modelerRef = useRef<ScanModeler | null>(null);
   if (!modelerRef.current) {
     modelerRef.current = new ScanModeler({ viewId: "architecture-board" });
-  } else if (typeof modelerRef.current.modeling.renameSystem !== "function") {
-    // HMR can keep a stale ScanModeler instance after @spherescan/modeler rebuilds.
-    modelerRef.current = new ScanModeler({ viewId: "architecture-board" });
+  } else {
+    const modeling = modelerRef.current.modeling as {
+      renameSystem?: unknown;
+      setElementUrl?: unknown;
+    };
+    // HMR can keep a stale ScanModeler after @spherescan/modeler gains methods
+    // (e.g. setElementUrl). Recreate when expected APIs are missing.
+    if (
+      typeof modeling.renameSystem !== "function" ||
+      typeof modeling.setElementUrl !== "function"
+    ) {
+      let yaml: string | null = null;
+      try {
+        yaml = modelerRef.current.peekYAML();
+      } catch {
+        yaml = null;
+      }
+      const next = new ScanModeler({ viewId: "architecture-board" });
+      if (yaml?.trim()) {
+        void next.importYAML(yaml);
+      }
+      modelerRef.current = next;
+    }
   }
   const modeler = modelerRef.current;
 
@@ -356,6 +403,12 @@ export function useScanBoard(options: UseScanBoardOptions | string = {}) {
     [modeler],
   );
 
+  const changeElementKind = useCallback(
+    (id: string, kind: Parameters<typeof modeler.modeling.changeElementKind>[1]) =>
+      modeler.modeling.changeElementKind(id, kind),
+    [modeler],
+  );
+
   const updateElementIcon = useCallback(
     (id: string, icon: string | null) => modeler.modeling.updateElementIcon(id, icon),
     [modeler],
@@ -383,6 +436,11 @@ export function useScanBoard(options: UseScanBoardOptions | string = {}) {
   const setElementRepository = useCallback(
     (id: string, repository: string | { provider?: string; path: string } | null) =>
       modeler.modeling.setElementRepository(id, repository),
+    [modeler],
+  );
+
+  const setElementUrl = useCallback(
+    (id: string, url: string | null) => applyElementUrl(modeler.modeling, id, url),
     [modeler],
   );
 
@@ -613,10 +671,12 @@ export function useScanBoard(options: UseScanBoardOptions | string = {}) {
       updateConnection,
       updateConnectionRoute,
       renameElement,
+      changeElementKind,
       updateElementIcon,
       updateElementDescription,
       updateElementMeta,
       setElementRepository,
+      setElementUrl,
       addElementLink,
       removeElementLink,
       updateElementLink,
@@ -673,10 +733,12 @@ export function useScanBoard(options: UseScanBoardOptions | string = {}) {
       updateConnection,
       updateConnectionRoute,
       renameElement,
+      changeElementKind,
       updateElementIcon,
       updateElementDescription,
       updateElementMeta,
       setElementRepository,
+      setElementUrl,
       addElementLink,
       removeElementLink,
       updateElementLink,

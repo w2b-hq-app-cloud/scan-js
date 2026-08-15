@@ -80,21 +80,32 @@ export const kindColorVar: Record<NodeKind, string> = {
   repo: "var(--repo)",
 };
 
-export const edgeStyle = (kind: SphereEdge["kind"]) => {
+/** Dash/width from connection kind; stroke follows the source node kind when provided. */
+export const edgeStyle = (
+  kind: SphereEdge["kind"],
+  sourceKind?: NodeKind,
+) => {
+  const stroke = sourceKind
+    ? kindColorVar[sourceKind]
+    : kind === "db" || kind === "flow"
+      ? "var(--agent)"
+      : kind === "async" || kind === "stream"
+        ? "var(--event)"
+        : kind === "git"
+          ? "oklch(0.5 0.02 260)"
+          : "oklch(0.35 0.03 260)";
   switch (kind) {
     case "rest":
-      return { stroke: "oklch(0.35 0.03 260)", dash: "", width: 1.5 };
     case "grpc":
-      return { stroke: "oklch(0.4 0.03 260)", dash: "", width: 1.5 };
+      return { stroke, dash: "", width: 1.5 };
     case "db":
-      return { stroke: "var(--agent)", dash: "6 4", width: 1.5 };
+      return { stroke, dash: "6 4", width: 1.5 };
     case "async":
-      return { stroke: "var(--event)", dash: "6 4", width: 1.5 };
     case "stream":
-      return { stroke: "var(--event)", dash: "6 4", width: 1.5 };
+      return { stroke, dash: "6 4", width: 1.5 };
     case "git":
-      return { stroke: "oklch(0.5 0.02 260)", dash: "5 4", width: 1.5 };
+      return { stroke, dash: "5 4", width: 1.5 };
     case "flow":
-      return { stroke: "var(--agent)", dash: "5 4", width: 1.5 };
+      return { stroke, dash: "5 4", width: 1.5 };
   }
 };

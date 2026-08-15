@@ -177,6 +177,48 @@ export class Modeling {
             repo.name = name;
         this.replace(next, prev, `Rename ${id}`);
     }
+    /**
+     * Change an element's SCAN kind (may move between collections).
+     * Preserves id, name, description, notes, ports, icon, links, layout.
+     */
+    changeElementKind(id, kind) {
+        const prev = cloneModel(this.getModel());
+        const next = cloneModel(prev);
+        const located = locateElement(next, id);
+        if (!located)
+            throw new Error(`Element not found: ${id}`);
+        if (located.kind === kind)
+            return;
+        const view = ensureView(next, this.viewId);
+        const layout = view.layout[id] ?? { x: 0, y: 0 };
+        const size = defaultSize(kind);
+        view.layout[id] = {
+            ...layout,
+            w: layout.w ?? size.w,
+            h: layout.h ?? size.h,
+        };
+        // Same bag: components service/datastore/search — just flip `type`.
+        if (located.bag === "components" &&
+            (kind === "service" || kind === "datastore" || kind === "search")) {
+            const el = next.components[located.index];
+            el.type = kind;
+            if (!el.technology) {
+                el.technology =
+                    kind === "service"
+                        ? "Spring Boot"
+                        : kind === "datastore"
+                            ? "PostgreSQL"
+                            : "Elasticsearch";
+            }
+            syncBoundaryMembership(view);
+            this.replace(next, prev, `Change kind ${id} → ${kind}`);
+            return;
+        }
+        const extracted = extractElement(next, located);
+        insertElementAsKind(next, kind, extracted);
+        syncBoundaryMembership(view);
+        this.replace(next, prev, `Change kind ${id} → ${kind}`);
+    }
     /** Set or clear a custom diagram icon (Lucide name, URL, or data URL). */
     updateElementIcon(id, icon) {
         const prev = cloneModel(this.getModel());
@@ -268,6 +310,7 @@ export class Modeling {
         const prev = cloneModel(this.getModel());
         const next = cloneModel(prev);
         const element = next.components.find((c) => c.id === id) ??
+            next.channels.find((c) => c.id === id) ??
             next.external_systems.find((c) => c.id === id) ??
             next.agents.find((c) => c.id === id);
         if (!element)
@@ -313,6 +356,21 @@ export class Modeling {
                 };
         }
         this.replace(next, prev, `Set repository ${id}`);
+    }
+    /** Set or clear a deploy / service URL on a component or external system. */
+    setElementUrl(id, url) {
+        const prev = cloneModel(this.getModel());
+        const next = cloneModel(prev);
+        const element = next.components.find((c) => c.id === id) ??
+            next.external_systems.find((c) => c.id === id);
+        if (!element)
+            throw new Error(`Element not found or does not support url: ${id}`);
+        const trimmed = url?.trim() ?? "";
+        if (!trimmed)
+            delete element.url;
+        else
+            element.url = trimmed;
+        this.replace(next, prev, `Set url ${id}`);
     }
     addElementLink(id, link) {
         const prev = cloneModel(this.getModel());
@@ -1173,5 +1231,191 @@ export function nodeKindToCreateKind(kind) {
             return "repository";
         default:
             return null;
+    }
+}
+function locateElement(model, id) {
+    const ci = model.components.findIndex((c) => c.id === id);
+    if (ci >= 0) {
+        const t = model.components[ci].type;
+        const kind = t === "datastore" ? "datastore" : t === "search" ? "search" : "service";
+        return { bag: "components", index: ci, kind };
+    }
+    const chi = model.channels.findIndex((c) => c.id === id);
+    if (chi >= 0)
+        return { bag: "channels", index: chi, kind: "event-stream" };
+    const ei = model.external_systems.findIndex((c) => c.id === id);
+    if (ei >= 0)
+        return { bag: "external_systems", index: ei, kind: "external-system" };
+    const ai = model.agents.findIndex((c) => c.id === id);
+    if (ai >= 0)
+        return { bag: "agents", index: ai, kind: "agent" };
+    const ri = model.repositories.findIndex((c) => c.id === id);
+    if (ri >= 0)
+        return { bag: "repositories", index: ri, kind: "repository" };
+    return null;
+}
+function extractElement(model, located) {
+    switch (located.bag) {
+        case "components": {
+            const [el] = model.components.splice(located.index, 1);
+            return {
+                id: el.id,
+                name: el.name,
+                description: el.description,
+                notes: el.notes,
+                technology: el.technology,
+                subtitle: el.subtitle,
+                icon: el.icon,
+                status: el.status,
+                warn: el.warn,
+                url: el.url,
+                repository: el.repository,
+                links: el.links,
+                consumes: el.consumes,
+                exposes: el.exposes,
+            };
+        }
+        case "channels": {
+            const [el] = model.channels.splice(located.index, 1);
+            return {
+                id: el.id,
+                name: el.name,
+                description: el.description,
+                notes: el.notes,
+                technology: el.technology,
+                icon: el.icon,
+                consumes: el.consumes,
+                exposes: el.exposes,
+            };
+        }
+        case "external_systems": {
+            const [el] = model.external_systems.splice(located.index, 1);
+            return {
+                id: el.id,
+                name: el.name,
+                description: el.description,
+                notes: el.notes,
+                technology: el.technology,
+                icon: el.icon,
+                url: el.url,
+                repository: el.repository,
+                links: el.links,
+                consumes: el.consumes,
+                exposes: el.exposes,
+            };
+        }
+        case "agents": {
+            const [el] = model.agents.splice(located.index, 1);
+            return {
+                id: el.id,
+                name: el.name,
+                description: el.description,
+                notes: el.notes,
+                technology: el.technology,
+                subtitle: el.subtitle,
+                icon: el.icon,
+                links: el.links,
+                consumes: el.consumes,
+                exposes: el.exposes,
+                purpose: el.purpose,
+            };
+        }
+        case "repositories": {
+            const [el] = model.repositories.splice(located.index, 1);
+            return {
+                id: el.id,
+                name: el.name,
+                description: el.description,
+                subtitle: el.subtitle,
+                icon: el.icon,
+                provider: el.provider,
+                path: el.path,
+            };
+        }
+    }
+}
+function insertElementAsKind(model, kind, src) {
+    const ports = {
+        consumes: src.consumes,
+        exposes: src.exposes,
+    };
+    switch (kind) {
+        case "service":
+        case "datastore":
+        case "search":
+            model.components.push({
+                id: src.id,
+                name: src.name,
+                type: kind,
+                technology: src.technology ??
+                    (kind === "service"
+                        ? "Spring Boot"
+                        : kind === "datastore"
+                            ? "PostgreSQL"
+                            : "Elasticsearch"),
+                ...(src.subtitle ? { subtitle: src.subtitle } : {}),
+                ...(src.description ? { description: src.description } : {}),
+                ...(src.notes ? { notes: src.notes } : {}),
+                ...(src.icon ? { icon: src.icon } : {}),
+                ...(src.status ? { status: src.status } : {}),
+                ...(src.warn ? { warn: src.warn } : {}),
+                ...(src.url ? { url: src.url } : {}),
+                ...(src.repository ? { repository: src.repository } : {}),
+                ...(src.links ? { links: src.links } : {}),
+                ...ports,
+            });
+            break;
+        case "event-stream":
+            model.channels.push({
+                id: src.id,
+                name: src.name,
+                type: "event-stream",
+                technology: src.technology ?? "Kafka",
+                ...(src.description ? { description: src.description } : {}),
+                ...(src.notes ? { notes: src.notes } : {}),
+                ...(src.icon ? { icon: src.icon } : {}),
+                ...ports,
+            });
+            break;
+        case "external-system":
+            model.external_systems.push({
+                id: src.id,
+                name: src.name,
+                type: "external-system",
+                ...(src.technology ? { technology: src.technology } : {}),
+                ...(src.description ? { description: src.description } : {}),
+                ...(src.notes ? { notes: src.notes } : {}),
+                ...(src.icon ? { icon: src.icon } : {}),
+                ...(src.url ? { url: src.url } : {}),
+                ...(src.repository ? { repository: src.repository } : {}),
+                ...(src.links ? { links: src.links } : {}),
+                ...ports,
+            });
+            break;
+        case "agent":
+            model.agents.push({
+                id: src.id,
+                name: src.name,
+                subtitle: src.subtitle ?? src.purpose ?? "Agent",
+                ...(src.technology ? { technology: src.technology } : {}),
+                ...(src.description ? { description: src.description } : {}),
+                ...(src.notes ? { notes: src.notes } : {}),
+                ...(src.icon ? { icon: src.icon } : {}),
+                ...(src.links ? { links: src.links } : {}),
+                ...(src.purpose ? { purpose: src.purpose } : {}),
+                ...ports,
+            });
+            break;
+        case "repository":
+            model.repositories.push({
+                id: src.id,
+                name: src.name,
+                provider: src.provider ?? "github",
+                path: src.path ?? `company/${src.id}`,
+                subtitle: src.subtitle ?? src.path ?? `company/${src.id}`,
+                ...(src.description ? { description: src.description } : {}),
+                ...(src.icon ? { icon: src.icon } : {}),
+            });
+            break;
     }
 }

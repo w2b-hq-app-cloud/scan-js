@@ -30,6 +30,7 @@ export {
   serializeScanJson,
   serializeSphereYaml,
   serializeSphereJson,
+  scanStringNeedsQuotes,
 } from "./serialize.js";
 export {
   createEmptyModel,

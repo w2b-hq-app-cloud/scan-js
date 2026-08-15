@@ -38,11 +38,13 @@ import {
   sideFacingPoint,
   routeOrthogonalEdges,
   routeOrthogonalPolylines,
+  pointOnPolyline,
   assignOrthogonalLanes,
   resolveLabelOverlaps,
   estimateEdgeLabelSize,
 } from "@spherescan/viewer";
 import type { CreateKind } from "@spherescan/modeler";
+import { nodeKindToCreateKind } from "@spherescan/modeler";
 import {
   parseScanYaml,
   serializeSphereYaml,
@@ -60,6 +62,8 @@ import type {
   ResizeHandle,
   BoardAppProps,
   BoardHostApi,
+  HostHighlightEdge,
+  HostCenterTarget,
   BoardSelection,
   ArchitectureWarning,
   SystemIdentityChange,
@@ -74,7 +78,7 @@ import {
   normalizeDraftRect,
   applyBoundaryResize,
 } from "./board-geometry";
-import { createKindHints, edgeKindTitle, edgeStyle } from "./board-style";
+import { createKindHints, edgeKindTitle, edgeStyle, kindColorVar } from "./board-style";
 import { isScanFile } from "./board-files";
 import { IconBtn } from "./ui/IconBtn";
 import { EdgeIcon } from "./icons/EdgeIcon";
@@ -87,6 +91,7 @@ import { TopBar } from "./chrome/TopBar";
 import { ViewTabs } from "./chrome/ViewTabs";
 import { ValidationToast } from "./chrome/ValidationToast";
 import { ContextMenu } from "./chrome/ContextMenu";
+import { KindPickerList } from "./tools/KindPickerList";
 import { Legend } from "./chrome/Legend";
 import { MiniMap } from "./chrome/MiniMap";
 
@@ -100,6 +105,41 @@ export type {
   ArchitectureWarning,
   SystemIdentityChange,
 } from "./board-types";
+
+/** Fraction along the routed polyline where host step badges sit. */
+const HOST_STEP_BADGE_T = 0.35;
+
+function hostEdgeWorldPoint(
+  edgeId: string,
+  edges: SphereEdge[],
+  nodeById: Record<string, SphereNode>,
+  orthogonalPolylines: Map<string, Point[]> | null | undefined,
+  edgeAnchorsById: Map<string, { a: Point; b: Point }>,
+): Point | null {
+  const e = edges.find((x) => x.id === edgeId);
+  if (!e) return null;
+  const from = nodeById[e.from];
+  const to = nodeById[e.to];
+  if (!from || !to) return null;
+  const poly = orthogonalPolylines?.get(e.id);
+  const anchors = edgeAnchorsById.get(e.id);
+  const a = anchors?.a ?? anchorPoint(from, e.fromSide ?? "r");
+  const b = anchors?.b ?? anchorPoint(to, e.toSide ?? "l");
+  return poly?.length
+    ? pointOnPolyline(poly, HOST_STEP_BADGE_T)
+    : { x: a.x * 0.65 + b.x * 0.35, y: a.y * 0.65 + b.y * 0.35 };
+}
+
+function easeOutCubic(t: number): number {
+  return 1 - (1 - t) ** 3;
+}
+
+function hostCenterKey(target: HostCenterTarget | null | undefined): string {
+  if (!target) return "";
+  if (target.edgeId) return `e:${target.edgeId}`;
+  if (target.nodeId) return `n:${target.nodeId}`;
+  return "";
+}
 
 export default function BoardApp({
   fill = "viewport",
@@ -121,17 +161,28 @@ export default function BoardApp({
   applyYamlNonce = 0,
   readOnly = false,
   onBoardReady,
+  onYamlLoadError,
+  onYamlImported,
   renderNodeOverlay,
+  renderNodeBadge,
   renderInspectorExtras,
   renderBottomChrome,
   renderLeftPanel,
+  renderRightPanel,
+  hostFocusNodeIds = null,
+  hostHighlightEdges = null,
+  hostCenter = null,
   renderViewTabsEnd,
+  showViewTools = true,
   renderCanvasOverlay,
+  inspectorOpen = true,
+  urlHealthById,
   architectureWarnings: architectureWarningsProp,
   renderValidationAction,
   architectureValidating = false,
 }: BoardAppProps) {
-  void readOnly;
+  const readOnlyRef = useRef(readOnly);
+  readOnlyRef.current = readOnly;
   const board = useScanBoard({
     startEmpty: startEmpty && !initialYaml,
   });
@@ -172,10 +223,12 @@ export default function BoardApp({
     exportPng,
     newBoard,
     renameElement,
+    changeElementKind,
     updateElementIcon,
     updateElementDescription,
     updateElementMeta,
     setElementRepository,
+    setElementUrl,
     addElementLink,
     removeElementLink,
     addPort,
@@ -225,6 +278,14 @@ export default function BoardApp({
   const onBoardReadyCalledRef = useRef(false);
   const loadYamlTextRef = useRef(loadYamlText);
   loadYamlTextRef.current = loadYamlText;
+  const clearSelectionRef = useRef(() => {});
+  clearSelectionRef.current = () => {
+    setSelected(null);
+    setSelectedExtras([]);
+    setSelectedBoundary(null);
+    setSelectedBoundaryExtras([]);
+    setSelectedEdge(null);
+  };
   const [connectFrom, setConnectFrom] = useState<{
     nodeId: string;
     portId?: string;
@@ -237,7 +298,11 @@ export default function BoardApp({
     | null
   >(null);
   const [yamlDragDepth, setYamlDragDepth] = useState(0);
-  const [renameModal, setRenameModal] = useState<{ nodeId: string; value: string } | null>(null);
+  const [renameModal, setRenameModal] = useState<{
+    nodeId: string;
+    value: string;
+    kind: CreateKind;
+  } | null>(null);
   const [boundaryRenameModal, setBoundaryRenameModal] = useState<{
     id: string;
     value: string;
@@ -255,6 +320,15 @@ export default function BoardApp({
   const lastPointerOnCanvas = useRef<Point | null>(null);
   const zoomRef = useRef(zoom);
   const panRef = useRef(pan);
+  const panAnimRef = useRef<number | null>(null);
+  const lastHostCenterSig = useRef<string>("");
+
+  const cancelPanAnim = useCallback(() => {
+    if (panAnimRef.current != null) {
+      cancelAnimationFrame(panAnimRef.current);
+      panAnimRef.current = null;
+    }
+  }, []);
 
   const applyViewport = useCallback((nextZoom: number, nextPan: Point) => {
     zoomRef.current = nextZoom;
@@ -262,6 +336,40 @@ export default function BoardApp({
     setZoom(nextZoom);
     setPan(nextPan);
   }, []);
+
+  const panWorldToCenter = useCallback(
+    (world: Point) => {
+      const z = zoomRef.current;
+      const target = {
+        x: canvasSize.w / 2 - world.x * z,
+        y: canvasSize.h / 2 - world.y * z,
+      };
+      const from = { ...panRef.current };
+      if (Math.hypot(target.x - from.x, target.y - from.y) < 12) return;
+      cancelPanAnim();
+      const started = performance.now();
+      const duration = 280;
+      const tick = (now: number) => {
+        const t = Math.min(1, (now - started) / duration);
+        const k = easeOutCubic(t);
+        const next = {
+          x: from.x + (target.x - from.x) * k,
+          y: from.y + (target.y - from.y) * k,
+        };
+        panRef.current = next;
+        setPan(next);
+        if (t < 1) panAnimRef.current = requestAnimationFrame(tick);
+        else panAnimRef.current = null;
+      };
+      panAnimRef.current = requestAnimationFrame(tick);
+    },
+    [canvasSize.h, canvasSize.w, cancelPanAnim],
+  );
+
+  useEffect(() => () => cancelPanAnim(), [cancelPanAnim]);
+
+  const onYamlImportedRef = useRef(onYamlImported);
+  onYamlImportedRef.current = onYamlImported;
 
   const loadYamlFromFile = useCallback(
     async (file: File) => {
@@ -275,12 +383,18 @@ export default function BoardApp({
         setSelectedEdge(null);
         setConnectFrom(null);
         toast.success(`Loaded ${file.name}`);
+        try {
+          const yaml = modeler.peekYAML();
+          onYamlImportedRef.current?.({ filename: file.name, yaml });
+        } catch {
+          onYamlImportedRef.current?.({ filename: file.name, yaml: "" });
+        }
       } catch (err) {
         const message = err instanceof Error ? err.message : "Invalid SCAN YAML";
         toast.error("Could not import YAML", { description: message });
       }
     },
-    [importYamlFile],
+    [importYamlFile, modeler],
   );
   const dragging = useRef<{
     id: string;
@@ -351,6 +465,19 @@ export default function BoardApp({
   // Keyboard: undo/redo, save, delete
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (readOnlyRef.current) {
+        // Allow save / escape only — block edit shortcuts while diagram is locked.
+        if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
+          e.preventDefault();
+          void saveYaml();
+        }
+        if (e.key === "Escape") {
+          setCtxMenu(null);
+          setConnectFrom(null);
+          setConnectCursor(null);
+        }
+        return;
+      }
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
         e.preventDefault();
         void saveYaml();
@@ -486,8 +613,14 @@ export default function BoardApp({
           if (g) setBoundaryRenameModal({ id: g.id, value: g.title });
         } else if (selected) {
           e.preventDefault();
-          const current = nodes.find((n) => n.id === selected)?.title ?? "";
-          setRenameModal({ nodeId: selected, value: current });
+          const current = nodes.find((n) => n.id === selected);
+          if (current) {
+            setRenameModal({
+              nodeId: selected,
+              value: current.title,
+              kind: nodeKindToCreateKind(current.kind) ?? "service",
+            });
+          }
         }
       }
       if (
@@ -563,6 +696,14 @@ export default function BoardApp({
     groups,
     nodes,
   ]);
+
+  useEffect(() => {
+    if (!readOnly) return;
+    setTool("select");
+    setConnectFrom(null);
+    setConnectCursor(null);
+    setFastDraft(null);
+  }, [readOnly]);
 
   useEffect(() => {
     if (tool !== "connect" && tool !== "fast") {
@@ -641,21 +782,38 @@ export default function BoardApp({
     for (const listener of documentListenersRef.current) listener(yaml);
   }, [historyStep, model, dirty, ready, modeler]);
 
+  const onYamlLoadErrorRef = useRef(onYamlLoadError);
+  onYamlLoadErrorRef.current = onYamlLoadError;
+
+  const safeLoadYamlText = useCallback(
+    async (yaml: string) => {
+      try {
+        await loadYamlText(yaml);
+      } catch (cause) {
+        const err = cause instanceof Error ? cause : new Error(String(cause));
+        onYamlLoadErrorRef.current?.(err, yaml);
+        // Do not rethrow — host surfaces Fix UI; avoid unhandled rejection in Vite.
+      }
+    },
+    [loadYamlText],
+  );
+  loadYamlTextRef.current = safeLoadYamlText;
+
   const loadedYamlRef = useRef<string | null>(null);
   useEffect(() => {
     if (!ready || !initialYaml) return;
     if (loadedYamlRef.current === initialYaml) return;
     loadedYamlRef.current = initialYaml;
-    void loadYamlText(initialYaml);
-  }, [ready, initialYaml, loadYamlText]);
+    void safeLoadYamlText(initialYaml);
+  }, [ready, initialYaml, safeLoadYamlText]);
 
   const appliedYamlNonceRef = useRef(0);
   useEffect(() => {
     if (!ready || !applyYaml?.trim()) return;
     if (applyYamlNonce === appliedYamlNonceRef.current) return;
     appliedYamlNonceRef.current = applyYamlNonce;
-    void loadYamlText(applyYaml);
-  }, [ready, applyYaml, applyYamlNonce, loadYamlText]);
+    void safeLoadYamlText(applyYaml);
+  }, [ready, applyYaml, applyYamlNonce, safeLoadYamlText]);
 
   const mergedYamlRef = useRef<string | null>(null);
   useEffect(() => {
@@ -690,21 +848,33 @@ export default function BoardApp({
   }, []);
 
   const displayNodes = useMemo(() => {
-    if (architectureWarningsProp === undefined) return nodes;
-    const msgById = new Map(
-      architectureWarningsProp.map((w) => [w.id, w.message] as const),
-    );
-    return nodes.map((n) => {
-      const msg = msgById.get(n.id);
-      if (msg) {
-        return { ...n, status: "warn" as const, warn: msg };
-      }
-      if (n.status === "warn" || n.warn) {
-        return { ...n, status: undefined, warn: undefined };
-      }
-      return n;
+    const withWarn =
+      architectureWarningsProp === undefined
+        ? nodes
+        : (() => {
+            const msgById = new Map(
+              architectureWarningsProp.map((w) => [w.id, w.message] as const),
+            );
+            return nodes.map((n) => {
+              const msg = msgById.get(n.id);
+              if (msg) {
+                return { ...n, status: "warn" as const, warn: msg };
+              }
+              if (n.status === "warn" || n.warn) {
+                return { ...n, status: undefined, warn: undefined };
+              }
+              return n;
+            });
+          })();
+    if (!urlHealthById || Object.keys(urlHealthById).length === 0) {
+      return withWarn;
+    }
+    return withWarn.map((n) => {
+      const health = urlHealthById[n.id];
+      if (!health || n.urlHealth === health) return n;
+      return { ...n, urlHealth: health };
     });
-  }, [nodes, architectureWarningsProp]);
+  }, [nodes, architectureWarningsProp, urlHealthById]);
 
   const nodeById = useMemo(
     () => Object.fromEntries(displayNodes.map((n) => [n.id, n])),
@@ -758,6 +928,7 @@ export default function BoardApp({
       // Always call through the latest loadYamlText (avoids stale closures after HMR / modeler swap).
       loadYaml: (yaml) => loadYamlTextRef.current(yaml),
       getSelection: () => selectionRef.current,
+      clearSelection: () => clearSelectionRef.current(),
       subscribeSelection: (listener) => {
         selectionListenersRef.current.add(listener);
         listener(selectionRef.current);
@@ -776,6 +947,7 @@ export default function BoardApp({
   }, [ready, onBoardReady, modeler, loadYamlText]);
 
   const focusIds = useMemo(() => {
+    if (hostFocusNodeIds) return new Set(hostFocusNodeIds);
     if (!focusMode) return null;
     // While wiring, keep every component fully visible — focus dimming hides valid targets.
     if (tool === "connect" || tool === "fast" || connectFrom) return null;
@@ -804,7 +976,13 @@ export default function BoardApp({
       }
     }
     return hop;
-  }, [focusMode, selectedNodeIds, selectedEdge, hoverEdge, edges, tool, connectFrom]);
+  }, [hostFocusNodeIds, focusMode, selectedNodeIds, selectedEdge, hoverEdge, edges, tool, connectFrom]);
+
+  const highlightById = useMemo(() => {
+    const map = new Map<string, HostHighlightEdge>();
+    for (const h of hostHighlightEdges ?? []) map.set(h.id, h);
+    return map;
+  }, [hostHighlightEdges]);
 
   const edgeFanById = useMemo(() => {
     const counts = new Map<string, number>();
@@ -954,6 +1132,42 @@ export default function BoardApp({
     return routeOrthogonalPolylines(routed);
   }, [orthogonalEdges, edges, nodeById, edgeFanById]);
 
+  const centerKey = hostCenterKey(hostCenter);
+  useEffect(() => {
+    if (!centerKey) {
+      lastHostCenterSig.current = "";
+      return;
+    }
+    const sig = `${centerKey}@${canvasSize.w}x${canvasSize.h}`;
+    let world: Point | null = null;
+    if (hostCenter?.edgeId) {
+      world = hostEdgeWorldPoint(
+        hostCenter.edgeId,
+        edges,
+        nodeById,
+        orthogonalPolylines,
+        edgeAnchorsById,
+      );
+    } else if (hostCenter?.nodeId) {
+      const n = nodeById[hostCenter.nodeId];
+      if (n) world = { x: n.x + n.w / 2, y: n.y + n.h / 2 };
+    }
+    if (!world) return;
+    if (lastHostCenterSig.current === sig) return;
+    lastHostCenterSig.current = sig;
+    panWorldToCenter(world);
+  }, [
+    canvasSize.h,
+    canvasSize.w,
+    centerKey,
+    edgeAnchorsById,
+    edges,
+    hostCenter,
+    nodeById,
+    orthogonalPolylines,
+    panWorldToCenter,
+  ]);
+
   const [routeDrag, setRouteDrag] = useState<{
     edgeId: string;
     /** Segment start index: handle sits on points[i]→points[i+1]. */
@@ -979,10 +1193,11 @@ export default function BoardApp({
 
   const edgeDimmed = useCallback(
     (e: SphereEdge) => {
+      if (highlightById.size) return !highlightById.has(e.id);
       if (!focusIds) return false;
       return !(focusIds.has(e.from) && focusIds.has(e.to));
     },
-    [focusIds],
+    [focusIds, highlightById],
   );
 
   const clientToWorld = (cx: number, cy: number): Point => {
@@ -995,6 +1210,15 @@ export default function BoardApp({
   };
 
   const startDrag = (e: PointerEvent, id: string) => {
+    if (readOnlyRef.current) {
+      e.stopPropagation();
+      setSelected(id);
+      setSelectedExtras([]);
+      setSelectedBoundaryExtras([]);
+      setSelectedEdge(null);
+      setSelectedBoundary(null);
+      return;
+    }
     if (tool === "connect" || tool === "fast") {
       e.stopPropagation();
       // Node body: port-less / fallback node->node wire
@@ -1078,6 +1302,7 @@ export default function BoardApp({
   };
 
   const onPortConnect = (nodeId: string, portId: string, role: "expose" | "consume") => {
+    if (readOnlyRef.current) return;
     // Ports are always interactive: start/finish wiring without requiring the Connect tool first.
     if (!connectFrom) {
       if (role === "expose") {
@@ -1315,6 +1540,7 @@ export default function BoardApp({
       );
     }
     if (panning.current) {
+      cancelPanAnim();
       const p = panning.current;
       const next = { x: p.px + (e.clientX - p.sx), y: p.py + (e.clientY - p.sy) };
       panRef.current = next;
@@ -1426,6 +1652,24 @@ export default function BoardApp({
   };
 
   const onCanvasPointerDown = (e: PointerEvent) => {
+    if (readOnlyRef.current) {
+      if (e.button === 1 || tool === "pan" || e.altKey || e.button === 2) {
+        panning.current = {
+          sx: e.clientX,
+          sy: e.clientY,
+          px: panRef.current.x,
+          py: panRef.current.y,
+        };
+      } else {
+        setSelected(null);
+        setSelectedExtras([]);
+        setSelectedBoundary(null);
+        setSelectedBoundaryExtras([]);
+        setSelectedEdge(null);
+        setCtxMenu(null);
+      }
+      return;
+    }
     if (tool === "fast" && e.button === 0) {
       // Empty-canvas sketch: click → component, drag box → boundary.
       // Node clicks are handled in startDrag / ports and stopPropagation.
@@ -1546,6 +1790,7 @@ export default function BoardApp({
       }
 
       // Trackpad pinch / ctrl+wheel: zoom toward cursor. Plain wheel pans.
+      cancelPanAnim();
       if (e.ctrlKey || e.metaKey) {
         const factor = Math.exp(-e.deltaY * 0.0015);
         zoomAround({ x: cx, y: cy }, zoomRef.current * factor);
@@ -1560,7 +1805,7 @@ export default function BoardApp({
     };
     el.addEventListener("wheel", handler, { passive: false });
     return () => el.removeEventListener("wheel", handler);
-  }, [zoomAround]);
+  }, [cancelPanAnim, zoomAround]);
 
   const zoomReset = () => {
     applyViewport(0.85, { x: 40, y: 20 });
@@ -1647,6 +1892,7 @@ export default function BoardApp({
   const completeNewBoard = useCallback(
     async (name: string) => {
       try {
+        const fromSystemId = modeler.getModel()?.system.id ?? null;
         await newBoard(name.trim() || "Untitled System");
         setSelected(null);
         setSelectedEdge(null);
@@ -1654,13 +1900,21 @@ export default function BoardApp({
         setCtxMenu(null);
         applyViewport(0.85, { x: 40, y: 20 });
         setNewBoardModal(null);
+        const yaml = modeler.peekYAML();
+        const toSystemId = modeler.getModel()?.system.id ?? "";
+        emitSystemIdentityChange({
+          reason: "new",
+          fromSystemId,
+          toSystemId,
+          yaml,
+        });
         toast.success("New board ready");
       } catch (err) {
         const message = err instanceof Error ? err.message : "Could not create board";
         toast.error("New board failed", { description: message });
       }
     },
-    [newBoard, applyViewport],
+    [newBoard, applyViewport, emitSystemIdentityChange, modeler],
   );
 
   const selNode = selected ? nodeById[selected] : null;
@@ -1742,6 +1996,7 @@ export default function BoardApp({
         nodes={displayNodes}
         groups={groups}
         endSlot={renderViewTabsEnd?.()}
+        showViewTools={showViewTools}
       />
 
       <div className="flex min-h-0 flex-1">
@@ -1934,39 +2189,20 @@ export default function BoardApp({
               style={{ overflow: "visible" }}
             >
               <defs>
-                <marker
-                  id="arrow"
-                  viewBox="0 0 10 10"
-                  refX="8"
-                  refY="5"
-                  markerWidth="6"
-                  markerHeight="6"
-                  orient="auto-start-reverse"
-                >
-                  <path d="M 0 0 L 10 5 L 0 10 z" fill="oklch(0.35 0.03 260)" />
-                </marker>
-                <marker
-                  id="arrow-agent"
-                  viewBox="0 0 10 10"
-                  refX="8"
-                  refY="5"
-                  markerWidth="6"
-                  markerHeight="6"
-                  orient="auto-start-reverse"
-                >
-                  <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--agent)" />
-                </marker>
-                <marker
-                  id="arrow-event"
-                  viewBox="0 0 10 10"
-                  refX="8"
-                  refY="5"
-                  markerWidth="6"
-                  markerHeight="6"
-                  orient="auto-start-reverse"
-                >
-                  <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--event)" />
-                </marker>
+                {(Object.keys(kindColorVar) as Array<keyof typeof kindColorVar>).map((k) => (
+                  <marker
+                    key={`arrow-${k}`}
+                    id={`arrow-${k}`}
+                    viewBox="0 0 10 10"
+                    refX="8"
+                    refY="5"
+                    markerWidth="6"
+                    markerHeight="6"
+                    orient="auto-start-reverse"
+                  >
+                    <path d="M 0 0 L 10 5 L 0 10 z" fill={kindColorVar[k]} />
+                  </marker>
+                ))}
               </defs>
               {edges.map((e) => {
                 const from = nodeById[e.from];
@@ -1977,15 +2213,14 @@ export default function BoardApp({
                 const b = anchors?.b ?? anchorPoint(to, e.toSide ?? "l");
                 const fromSide = anchors?.fromSide ?? e.fromSide ?? "r";
                 const toSide = anchors?.toSide ?? e.toSide ?? "l";
-                const s = edgeStyle(e.kind);
-                const active = hoverEdge === e.id || selectedEdge === e.id;
-                const faded = edgeDimmed(e) && !active;
-                const marker =
-                  e.kind === "flow" || e.kind === "db"
-                    ? "url(#arrow-agent)"
-                    : e.kind === "async" || e.kind === "stream"
-                      ? "url(#arrow-event)"
-                      : "url(#arrow)";
+                const s = edgeStyle(e.kind, from.kind);
+                const highlight = highlightById.get(e.id);
+                const active =
+                  hoverEdge === e.id ||
+                  selectedEdge === e.id ||
+                  highlight?.state === "active";
+                const faded = edgeDimmed(e) && !active && !highlight;
+                const marker = `url(#arrow-${from.kind})`;
                 const d =
                   routeDrag?.edgeId === e.id
                     ? routeDrag.points
@@ -1993,16 +2228,24 @@ export default function BoardApp({
                         .join(" ")
                     : orthogonalEdgePaths?.get(e.id) ??
                       edgePath(a, b, fromSide, toSide);
+                const width =
+                  highlight?.state === "active"
+                    ? s.width + 2
+                    : highlight
+                      ? s.width + 1
+                      : active
+                        ? s.width + 1.5
+                        : s.width;
                 return (
                   <g key={e.id} className="pointer-events-auto">
                     <path
                       d={d}
                       stroke={s.stroke}
-                      strokeWidth={active ? s.width + 1.5 : s.width}
+                      strokeWidth={width}
                       strokeDasharray={s.dash}
                       fill="none"
                       markerEnd={marker}
-                      opacity={faded ? 0.18 : active ? 1 : 0.9}
+                      opacity={faded ? 0.18 : active || highlight ? 1 : 0.9}
                       style={{ cursor: "pointer" }}
                       onMouseEnter={() => setHoverEdge(e.id)}
                       onMouseLeave={() => setHoverEdge(null)}
@@ -2032,7 +2275,7 @@ export default function BoardApp({
                       strokeDasharray="6 4"
                       fill="none"
                       opacity={0.85}
-                      markerEnd="url(#arrow)"
+                      markerEnd="url(#arrow-service)"
                       pointerEvents="none"
                     />
                   );
@@ -2079,7 +2322,7 @@ export default function BoardApp({
                 return handles.map((h) => (
                   <div
                     key={h.key}
-                    className="absolute z-[1] h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-sm border-2 border-primary bg-background shadow active:cursor-grabbing"
+                    className="absolute z-[6] h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-sm border-2 border-primary bg-background shadow active:cursor-grabbing"
                     style={{ left: h.x, top: h.y, cursor: h.cursor }}
                     title={
                       h.axis === "y"
@@ -2129,6 +2372,7 @@ export default function BoardApp({
               const showOps = hoverEdge === e.id && (e.operations?.length ?? 0) > 0;
               const faded = edgeDimmed(e) && !active;
               const showText = active || zoom >= LABEL_LOD_ZOOM;
+              const selectedForRoute = selectedEdge === e.id;
               if (!showText && !active) {
                 // Thin hit target at low zoom so edges stay selectable via path;
                 // skip the opaque chip to reduce clutter.
@@ -2137,14 +2381,26 @@ export default function BoardApp({
               return (
                 <div
                   key={`lbl-${e.id}`}
-                  className={`absolute z-[4] flex -translate-x-1/2 -translate-y-1/2 cursor-pointer flex-col items-stretch gap-1 ${
-                    showOps ? "z-[5]" : ""
+                  className={`absolute flex -translate-x-1/2 -translate-y-1/2 flex-col items-stretch gap-1 ${
+                    selectedForRoute
+                      ? "pointer-events-none z-[2]"
+                      : showOps
+                        ? "z-[5] cursor-pointer"
+                        : "z-[4] cursor-pointer"
                   } ${faded ? "opacity-25" : ""}`}
                   style={{ left: m.x, top: m.y }}
-                  onMouseEnter={() => setHoverEdge(e.id)}
-                  onMouseLeave={() => setHoverEdge(null)}
-                  onPointerDown={(ev) => ev.stopPropagation()}
+                  onMouseEnter={() => {
+                    if (!selectedForRoute) setHoverEdge(e.id);
+                  }}
+                  onMouseLeave={() => {
+                    if (!selectedForRoute) setHoverEdge(null);
+                  }}
+                  onPointerDown={(ev) => {
+                    if (selectedForRoute) return;
+                    ev.stopPropagation();
+                  }}
                   onClick={(ev) => {
+                    if (selectedForRoute) return;
                     ev.stopPropagation();
                     setSelectedEdge(e.id);
                     setSelected(null);
@@ -2196,38 +2452,95 @@ export default function BoardApp({
               );
             })}
 
-            {/* EDGE HOVER (edges without labels still show ops) */}
+            {/* HOST PATH STEP BADGES */}
+            {highlightById.size
+              ? [...highlightById.values()].map((h) => {
+                  const e = edges.find((x) => x.id === h.id);
+                  if (!e || h.step == null) return null;
+                  const p = hostEdgeWorldPoint(
+                    e.id,
+                    edges,
+                    nodeById,
+                    orthogonalPolylines,
+                    edgeAnchorsById,
+                  );
+                  if (!p) return null;
+                  const active = h.state === "active" || selectedEdge === e.id;
+                  const done = h.state === "done";
+                  return (
+                    <button
+                      key={`step-${e.id}`}
+                      type="button"
+                      className={`absolute z-[6] flex h-6 w-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full text-[11px] font-semibold tabular-nums hairline node-shadow ${
+                        active
+                          ? "bg-primary text-primary-foreground"
+                          : done
+                            ? "bg-surface text-foreground"
+                            : "bg-surface text-muted-foreground"
+                      }`}
+                      style={{ left: p.x, top: p.y }}
+                      title={`Step ${h.step}`}
+                      onPointerDown={(ev) => ev.stopPropagation()}
+                      onClick={(ev) => {
+                        ev.stopPropagation();
+                        setSelectedEdge(e.id);
+                        setSelected(null);
+                        setSelectedBoundary(null);
+                      }}
+                    >
+                      {h.step}
+                    </button>
+                  );
+                })
+              : null}
+
+            {/* EDGE HOVER — source component pill + ops for unlabeled edges */}
             {hoverEdge &&
               (() => {
                 const e = edges.find((x) => x.id === hoverEdge);
-                if (!e || e.label || !e.operations?.length) return null;
+                if (!e) return null;
                 const from = nodeById[e.from];
                 const to = nodeById[e.to];
                 if (!from || !to) return null;
-                const a = anchorPoint(from, e.fromSide ?? "r");
-                const b = anchorPoint(to, e.toSide ?? "l");
-                const m = placeEdgeLabel({
-                  a,
-                  b,
-                  aSide: e.fromSide ?? "r",
-                  bSide: e.toSide ?? "l",
-                  nodes: nodes.map((n) => ({ x: n.x, y: n.y, w: n.w, h: n.h })),
-                });
+                const m =
+                  edgeLabelPositions.get(e.id) ??
+                  placeEdgeLabel({
+                    a: anchorPoint(from, e.fromSide ?? "r"),
+                    b: anchorPoint(to, e.toSide ?? "l"),
+                    aSide: e.fromSide ?? "r",
+                    bSide: e.toSide ?? "l",
+                    nodes: nodes.map((n) => ({ x: n.x, y: n.y, w: n.w, h: n.h })),
+                  });
+                const sourceColor = kindColorVar[from.kind];
                 return (
                   <div
-                    className="pointer-events-none absolute z-[5] min-w-[180px] max-w-[240px] -translate-x-1/2 -translate-y-1/2 rounded-lg border border-border bg-popover px-2.5 py-2 node-shadow-lg"
-                    style={{ left: m.x, top: m.y }}
+                    className="pointer-events-none absolute z-[7] flex -translate-x-1/2 -translate-y-full flex-col items-center gap-1"
+                    style={{ left: m.x, top: m.y - 10 }}
                   >
-                    <div className="mb-1.5 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">
-                      {edgeKindTitle(e.kind)} endpoints
-                    </div>
-                    <ul className="space-y-1">
-                      {e.operations.map((op) => (
-                        <li key={op} className="truncate font-mono text-[10px]" title={op}>
-                          {op}
-                        </li>
-                      ))}
-                    </ul>
+                    <span
+                      className="rounded-full px-2 py-0.5 text-[10px] font-medium text-white shadow"
+                      style={{ background: sourceColor }}
+                    >
+                      {from.title}
+                    </span>
+                    {!e.label && (e.operations?.length ?? 0) > 0 && (
+                      <div className="min-w-[180px] max-w-[240px] rounded-lg border border-border bg-popover px-2.5 py-2 text-left node-shadow-lg">
+                        <div className="mb-1.5 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">
+                          {edgeKindTitle(e.kind)} endpoints
+                        </div>
+                        <ul className="space-y-1">
+                          {e.operations!.map((op) => (
+                            <li
+                              key={op}
+                              className="truncate font-mono text-[10px] text-foreground"
+                              title={op}
+                            >
+                              {op}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
                   </div>
                 );
               })()}
@@ -2275,10 +2588,23 @@ export default function BoardApp({
                   setSelectedEdge(null);
                   setSelectedBoundary(null);
                   setSelectedBoundaryExtras([]);
-                  setRenameModal({ nodeId: n.id, value: n.title });
+                  setRenameModal({
+                    nodeId: n.id,
+                    value: n.title,
+                    kind: nodeKindToCreateKind(n.kind) ?? "service",
+                  });
                 }}
               />
             ))}
+            {displayNodes.map((n) =>
+              renderNodeBadge?.({
+                node: n,
+                x: n.x,
+                y: n.y,
+                w: n.w,
+                h: n.h,
+              }),
+            )}
             {selected &&
               selNode &&
               tool === "select" &&
@@ -2384,12 +2710,22 @@ export default function BoardApp({
         <div data-canvas-chrome>
           <ToolRail
             tool={tool}
-            setTool={setTool}
+            setTool={(next) => {
+              if (readOnlyRef.current && next !== "select" && next !== "pan") {
+                toast.message("Diagram is locked while building");
+                return;
+              }
+              setTool(next);
+            }}
             showGrid={showGrid}
             setShowGrid={setShowGrid}
             orthogonalEdges={orthogonalEdges}
             setOrthogonalEdges={setOrthogonalEdges}
             onPickCreate={(kind) => {
+              if (readOnlyRef.current) {
+                toast.message("Diagram is locked while building");
+                return;
+              }
               setCreateKind(kind);
               if (tool === "fast") {
                 toast.message(`Fast design places ${createKindHints[kind].label}`);
@@ -2398,6 +2734,10 @@ export default function BoardApp({
               setTool("create");
             }}
             onPickBoundary={(kind) => {
+              if (readOnlyRef.current) {
+                toast.message("Diagram is locked while building");
+                return;
+              }
               setBoundaryKind(kind);
               if (tool === "fast") {
                 toast.message(
@@ -2470,6 +2810,7 @@ export default function BoardApp({
             canvasSize={canvasSize}
             systemName={systemName}
             onNavigate={(worldX, worldY) => {
+              cancelPanAnim();
               const next = {
                 x: canvasSize.w / 2 - worldX * zoomRef.current,
                 y: canvasSize.h / 2 - worldY * zoomRef.current,
@@ -2478,6 +2819,7 @@ export default function BoardApp({
               setPan(next);
             }}
             onPanDelta={(dxWorld, dyWorld) => {
+              cancelPanAnim();
               const z = zoomRef.current;
               const next = {
                 x: panRef.current.x - dxWorld * z,
@@ -2501,8 +2843,8 @@ export default function BoardApp({
           }}
         />
 
-        {/* INSPECTOR */}
-        {(selNode || selEdge || selBoundary) && (
+        {/* INSPECTOR — host may hide on YAML/Code without clearing selection */}
+        {inspectorOpen && (selNode || selEdge || selBoundary) && (
           <Inspector
             node={selNode ?? null}
             edge={selEdge ?? null}
@@ -2564,6 +2906,20 @@ export default function BoardApp({
                 setElementRepository(id, repository);
               } catch (err) {
                 toast.error("Could not set repository", {
+                  description: err instanceof Error ? err.message : "Update failed",
+                });
+              }
+            }}
+            onSetElementUrl={(id, url) => {
+              try {
+                if (typeof setElementUrl !== "function") {
+                  throw new Error(
+                    "Board API missing setElementUrl — hard-refresh after scan:local",
+                  );
+                }
+                setElementUrl(id, url);
+              } catch (err) {
+                toast.error("Could not set service URL", {
                   description: err instanceof Error ? err.message : "Update failed",
                 });
               }
@@ -2667,8 +3023,14 @@ export default function BoardApp({
               }
             }}
             onRename={() => {
-              const current = nodeById[ctxMenu.nodeId]?.title ?? "";
-              setRenameModal({ nodeId: ctxMenu.nodeId, value: current });
+              const current = nodeById[ctxMenu.nodeId];
+              if (current) {
+                setRenameModal({
+                  nodeId: ctxMenu.nodeId,
+                  value: current.title,
+                  kind: nodeKindToCreateKind(current.kind) ?? "service",
+                });
+              }
               setCtxMenu(null);
             }}
             onConnect={() => {
@@ -2721,8 +3083,8 @@ export default function BoardApp({
         <Modal
           open={!!renameModal}
           onClose={() => setRenameModal(null)}
-          title="Rename component"
-          description="Give this component a clearer name. This updates the SCAN model."
+          title="Edit component"
+          description="Update the display name and SCAN element type."
           tone="info"
           actions={[
             { label: "Cancel", variant: "ghost", onClick: () => setRenameModal(null) },
@@ -2733,8 +3095,21 @@ export default function BoardApp({
               disabled: !renameModal?.value.trim(),
               onClick: () => {
                 if (!renameModal?.value.trim()) return;
-                renameElement(renameModal.nodeId, renameModal.value.trim());
-                setRenameModal(null);
+                const node = nodeById[renameModal.nodeId];
+                const prevKind = node
+                  ? nodeKindToCreateKind(node.kind) ?? "service"
+                  : "service";
+                try {
+                  if (renameModal.kind !== prevKind) {
+                    changeElementKind(renameModal.nodeId, renameModal.kind);
+                  }
+                  renameElement(renameModal.nodeId, renameModal.value.trim());
+                  setRenameModal(null);
+                } catch (err) {
+                  toast.error("Could not update component", {
+                    description: err instanceof Error ? err.message : "Update failed",
+                  });
+                }
               },
             },
           ]}
@@ -2750,12 +3125,35 @@ export default function BoardApp({
             }
             onKeyDown={(e) => {
               if (e.key === "Enter" && renameModal?.value.trim()) {
-                renameElement(renameModal.nodeId, renameModal.value.trim());
-                setRenameModal(null);
+                const node = nodeById[renameModal.nodeId];
+                const prevKind = node
+                  ? nodeKindToCreateKind(node.kind) ?? "service"
+                  : "service";
+                try {
+                  if (renameModal.kind !== prevKind) {
+                    changeElementKind(renameModal.nodeId, renameModal.kind);
+                  }
+                  renameElement(renameModal.nodeId, renameModal.value.trim());
+                  setRenameModal(null);
+                } catch (err) {
+                  toast.error("Could not update component", {
+                    description: err instanceof Error ? err.message : "Update failed",
+                  });
+                }
               }
             }}
             className="mt-1.5 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
             placeholder="e.g. Order API"
+          />
+          <label className="mt-3 block text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+            Type
+          </label>
+          <KindPickerList
+            className="mt-1.5 max-h-56 overflow-y-auto node-shadow-lg"
+            value={renameModal?.kind}
+            onChange={(kind) =>
+              setRenameModal((r) => (r ? { ...r, kind } : r))
+            }
           />
         </Modal>
 
@@ -2993,6 +3391,7 @@ export default function BoardApp({
         </Modal>
 
       </div>
+      {renderRightPanel?.()}
       </div>
     </div>
     </TooltipProvider>

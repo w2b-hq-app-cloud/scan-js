@@ -30,18 +30,28 @@ export function diagramBounds(graph, pad = 40) {
         height: maxY - minY + pad * 2,
     };
 }
-function edgeStroke(kind) {
+function edgeStroke(kind, sourceKind) {
+    const stroke = sourceKind
+        ? (kindVisuals[sourceKind]?.color ?? "#475569")
+        : kind === "db" || kind === "flow"
+            ? "#22c55e"
+            : kind === "async" || kind === "stream"
+                ? "#c026d3"
+                : kind === "git"
+                    ? "#94a3b8"
+                    : "#475569";
     switch (kind) {
         case "db":
+            return { stroke, dash: "6 4" };
         case "flow":
-            return { stroke: "#22c55e", dash: kind === "flow" ? "5 4" : "6 4" };
+            return { stroke, dash: "5 4" };
         case "async":
         case "stream":
-            return { stroke: "#c026d3", dash: "6 4" };
+            return { stroke, dash: "6 4" };
         case "git":
-            return { stroke: "#94a3b8", dash: "5 4" };
+            return { stroke, dash: "5 4" };
         default:
-            return { stroke: "#475569", dash: "" };
+            return { stroke, dash: "" };
     }
 }
 function estimateTextWidth(text, fontSize) {
@@ -243,13 +253,9 @@ export function graphToSvg(graph, options = {}) {
             return "";
         const fan = edgeFanIndex(graph.edges, e.id);
         const anchors = resolveEdgeAnchors(from, to, fan.index, fan.count);
-        const style = edgeStroke(e.kind);
+        const style = edgeStroke(e.kind, from.kind);
         const dashed = style.dash ? ` stroke-dasharray="${style.dash}"` : "";
-        const marker = e.kind === "flow" || e.kind === "db"
-            ? "url(#arrow-agent)"
-            : e.kind === "async" || e.kind === "stream"
-                ? "url(#arrow-event)"
-                : "url(#arrow)";
+        const marker = `url(#arrow-${from.kind})`;
         const d = orthogonalPaths?.get(e.id) ??
             edgePath(anchors.a, anchors.b, anchors.fromSide, anchors.toSide, mode, lanes.get(e.id) ?? 0);
         let labelSvg = "";
@@ -284,15 +290,11 @@ export function graphToSvg(graph, options = {}) {
     return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="${b.x} ${b.y} ${b.width} ${b.height}" width="${b.width}" height="${b.height}">
   <defs>
-    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-      <path d="M 0 0 L 10 5 L 0 10 z" fill="#475569"/>
-    </marker>
-    <marker id="arrow-agent" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-      <path d="M 0 0 L 10 5 L 0 10 z" fill="#22c55e"/>
-    </marker>
-    <marker id="arrow-event" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-      <path d="M 0 0 L 10 5 L 0 10 z" fill="#c026d3"/>
-    </marker>
+    ${["service", "external", "database", "event", "search", "agent", "repo"]
+        .map((k) => `<marker id="arrow-${k}" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">` +
+        `<path d="M 0 0 L 10 5 L 0 10 z" fill="${kindVisuals[k].color}"/>` +
+        `</marker>`)
+        .join("\n    ")}
   </defs>
   <rect x="${b.x}" y="${b.y}" width="${b.width}" height="${b.height}" fill="#f8fafc"/>
   ${groupRects}

@@ -21,6 +21,8 @@ npx scan validate ./architecture.scan.yaml   # after: npm i -D @spherescan/cli
 
 This repository (`scan-js`) is the open-source project. Contributions, issues, and roadmap here are about **SCAN**, not any proprietary host product.
 
+**Ownership:** `scan-js` is the official open-source JavaScript implementation of the SCAN notation used by [Sphere](https://spherescan.io) and published by the Sphere team under the existing `w2b-hq-app-cloud` organization. Product site: [spherescan.io](https://spherescan.io) · App: [app.spherescan.io](https://app.spherescan.io).
+
 ---
 
 ## What SCAN is

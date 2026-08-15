@@ -427,6 +427,32 @@ test("updateElementDescription + undo", async () => {
   );
 });
 
+test("changeElementKind within components and across collections", async () => {
+  const modeler = new SphereModeler({ viewId: "architecture-board" });
+  await modeler.importYAML(fixture);
+  modeler.modeling.changeElementKind("order-api", "datastore");
+  const asDb = modeler.getModel()!.components.find((c) => c.id === "order-api");
+  assert.equal(asDb?.type, "datastore");
+  modeler.modeling.changeElementKind("order-api", "agent");
+  assert.equal(modeler.getModel()!.components.find((c) => c.id === "order-api"), undefined);
+  assert.ok(modeler.getModel()!.agents.find((a) => a.id === "order-api"));
+  modeler.undo();
+  assert.equal(
+    modeler.getModel()!.components.find((c) => c.id === "order-api")?.type,
+    "datastore",
+  );
+});
+
+test("updateElementMeta technology on component", async () => {
+  const modeler = new SphereModeler({ viewId: "architecture-board" });
+  await modeler.importYAML(fixture);
+  modeler.modeling.updateElementMeta("order-api", { technology: "NestJS" });
+  assert.equal(
+    modeler.getModel()!.components.find((c) => c.id === "order-api")!.technology,
+    "NestJS",
+  );
+});
+
 test("port-to-port connect stores fromPort/toPort", async () => {
   const modeler = new SphereModeler();
   await modeler.importYAML(fixture);
