@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `@spherescan/board`: `BoardNodeOverlayContext.hovered` — host `renderNodeBadge`
+  receives whether the pointer is over the node card (for hover-only chrome).
+
 ### Fixed
 
 - `@spherescan/board`: after Import YAML / `initialYaml` / `applyYaml` / host

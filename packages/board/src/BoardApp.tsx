@@ -250,6 +250,7 @@ export default function BoardApp({
   /** Additional boundary ids for multi-select (primary is `selectedBoundary`). */
   const [selectedBoundaryExtras, setSelectedBoundaryExtras] = useState<string[]>([]);
   const [hoverEdge, setHoverEdge] = useState<string | null>(null);
+  const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
   const [selectedEdge, setSelectedEdge] = useState<string | null>(null);
   const [zoom, setZoom] = useState(0.85);
   const [pan, setPan] = useState<Point>({ x: 40, y: 20 });
@@ -2612,6 +2613,10 @@ export default function BoardApp({
                     kind: nodeKindToCreateKind(n.kind) ?? "service",
                   });
                 }}
+                onPointerEnter={() => setHoveredNodeId(n.id)}
+                onPointerLeave={() =>
+                  setHoveredNodeId((cur) => (cur === n.id ? null : cur))
+                }
               />
             ))}
             {displayNodes.map((n) =>
@@ -2621,6 +2626,7 @@ export default function BoardApp({
                 y: n.y,
                 w: n.w,
                 h: n.h,
+                hovered: hoveredNodeId === n.id,
               }),
             )}
             {selected &&

@@ -24,6 +24,8 @@ export function NodeCard({
   onPortPointerDown,
   onClick,
   onDoubleClick,
+  onPointerEnter,
+  onPointerLeave,
 }: {
   node: SphereNode;
   selected: boolean;
@@ -41,6 +43,8 @@ export function NodeCard({
   ) => void;
   onClick: (e: MouseEvent) => void;
   onDoubleClick?: (e: MouseEvent) => void;
+  onPointerEnter?: () => void;
+  onPointerLeave?: () => void;
 }) {
   const meta = kindMeta[node.kind];
   const isDb = node.kind === "database";
@@ -57,6 +61,8 @@ export function NodeCard({
       onContextMenu={onContextMenu}
       onClick={onClick}
       onDoubleClick={onDoubleClick}
+      onPointerEnter={onPointerEnter}
+      onPointerLeave={onPointerLeave}
     >
       {selected && <SelectionCheck />}
       {isDb && (

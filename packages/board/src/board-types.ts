@@ -47,6 +47,8 @@ export type BoardNodeOverlayContext = {
   y: number;
   w: number;
   h: number;
+  /** True while the pointer is over this node card. */
+  hovered: boolean;
 };
 
 /** Host-driven edge emphasis (path overlay). Unbranded — any host may use it. */
