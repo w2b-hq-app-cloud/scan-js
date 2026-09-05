@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `@spherescan/board`: key host `renderNodeBadge` results in the node overlay list (React unique-key warning on remount)
 - `@spherescan/board`: after Import YAML / `initialYaml` / `applyYaml` / host
   `loadYaml` (and template merge), fit the viewport to center the diagram
   (`fitOnLoad`, default true; demo opts out).
