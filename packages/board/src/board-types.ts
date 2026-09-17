@@ -47,6 +47,8 @@ export type BoardNodeOverlayContext = {
   y: number;
   w: number;
   h: number;
+  /** True while the pointer is over this node card. */
+  hovered: boolean;
 };
 
 /** Host-driven edge emphasis (path overlay). Unbranded — any host may use it. */
@@ -137,6 +139,12 @@ export type BoardAppProps = {
    */
   applyYaml?: string | null;
   applyYamlNonce?: number;
+  /**
+   * After a successful YAML load (file import, `initialYaml`, `applyYaml`, host
+   * `loadYaml`), pan/zoom so the diagram is centered in the canvas. Default true.
+   * Demo hosts that rely on a fixed camera can set `false`.
+   */
+  fitOnLoad?: boolean;
   /**
    * When true, diagram editing is locked (no drag/create/connect/delete).
    * Pan and zoom still work. Used during component plan-chain builds.

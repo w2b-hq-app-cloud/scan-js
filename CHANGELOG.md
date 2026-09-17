@@ -15,6 +15,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Whiteboard: browser draft uses **`sessionStorage`** (per tab) so multiple open
+  tabs keep independent diagrams across refresh; focused tab only claims
+  `POST /api/open-scan`.
+- Whiteboard: browser tab title follows the open diagram (`{system.name} · SCAN`)
+  so multiple tabs are distinguishable.
+- Whiteboard: persist the open SCAN YAML across refresh until Import / New board /
+  external open replaces it; `?fresh=1` skips restore.
+- Whiteboard: `POST /api/open-scan` so another local app can push a `.scan.yaml`
+  into the running Vite instance (poll/GET + claim); CORS open for localhost
+  tooling. See `apps/whiteboard/README.md`.
+- `@spherescan/board`: `BoardNodeOverlayContext.hovered` — host `renderNodeBadge`
+  receives whether the pointer is over the node card (for hover-only chrome).
+
+### Fixed
+
+- `@spherescan/board`: after Import YAML / `initialYaml` / `applyYaml` / host
+  `loadYaml` (and template merge), fit the viewport to center the diagram
+  (`fitOnLoad`, default true; demo opts out).
+
+### Changed
+
+- (none yet)
+
+## [0.5.0] - 2026-08-15
+
+### Added
+
 - README ownership note: `scan-js` is the official SCAN JavaScript implementation used by Sphere, with links to [spherescan.io](https://spherescan.io).
 - `@spherescan/board`: `hostCenter` pans (keeps zoom) to an edge step-badge or node; `showViewTools` host flag to hide Filters / Focus / Auto-layout.
 
