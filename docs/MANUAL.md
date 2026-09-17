@@ -68,10 +68,11 @@ You can also **drag and drop** a SCAN/YAML file onto the canvas (see [Canvas](#4
 
 ### Browser draft
 
-The whiteboard keeps the **open** SCAN YAML in browser `localStorage`
-(`scan.whiteboard.draftYaml`). Refreshing the tab restores that document instead
-of the sample Order Platform diagram. Import, New board, or an external open
-replaces the draft. Start clean with `?fresh=1` on the URL.
+The whiteboard keeps the **open** SCAN YAML in browser **`sessionStorage`**
+(`scan.whiteboard.draftYaml`) — **one draft per tab**. Refreshing restores that
+tab’s document; other tabs are unchanged. Closing the tab drops its draft.
+Import, New board, or an external open replaces the draft in the active tab.
+Start clean with `?fresh=1` on the URL.
 
 The browser **tab title** is set to `{system.name} · SCAN` whenever a diagram is
 loaded or renamed, so multiple whiteboard tabs are easy to tell apart.

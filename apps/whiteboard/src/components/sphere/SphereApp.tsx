@@ -1,6 +1,6 @@
 /**
  * SCAN whiteboard — `@spherescan/board` host.
- * Restores the open diagram from localStorage and accepts pushes via /api/open-scan.
+ * Restores the open diagram from sessionStorage (per tab) and accepts pushes via /api/open-scan.
  */
 import { useCallback, useEffect, useState } from "react";
 import BoardApp from "@spherescan/board";
@@ -75,9 +75,11 @@ export default function ScanApp() {
 
     const tick = async () => {
       try {
+        // Only the focused tab claims an external open — avoids all tabs loading it.
+        if (document.visibilityState !== "visible") return;
         const url = afterId
-          ? `/api/open-scan?after=${encodeURIComponent(afterId)}`
-          : "/api/open-scan";
+          ? `/api/open-scan?after=${encodeURIComponent(afterId)}&claim=1`
+          : "/api/open-scan?claim=1";
         const res = await fetch(url, { method: "GET", cache: "no-store" });
         if (!res.ok || cancelled) return;
         const data = (await res.json()) as {
@@ -91,11 +93,6 @@ export default function ScanApp() {
         setDocumentTitleFromYaml(pending.yaml);
         setApplyYaml(pending.yaml);
         setApplyYamlNonce((n) => n + 1);
-        void fetch(`/api/open-scan?id=${encodeURIComponent(pending.id)}`, {
-          method: "DELETE",
-        }).catch(() => {
-          /* ignore */
-        });
       } catch {
         /* server restart / offline — keep polling */
       }

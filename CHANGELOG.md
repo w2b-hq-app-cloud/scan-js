@@ -9,10 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Whiteboard: browser draft uses **`sessionStorage`** (per tab) so multiple open
+  tabs keep independent diagrams across refresh; focused tab only claims
+  `POST /api/open-scan`.
 - Whiteboard: browser tab title follows the open diagram (`{system.name} · SCAN`)
   so multiple tabs are distinguishable.
-- Whiteboard: persist the open SCAN YAML in browser `localStorage`
-  (`scan.whiteboard.draftYaml`) across refresh until Import / New board /
+- Whiteboard: persist the open SCAN YAML across refresh until Import / New board /
   external open replaces it; `?fresh=1` skips restore.
 - Whiteboard: `POST /api/open-scan` so another local app can push a `.scan.yaml`
   into the running Vite instance (poll/GET + claim); CORS open for localhost

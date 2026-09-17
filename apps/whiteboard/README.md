@@ -19,11 +19,12 @@ npm run dev
 
 Default URL: [http://localhost:3001](http://localhost:3001).
 
-## Browser draft (localStorage)
+## Browser draft (per tab)
 
-The open diagram is saved to `localStorage` under `scan.whiteboard.draftYaml` on
-every edit. A hard refresh restores that draft instead of the Order Platform
-sample. Import YAML, New board, or an external open (below) replaces the draft.
+The open diagram is saved to **`sessionStorage`** under `scan.whiteboard.draftYaml`.
+Each browser tab has its own copy: refresh restores **that** tab’s diagram; other
+tabs keep theirs. Closing a tab discards its draft. (An older shared
+`localStorage` draft is cleared if still present.)
 
 Skip restore: open [http://localhost:3001/?fresh=1](http://localhost:3001/?fresh=1).
 
@@ -49,7 +50,7 @@ curl -s -X POST http://localhost:3001/api/open-scan \
 | Method | Path | Purpose |
 |--------|------|---------|
 | `POST` | `/api/open-scan` | Queue YAML (`{ yaml, source? }` JSON, or raw `text/yaml`) |
-| `GET` | `/api/open-scan?after=<id>` | Peek pending document (board uses this) |
+| `GET` | `/api/open-scan?after=<id>&claim=1` | Peek (or claim) pending document; whiteboard uses `claim=1` from the focused tab only |
 | `DELETE` | `/api/open-scan?id=<id>` | Claim / clear after load |
 | `OPTIONS` | `/api/open-scan` | CORS preflight (`Access-Control-Allow-Origin: *`) |
 

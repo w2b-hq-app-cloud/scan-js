@@ -2,7 +2,7 @@
  * Open a SCAN document in the running whiteboard from another app.
  *
  *   POST /api/open-scan          — push YAML (JSON `{ yaml }` or raw text/yaml body)
- *   GET  /api/open-scan?after=id — poll for a newer pending document
+ *   GET  /api/open-scan?after=id&claim=1 — poll; claim=1 clears after return (focused tab)
  *   DELETE /api/open-scan?id=…   — claim/clear after the board applied it
  *   OPTIONS /api/open-scan       — CORS preflight
  */
@@ -86,7 +86,14 @@ export const Route = createFileRoute("/api/open-scan")({
       GET: async ({ request }) => {
         const url = new URL(request.url);
         const after = url.searchParams.get("after");
-        const pending = peekPendingOpenScan(after);
+        const claim = url.searchParams.get("claim") === "1";
+        const pending = claim
+          ? (() => {
+              const peeked = peekPendingOpenScan(after);
+              if (!peeked) return null;
+              return claimPendingOpenScan(peeked.id);
+            })()
+          : peekPendingOpenScan(after);
         if (!pending) {
           return json({ ok: true, pending: null });
         }
