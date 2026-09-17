@@ -23,7 +23,10 @@ npm run validate
 npm run dev
 ```
 
-Opens the minimal modeler in `apps/whiteboard`. How-to: [MANUAL.md](MANUAL.md).
+Opens the minimal modeler in `apps/whiteboard` at [http://localhost:3001](http://localhost:3001).
+How-to: [MANUAL.md](MANUAL.md). The open diagram persists in browser
+`localStorage`; other apps can `POST /api/open-scan` to load a file into the
+running tab — see [`apps/whiteboard/README.md`](../apps/whiteboard/README.md).
 
 ## Packages
 

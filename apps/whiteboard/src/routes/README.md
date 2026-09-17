@@ -10,6 +10,7 @@ is `src/routes/__root.tsx`.
 | File | URL |
 | --- | --- |
 | `index.tsx` | `/` |
+| `api/open-scan.ts` | `/api/open-scan` (server handlers — open YAML from another app) |
 | `about.tsx` | `/about` |
 | `users/index.tsx` | `/users` |
 | `users/$id.tsx` | `/users/:id` (dynamic - bare `$`, no curly braces) |

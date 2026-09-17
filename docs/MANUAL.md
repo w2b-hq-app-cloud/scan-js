@@ -58,13 +58,33 @@ Mode banners (Connect / Fast design / place component / place boundary) appear c
 
 | Item | Shortcut | Result |
 |------|----------|--------|
-| **New board** | - | If dirty, confirms discard -> asks for a diagram name -> empty board |
-| **Import YAML** | - | File picker for `.scan` / `.yaml` / `.yml` / `.scan.yaml` |
+| **New board** | - | If dirty, confirms discard -> asks for a diagram name -> empty board (also replaces the browser draft) |
+| **Import YAML** | - | File picker for `.scan` / `.yaml` / `.yml` / `.scan.yaml` (replaces the browser draft) |
 | **Save YAML** | **Ctrl+S** (Cmd+S) | Saves as `{diagram-name}.scan.yaml` (disk picker when the browser supports it, otherwise download) |
 | **Export SVG** | - | Downloads `{diagram-name}.svg` |
 | **Export PNG** | - | Downloads `{diagram-name}.png` |
 
 You can also **drag and drop** a SCAN/YAML file onto the canvas (see [Canvas](#4-canvas)).
+
+### Browser draft
+
+The whiteboard keeps the **open** SCAN YAML in browser `localStorage`
+(`scan.whiteboard.draftYaml`). Refreshing the tab restores that document instead
+of the sample Order Platform diagram. Import, New board, or an external open
+replaces the draft. Start clean with `?fresh=1` on the URL.
+
+### Open from another app
+
+With `npm run dev` (or a Node Start preview) on port **3001**, POST YAML to the
+running instance and the open tab loads it within about a second:
+
+```bash
+curl -s -X POST http://localhost:3001/api/open-scan \
+  -H "Content-Type: text/yaml" \
+  --data-binary @architecture.scan.yaml
+```
+
+Details: [`apps/whiteboard/README.md`](../apps/whiteboard/README.md).
 
 ---
 

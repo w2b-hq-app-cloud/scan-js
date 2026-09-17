@@ -2639,6 +2639,7 @@ export default function BoardApp({
                 y: selNode.y,
                 w: selNode.w,
                 h: selNode.h,
+                hovered: hoveredNodeId === selNode.id,
               })}
             {/* Fast design rubber-band preview */}
             {fastDraft && (() => {

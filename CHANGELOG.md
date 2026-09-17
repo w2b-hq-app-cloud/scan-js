@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Whiteboard: persist the open SCAN YAML in browser `localStorage`
+  (`scan.whiteboard.draftYaml`) across refresh until Import / New board /
+  external open replaces it; `?fresh=1` skips restore.
+- Whiteboard: `POST /api/open-scan` so another local app can push a `.scan.yaml`
+  into the running Vite instance (poll/GET + claim); CORS open for localhost
+  tooling. See `apps/whiteboard/README.md`.
 - `@spherescan/board`: `BoardNodeOverlayContext.hovered` — host `renderNodeBadge`
   receives whether the pointer is over the node card (for hover-only chrome).
 
