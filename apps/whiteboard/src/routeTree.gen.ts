@@ -12,14 +12,14 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApiOpenScanRouteImport } from './routes/api/open-scan'
 
-const ApiOpenScanRoute = ApiOpenScanRouteImport.update({
-  id: '/api/open-scan',
-  path: '/api/open-scan',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiOpenScanRoute = ApiOpenScanRouteImport.update({
+  id: '/api/open-scan',
+  path: '/api/open-scan',
   getParentRoute: () => rootRouteImport,
 } as any)
 
@@ -32,7 +32,7 @@ export interface FileRoutesByTo {
   '/api/open-scan': typeof ApiOpenScanRoute
 }
 export interface FileRoutesById {
-  '__root__': typeof rootRouteImport
+  __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/api/open-scan': typeof ApiOpenScanRoute
 }
