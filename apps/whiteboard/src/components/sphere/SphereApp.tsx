@@ -4,6 +4,7 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import BoardApp from "@spherescan/board";
+import { parseScanYaml } from "@spherescan/model";
 
 import {
   clearBoardDraft,
@@ -24,6 +25,22 @@ type PendingPayload = {
 };
 
 const POLL_MS = 1000;
+const DEFAULT_DOC_TITLE = "SCAN - Notation modeler";
+
+function diagramNameFromYaml(yaml: string): string | null {
+  try {
+    const name = parseScanYaml(yaml).system?.name?.trim();
+    return name || null;
+  } catch {
+    return null;
+  }
+}
+
+function setDocumentTitleFromYaml(yaml: string): void {
+  if (typeof document === "undefined") return;
+  const name = diagramNameFromYaml(yaml);
+  document.title = name ? `${name} · SCAN` : DEFAULT_DOC_TITLE;
+}
 
 export default function ScanApp() {
   const [restore, setRestore] = useState<RestoreState>({ status: "loading" });
@@ -37,14 +54,17 @@ export default function ScanApp() {
       return;
     }
     const draft = readBoardDraft();
+    const yaml = draft?.yaml?.trim() ? draft.yaml : undefined;
+    if (yaml) setDocumentTitleFromYaml(yaml);
     setRestore({
       status: "ready",
-      initialYaml: draft?.yaml?.trim() ? draft.yaml : undefined,
+      initialYaml: yaml,
     });
   }, []);
 
   const onDocumentChange = useCallback((yaml: string) => {
     writeBoardDraft(yaml);
+    setDocumentTitleFromYaml(yaml);
   }, []);
 
   // Poll the local Start server for YAML pushed by external apps.
@@ -68,6 +88,7 @@ export default function ScanApp() {
         if (!pending?.yaml?.trim() || pending.id === afterId) return;
         afterId = pending.id;
         writeBoardDraft(pending.yaml);
+        setDocumentTitleFromYaml(pending.yaml);
         setApplyYaml(pending.yaml);
         setApplyYamlNonce((n) => n + 1);
         void fetch(`/api/open-scan?id=${encodeURIComponent(pending.id)}`, {

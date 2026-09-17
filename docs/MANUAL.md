@@ -73,6 +73,9 @@ The whiteboard keeps the **open** SCAN YAML in browser `localStorage`
 of the sample Order Platform diagram. Import, New board, or an external open
 replaces the draft. Start clean with `?fresh=1` on the URL.
 
+The browser **tab title** is set to `{system.name} · SCAN` whenever a diagram is
+loaded or renamed, so multiple whiteboard tabs are easy to tell apart.
+
 ### Open from another app
 
 With `npm run dev` (or a Node Start preview) on port **3001**, POST YAML to the
