@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `@spherescan/board`: wrap host `renderNodeBadge` results in keyed `Fragment`s
+  so React has unique keys for node badge overlays.
+
 ### Changed
 
 - (none yet)

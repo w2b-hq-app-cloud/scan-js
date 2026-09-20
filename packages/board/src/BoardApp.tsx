@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
   useCallback,
+  Fragment,
   type CSSProperties,
   type MouseEvent,
   type PointerEvent,
@@ -2619,16 +2620,18 @@ export default function BoardApp({
                 }
               />
             ))}
-            {displayNodes.map((n) =>
-              renderNodeBadge?.({
-                node: n,
-                x: n.x,
-                y: n.y,
-                w: n.w,
-                h: n.h,
-                hovered: hoveredNodeId === n.id,
-              }),
-            )}
+            {displayNodes.map((n) => (
+              <Fragment key={`badge-${n.id}`}>
+                {renderNodeBadge?.({
+                  node: n,
+                  x: n.x,
+                  y: n.y,
+                  w: n.w,
+                  h: n.h,
+                  hovered: hoveredNodeId === n.id,
+                })}
+              </Fragment>
+            ))}
             {selected &&
               selNode &&
               tool === "select" &&
