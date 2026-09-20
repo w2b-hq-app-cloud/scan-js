@@ -14,7 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- (none yet)
+- Stop tracking `packages/*/dist` build artifacts in git so `.gitignore` applies
+  and harness builds do not churn OSS history (dist still built for publish).
 
 ## [0.6.0] - 2026-09-17
 
