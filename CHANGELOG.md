@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `@spherescan/board`: pass host `initialYaml` into board boot so hosts no longer
+  flash the Order Platform sample before their document loads.
 - `@spherescan/board`: wrap host `renderNodeBadge` results in keyed `Fragment`s
   so React has unique keys for node badge overlays.
 

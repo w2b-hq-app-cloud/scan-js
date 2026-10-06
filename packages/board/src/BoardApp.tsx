@@ -186,7 +186,8 @@ export default function BoardApp({
   const readOnlyRef = useRef(readOnly);
   readOnlyRef.current = readOnly;
   const board = useScanBoard({
-    startEmpty: startEmpty && !initialYaml,
+    startEmpty: Boolean(startEmpty && !initialYaml),
+    ...(initialYaml ? { initialYaml } : {}),
   });
   const {
     nodes,
